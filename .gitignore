@@ -1,0 +1,6 @@
+*.pyc
+
+Source/*
+!Source/*.py
+!Source/config_template.json
+!Source/requirements.txt
