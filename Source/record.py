@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
 """
-	@TODO
+	This script records the previously scouted snapshots by opening their pages in Firefox and scrolling through them at a set pace.
+	If the recorder script detects that any plugins crashed or that the page was redirected while capturing the screen, the recording is aborted.
+	This script is inherently unsafe since it relies on web plugins (e.g. Flash, Shockwave, Java, etc).
 """
 
+import ctypes
 import os
 import sqlite3
 import time
@@ -33,7 +36,7 @@ class RecordConfig(CommonConfig):
 
 	ranking_constant: float
 	record_filtered_snapshots: bool
-	min_upload_days_for_new_recording: int
+	min_publish_days_for_new_recording: int
 
 	viewport_scroll_percentage: float
 	cache_wait_after_load_multiplier: float
@@ -85,7 +88,6 @@ class RecordConfig(CommonConfig):
 		self.ffmpeg_archive_output = container_to_lowercase(self.ffmpeg_archive_output)
 		self.ffmpeg_upload_output = container_to_lowercase(self.ffmpeg_upload_output)
 
-		import ctypes
 		user32 = ctypes.windll.user32
 		user32.SetProcessDPIAware()
 		self.physical_screen_width = user32.GetSystemMetrics(0)
@@ -100,8 +102,8 @@ class RecordConfig(CommonConfig):
 config = RecordConfig()
 log = setup_root_logger('record')
 
-parser = ArgumentParser(description='@TODO')
-parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='@TODO')
+parser = ArgumentParser(description='Records the previously scouted snapshots by opening their pages in Firefox and scrolling through them at a set pace. If the recorder script detects that any plugins crashed or that the page was redirected while capturing the screen, the recording is aborted. This script is inherently unsafe since it relies on web plugins (e.g. Flash, Shockwave, Java, etc).')
+parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to record. Omit or set to %(default)s to run forever on a set schedule.')
 args = parser.parse_args()
 
 ####################################################################################################
@@ -277,12 +279,12 @@ def record_snapshots(num_snapshots: int) -> None:
 					# - https://stackoverflow.com/a/56006340/18442724
 					# - http://utopia.duth.gr/~pefraimi/research/data/2007EncOfAlg.pdf
 					cursor = db.execute('''
-										SELECT S.*, SS.Points, RANK_SNAPSHOT_BY_POINTS(SS.Points) AS Rank, LR.DaysSinceLastUpload
+										SELECT S.*, SS.Points, RANK_SNAPSHOT_BY_POINTS(SS.Points) AS Rank, LR.DaysSinceLastPublished
 										FROM Snapshot S
 										INNER JOIN SnapshotScore SS ON S.Id = SS.Id
 										LEFT JOIN
 										(
-											SELECT SnapshotId, JulianDay('now') - JulianDay(MAX(UploadTime)) AS DaysSinceLastUpload
+											SELECT SnapshotId, JulianDay('now') - JulianDay(MAX(PublishTime)) AS DaysSinceLastPublished
 											FROM Recording
 											GROUP BY SnapshotId
 										) LR ON S.Id = LR.SnapshotId
@@ -290,7 +292,7 @@ def record_snapshots(num_snapshots: int) -> None:
 											(
 												S.State = :scouted_state
 												OR
-												(S.State = :uploaded_state AND LR.DaysSinceLastUpload >= :min_upload_days_for_new_recording)
+												(S.State = :published_state AND LR.DaysSinceLastPublished >= :min_publish_days_for_new_recording)
 											)
 											AND NOT S.IsExcluded
 											AND (:record_filtered_snapshots OR NOT S.IsFiltered)
@@ -298,8 +300,8 @@ def record_snapshots(num_snapshots: int) -> None:
 											S.Priority DESC,
 											Rank DESC
 										LIMIT 1;
-										''', {'scouted_state': Snapshot.SCOUTED, 'uploaded_state': Snapshot.UPLOADED,
-											  'min_upload_days_for_new_recording': config.min_upload_days_for_new_recording,
+										''', {'scouted_state': Snapshot.SCOUTED, 'published_state': Snapshot.PUBLISHED,
+											  'min_publish_days_for_new_recording': config.min_publish_days_for_new_recording,
 											  'record_filtered_snapshots': config.record_filtered_snapshots})
 					
 					row = cursor.fetchone()
@@ -307,10 +309,10 @@ def record_snapshots(num_snapshots: int) -> None:
 						snapshot = Snapshot(**dict(row))
 						
 						rank = row['Rank'] * 100
-						days_since_last_upload = row['DaysSinceLastUpload']
+						days_since_last_published = row['DaysSinceLastPublished']
 						
-						if days_since_last_upload is not None:
-							days_since_last_upload = round(days_since_last_upload)
+						if days_since_last_published is not None:
+							days_since_last_published = round(days_since_last_published)
 
 						cursor = db.execute('''SELECT seq + 1 AS NextRecordingId FROM sqlite_sequence WHERE name = 'Recording';''')
 						row = cursor.fetchone()
@@ -351,7 +353,7 @@ def record_snapshots(num_snapshots: int) -> None:
 						content_url = snapshot.WaybackUrl
 
 					wait_for_wayback_machine_rate_limit()
-					log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} ranked at {rank:.2f}% with {snapshot.Points} points (last upload = {days_since_last_upload}).')
+					log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} ranked at {rank:.2f}% with {snapshot.Points} points (last published = {days_since_last_published}).')
 					
 					original_window = driver.current_window_handle
 					browser.bring_to_front()

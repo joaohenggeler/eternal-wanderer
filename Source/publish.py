@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 """
-	@TODO
+	This script publishes the previously recorded snapshots to Twitter on a set schedule.
+	The publisher script uploads each snapshot's MP4 video and generates a tweet with the web page's title, its date, and a link to its Wayback Machine capture.
 """
 
 import os
@@ -21,7 +22,7 @@ from common import CommonConfig, Database, Recording, Snapshot, delete_file, get
 
 ####################################################################################################
 
-class UploadConfig(CommonConfig):
+class PublishConfig(CommonConfig):
 
 	# From the config file.
 	scheduler: Dict[str, Union[int, str]]
@@ -42,18 +43,18 @@ class UploadConfig(CommonConfig):
 
 	def __init__(self):
 		super().__init__()
-		self.load_subconfig('upload')
+		self.load_subconfig('publish')
 
-config = UploadConfig()
-log = setup_root_logger('upload')
+config = PublishConfig()
+log = setup_root_logger('publish')
 
-parser = ArgumentParser(description='@TODO')
-parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='@TODO')
+parser = ArgumentParser(description='Publishes the previously recorded snapshots to Twitter on a set schedule. The publisher script uploads each snapshot\'s MP4 video and generates a tweet with the web page\'s title, its date, and a link to its Wayback Machine capture.')
+parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to publish. Omit or set to %(default)s to run forever on a set schedule.')
 args = parser.parse_args()
 
 ####################################################################################################
 
-log.info('Initializing the uploader.')
+log.info('Initializing the publisher.')
 
 try:
 	auth = tweepy.OAuth1UserHandler(config.twitter_api_key, config.twitter_api_secret,
@@ -66,7 +67,7 @@ except tweepy.errors.TweepyException as error:
 
 scheduler = BlockingScheduler()
 
-def upload_snapshot_recording(num_snapshots: int) -> None:
+def publish_snapshot_recording(num_snapshots: int) -> None:
 	
 	try:
 		with Database() as db:
@@ -104,7 +105,7 @@ def upload_snapshot_recording(num_snapshots: int) -> None:
 						snapshot = Snapshot(**row, Id=row['SnapshotId'])
 						recording = Recording(**row, Id=row['RecordingId'])
 					else:
-						log.info('Ran out of snapshots to upload.')
+						log.info('Ran out of snapshots to publish.')
 						break
 				except sqlite3.Error as error:
 					log.error(f'Failed to select the next snapshot recording with the error: {repr(error)}')
@@ -159,12 +160,12 @@ def upload_snapshot_recording(num_snapshots: int) -> None:
 								
 								break
 
-					db.execute('UPDATE Snapshot SET State = :state WHERE Id = :id;', {'state': Snapshot.UPLOADED, 'id': snapshot.Id})
+					db.execute('UPDATE Snapshot SET State = :state WHERE Id = :id;', {'state': Snapshot.PUBLISHED, 'id': snapshot.Id})
 
-					db.execute('UPDATE Recording SET IsProcessed = :is_processed, UploadTime = :upload_time, MediaId = :media_id, TweetId = :tweet_id WHERE Id = :id;',
-							   {'is_processed': True, 'upload_time': get_current_timestamp(), 'media_id': media_id, 'tweet_id': status.id, 'id': recording.Id})
+					db.execute('UPDATE Recording SET IsProcessed = :is_processed, PublishTime = :publish_time, MediaId = :media_id, TweetId = :tweet_id WHERE Id = :id;',
+							   {'is_processed': True, 'publish_time': get_current_timestamp(), 'media_id': media_id, 'tweet_id': status.id, 'id': recording.Id})
 
-					if snapshot.Priority == Snapshot.UPLOAD_PRIORITY:
+					if snapshot.Priority == Snapshot.PUBLISH_PRIORITY:
 						db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
 
 					db.commit()
@@ -186,9 +187,9 @@ def upload_snapshot_recording(num_snapshots: int) -> None:
 ####################################################################################################
 
 if args.max_iterations >= 0:
-	upload_snapshot_recording(args.max_iterations)
+	publish_snapshot_recording(args.max_iterations)
 else:
-	scheduler.add_job(upload_snapshot_recording, args=[config.num_snapshots_per_scheduled_batch], trigger='cron', coalesce=True, **config.scheduler, timezone='UTC')
+	scheduler.add_job(publish_snapshot_recording, args=[config.num_snapshots_per_scheduled_batch], trigger='cron', coalesce=True, **config.scheduler, timezone='UTC')
 	scheduler.start()
 
-log.info('Terminating the uploader.')
+log.info('Terminating the publisher.')

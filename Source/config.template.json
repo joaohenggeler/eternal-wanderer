@@ -1,0 +1,341 @@
+{
+	"common":
+	{
+		"debug": false,
+		"locale": "en_US",
+
+		"database_path": "Data/wanderer.db",
+		"database_error_wait": 30,
+
+		"gui_webdriver_path": "Data/Drivers/0.17.0/geckodriver.exe",
+		"headless_webdriver_path": "Data/Drivers/0.20.1/geckodriver.exe",
+		"page_load_timeout": 120,
+
+		"gui_firefox_path": "Data/Firefox/52.9.0/App/Firefox/firefox.exe",
+		"headless_firefox_path": "Data/Firefox/56.0.2/App/Firefox/firefox.exe",
+		"multiprocess_firefox": true,
+
+		"profile_path": "Data/Profile",
+		
+		"preferences":
+		{
+			"app.update.auto": false,
+			"app.update.enabled": false,
+			"app.update.service.enabled": false,
+
+			"browser.cache.disk.enable": false,
+			"browser.download.manager.retention": 1,
+			"browser.download.useDownloadDir": false,
+			"browser.shell.checkDefaultBrowser": false,
+			"javascript.options.wasm": true,
+			"places.history.enabled": false,
+
+			"browser.fullscreen.animate": false,
+			"browser.link.open_newwindow": 3,
+			"browser.link.open_newwindow.restriction": 0,
+			"browser.tabs.loadDivertedInBackground": true,
+
+			"dom.allow_scripts_to_close_windows": true,
+			"dom.disable_window_open_feature.location": false,
+			"dom.ipc.plugins.asyncdrawing.enabled": false,
+			"dom.ipc.plugins.flash.disable-protected-mode": true,
+			"dom.ipc.plugins.flash.subprocess.crashreporter.enabled": false,
+			"dom.ipc.plugins.reportCrashURL": false,
+			"dom.ipc.plugins.timeoutSecs": -1,
+
+			"extensions.autoDisableScopes": 0,
+			"extensions.blocklist.enabled": false,
+			"extensions.enabledScopes": 15,
+			"extensions.update.enabled": false,
+			"toolkit.legacyUserProfileCustomizations.stylesheets": true,
+			"xpinstall.signatures.required": false,
+
+			"extensions.greasemonkey.fileIsGreaseable": true,
+			"extensions.greasemonkey.haveInsertedToolbarbutton": false,
+			"extensions.greasemonkey.installDelay": 1,
+			"extensions.greasemonkey.notification.muted.script.installed": true,
+			"extensions.greasemonkey.requireSecureUpdates": false,
+			"extensions.greasemonkey.showGrantsWarning": false,
+			"extensions.greasemonkey.stats.prompted": true,
+			"extensions.greasemonkey.sync.enabled": false,
+
+			"plugin.default.state": 2,
+			"plugin.expose_full_path": true,
+			"plugin.scan.Acrobat": 1000,
+			"plugin.scan.plid.all": false,
+			"plugin.scan.Quicktime": 1000,
+			"plugin.scan.WindowsMediaPlayer": 1000,
+			"plugin.state.flash": 2,
+			"plugin.state.java": 2,
+
+			"security.csp.enable": false,
+			"security.fileuri.strict_origin_policy": false,
+			"security.mixed_content.block_active_content": false,
+			"security.mixed_content.block_display_content": false,
+
+			"browser.newtabpage.directory.ping": "",
+			"browser.newtabpage.directory.source": "",
+			"browser.onboarding.enabled": false,
+			"browser.tabs.crashReporting.sendReport": false,
+			"browser.urlbar.searchSuggestionsChoice": false,
+			"datareporting.healthreport.service.enabled": false,
+			"datareporting.policy.dataSubmissionEnabled": false,
+			"experiments.activeExperiment": false,
+			"experiments.enabled": false,
+			"media.gmp-manager.url": "",
+			"network.allow-experiments": false,
+			"network.captive-portal-service.enabled": false,
+			"toolkit.crashreporter.enabled": false,
+			"toolkit.telemetry.cachedClientID": "",
+			"toolkit.telemetry.enabled": false,
+			"toolkit.telemetry.unified": false
+		},
+
+		"extensions_path": "Data/Extensions",
+
+		"extensions_before_running":
+		{
+			"blink_enable-1.1-fx.xpi": true,
+			"classic_theme_restorer_fx29_56-1.7.7.2-fx.xpi": true,
+			"greasemonkey-3.17-fx.xpi": true
+		},
+
+		"extensions_after_running":
+		{
+			"ca-archive-2.0.3.xpi": false
+		},
+
+		"plugins_path": "Data/Plugins",
+
+		"plugins_mode": "dynamic",
+		"plugins":
+		{
+			"NPSWF32_32_0_0_363.dll": true,
+			"np32dsw.dll": true,
+			"npjp2.dll": true,
+			"npctrl.dll": true,
+			"npvirtools.dll": true,
+			"np32asw.dll": true,
+			"nptcl31.dll": true,
+
+			"Npxgplugin.dll": true,
+			"npmod32.dll": true,
+			"npsid.dll": true,
+			"npvlc.dll": true
+		},
+		
+		"compiled_autoit_path": "Data/AutoIt",
+		"autoit_poll_frequency": 20,		
+		
+		"recordings_path": "Data/Recordings",
+		"max_recordings_per_directory": 1000,
+
+		"max_wayback_machine_requests_per_minute": 25,
+		"unavailable_wayback_machine_wait": 900
+	},
+
+	"scout":
+	{
+		"initial_snapshots":
+		[
+			{"url": "http://www.geocities.com/", "timestamp": "19961022173245"},
+			{"url": "http://www.geocities.co.jp/", "timestamp": "19980123230306"},
+			{"url": "http://www.yahoo.com/", "timestamp": "19961017235908"},
+			{"url": "http://www.yahoo.co.jp/", "timestamp": "19961120065342"},
+			{"url": "http://www.angelfire.com/", "timestamp": "19961028070227"},
+			{"url": "http://tripod.lycos.com/", "timestamp": "20000229091928"},
+			{"url": "http://www.fortunecity.com/", "timestamp": "19961227145545"},
+			{"url": "http://www.developer.com/", "timestamp": "19970531223941"},
+			{"url": "http://www.gamelan.com/", "timestamp": "19961220054054"},
+			{"url": "http://www.aol.com/", "timestamp": "19961220155557"},
+			{"url": "http://www.cnet.com/", "timestamp": "19961022174919"}
+		],
+
+		"min_year": null,
+		"max_year": 2010,
+		"ignore_year_filter_for_domains": ["geocities.*", "angelfire.*", "tripod.*", "fortunecity.*"],
+		"max_depth": null,
+		"max_required_depth": 2,
+
+		"standalone_media_file_extensions":
+		[
+			"spl", "swf",
+			"dcr", "dir", "dxr",
+
+			"mid", "midi",
+			"it", "itz", "mdz", "med", "mod", "s3m", "s3z", "xm", "xmz",
+			"sid",
+			
+			"3g2", "3gp", "3gpp", "3gpp2",
+			"aac", "aif", "aifc", "aiff", "amr", "asf", "asx", "au", "avi", "awb",
+			"dif", "divx", "dv",
+			"flac", "fli", "flv",
+			"gsm",
+			"kar",
+			"m3u", "m4a", "m4v", "mka", "mkv", "mov", "mp2",
+			"mp3", "mp4", "mpe", "mpeg", "mpega", "mpg", "mpg4", "mpga", "mpv", "mxf", "mxu",
+			"oga", "ogg", "ogv", "opus",
+			"pls",
+			"ra", "ram", "rm",
+			"snd", "swfl",
+			"vob",
+			"wav", "webm", "wm", "wma", "wmv", "wmx", "wvx",
+			"xspf"
+		],
+
+		"standalone_media_points": 750,
+
+		"word_points":
+		{
+			"flash": 200,
+			"shockwave": 200,
+			"java": 200,
+			"applet": 200,
+			"applets": 200,
+			"silverlight": 200,
+			"virtools": 200,
+			"3dvia": 200,
+			"vrml": 200,
+			"midi": 200,
+			"quicktime": 200,
+			"plugin": 100,
+			"plug-in": 100
+		},
+
+		"tag_points":
+		{
+			"object": 1000,
+			"embed": 1000,
+			"applet": 1000,
+			"bgsound": 1000,
+			"audio": 500,
+			"video": 500,
+			"map": 250,
+			"blink": 150,
+			"marquee": 150
+		},
+
+		"word_filter": ["nude", "naked", "xxx", "porn"]
+	},
+
+	"record":
+	{
+		"scheduler": {"minute": "*/10"},
+		"num_snapshots_per_scheduled_batch": 3,
+
+		"ranking_constant": 900.0,
+		"record_filtered_snapshots": true,
+		"min_publish_days_for_new_recording": 365,
+
+		"viewport_scroll_percentage": 0.85,
+		"cache_wait_after_load_multiplier": 2.0,
+
+		"max_wait_after_load_video_percentage": 0.20,
+		"points_per_extra_wait": 500,
+
+		"base_wait_after_load": 10,
+		"extra_wait_after_load": 5,
+
+		"base_wait_per_scroll": 5,
+		"extra_wait_per_scroll": 2,
+
+		"standalone_media_fallback_duration": 20,
+		"standalone_media_width": "60%",
+		"standalone_media_height": "60%",
+		"standalone_media_background_color": "#000000",
+
+		"fullscreen_browser": true,
+		"reload_plugin_media_before_recording": true,
+
+		"min_video_duration": 2,
+		"max_video_duration": 135,
+		"keep_archive_copy": false,
+
+		"screen_capture_recorder_config":
+		{
+			"capture_width": null,
+			"capture_height": null,
+			"start_x": null,
+			"start_y": null,
+			"default_max_fps": null,
+			"stretch_to_width": null,
+			"stretch_to_height": null,
+			"stretch_mode_high_quality_if_1": null,
+			"hwnd_to_track": null,
+			"disable_aero_for_vista_plus_if_1": null,
+			"track_new_x_y_coords_each_frame_if_1": null,
+			"capture_mouse_default_1": 0,
+			"capture_foreground_window_if_1": null,
+			"dedup_if_1": null,
+			"millis_to_sleep_between_poll_for_dedupe_changes": null,
+			"capture_transparent_windows_including_mouse_in_non_aero_if_1_causes_annoying_mouse_flicker": null,
+			"hwnd_to_track_with_window_decoration": null
+		},
+
+		"ffmpeg_global": ["-loglevel", "warning", "-nostats"],
+
+		"ffmpeg_recording_input":
+		{
+			"f": "dshow",
+			"framerate": 60,
+			"ar": "48K",
+			"ac": 2,
+			"rtbufsize": "100M"
+		},
+
+		"ffmpeg_recording_output":
+		{
+			"c:v": "libx264rgb",
+			"qp": 0,
+			"preset": "ultrafast",
+			"tune": "zerolatency",
+			"color_range": 2,
+			"c:a": "flac"
+		},
+
+		"ffmpeg_archive_output":
+		{
+			"c:v": "libx264rgb",
+			"qp": 0,
+			"preset": "veryslow",
+			"color_range": 2,
+			"c:a": "copy"
+		},
+
+		"ffmpeg_upload_output":
+		{
+			"c:v": "libx264",
+			"profile:v": "high",
+			"bf": 2,
+			"g": 30,
+			"crf": 18,
+			"preset": "veryslow",
+			"pix_fmt": "yuv420p",
+			"vsync": "vfr",
+			"c:a": "aac",
+			"profile:a": "aac_low",
+			"b:a": "384K",
+			"movflags": "faststart",
+			"fs": "512M"
+		}
+	},
+
+	"publish":
+	{
+		"scheduler": {"minute": "*/10"},
+		"num_snapshots_per_scheduled_batch": 1,
+		"require_approval": false,
+
+		"twitter_api_key": "<API Key>",
+		"twitter_api_secret": "<API Secret>",
+		"twitter_access_token": "<Access Token>",
+		"twitter_access_token_secret": "<Access Token Secret>",
+		
+		"twitter_max_retries": 10,
+		"twitter_retry_wait": 60,
+
+		"max_tweet_length": 280,
+		"mark_filtered_snapshots_as_sensitive": true,
+		"delete_video_after_upload": false
+	}
+}

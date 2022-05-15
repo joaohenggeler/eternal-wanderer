@@ -1,64 +1,9 @@
 #!/usr/bin/env python3
 
 """
-	@TODO
-
-	Flash: https://get.adobe.com/flashplayer/about/
-	Shockwave: https://www.adobe.com/shockwave/welcome/index.html
-	Authorware: https://www.adobe.com/shockwave/welcome/authorwareonly.html
-	Silverlight: https://www.microsoft.com/silverlight/iis-smooth-streaming/demo/
-	Java + MIDI + MOD: http://www.javaonthebrain.com/java/noids/tpanindex.html
-	BGSOUND: https://web.archive.org/web/20070702203805if_/http://www.spacerock.com/htmlref/BGSOUND1.html
-	MIDI: https://web.archive.org/web/20021010095601if_/http://www.yamaha-xg.com/mps/index.html
-	MIDI Hang: https://web.archive.org/web/19961221002525if_/http://www.geocities.com/Heartland/8055/
-	AIFF: https://web.archive.org/web/20010306021445if_/http://www.big.or.jp:80/~frog/others/bbb.html
-	RealAudio: http://web.archive.org/web/19991012120206if_/http://www.big.or.jp/~frog/others/plug/hello.ra
-	QuickTime Embed Tag: https://web.nmsu.edu/~leti/portfolio/quicktimemovie.html
-	Quicktime Object Tag: http://goa103.free.fr/t_63455/media_player.php
-	AVI: https://web.archive.org/web/20191030020045if_/http://www.eyeone.com/fun/index_page.jsp?fun_id=332
-	MIDI + Flash in different frames: https://web.archive.org/web/20021105045704if_/http://www.yamaha-xg.com/mps/game/3/scene1.htm
-	WMV: https://web.archive.org/web/20100323053720if_/http://thirdplanetvideo.com/Flip4MacTestPage.html
-	Standalone Media: https://web.archive.org/web/20181106025854if_/http://www.geocities.co.jp/AnimalPark-Pochi/1130/animation.html
-	Open New Window: https://web.archive.org/web/20010516004218/http://www.geocities.com/colosseum/8533/
-	Crescendo MIDI: https://web.archive.org/web/19961221004112if_/http://www.geocities.com/TimesSquare/8497/index.html
-	MIDI + Java + Standalone + Alerts: https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html
-	Frames: https://web.archive.org/web/19961221002554if_/http://www.geocities.com:80/Hollywood/Hills/5988/
-	Redirect: https://web.archive.org/web/19990127111318if_/http://www6.geocities.com:80/Heartland/
-	Japanese Applet Parameters: http://chutapita.nobody.jp/top/mapdata/zumidan1.html
-
-	@TODO: Docs
-
-	@TODO: Classic Firefox look
-	@TODO: The proxy thing
-	@TODO: Mastodon support?
-
-	@TODO: Add VRML support via OpenVRML
-	@TODO: Create pluginreg.dat dynamically? browse.py -generate
-	@TODO: Crescendo tags can sometimes appear type="music/crescendo" song="music.mid"
-	@TODO: Java parameters for Japanese sites (requires a Greasemonkey user script since we can't change the environment variable at runtime)
-	@TODO: Censor email addresses and phone numbers liek wayback_exe.
-	@TODO: Add Shockwave movies to the standalone media list. Check if there's any interesting parameters that should be used.
-	
-	C++ Windows XP Support for VS 2017 (v141) tools
-
-	Java Versions:
-	- 6u7 - last version before the next generation Java Plugin.
-	- 7u3 - last version where the security level can be LOW without crashing Firefox 52.
-	- 7u17 - last version where the security level can be LOW.
-	- 7u45 - last version before the exception site list was added.
-	- 8u11 - last version where the security level can be MEDIUM.
-
-	{"url": "http://www.geocities.com/", "timestamp": "19961022173245"},
-	{"url": "http://www.geocities.co.jp/", "timestamp": "19980123230306"},
-	{"url": "http://www.yahoo.com/", "timestamp": "19961017235908"},
-	{"url": "http://www.yahoo.co.jp/", "timestamp": "19961120065342"},
-	{"url": "http://www.angelfire.com/", "timestamp": "19961028070227"},
-	{"url": "http://tripod.lycos.com/", "timestamp": "20000229091928"},
-	{"url": "http://www.fortunecity.com/", "timestamp": "19961227145545"},
-	{"url": "http://www.developer.com/", "timestamp": "19970531223941"},
-	{"url": "http://www.gamelan.com/", "timestamp": "19961220054054"},
-	{"url": "http://www.aol.com/", "timestamp": "19961220155557"},
-	{"url": "http://www.cnet.com/", "timestamp": "19961022174919"}
+	This script traverses web pages archived by the Wayback Machine (snapshots) and collects metadata from their content and from the CDX API.
+	The scout script prioritizes pages that were manually added by the user through the configuration file as well as pages whose parent snapshot
+	contains specific words and plugin media.
 """
 
 import os
@@ -123,8 +68,8 @@ class ScoutConfig(CommonConfig):
 config = ScoutConfig()
 log = setup_root_logger('scout')
 
-parser = ArgumentParser(description='@TODO')
-parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='@TODO')
+parser = ArgumentParser(description='Traverses web pages archived by the Wayback Machine (snapshots) and collects metadata from their content and from the CDX API. The scout script prioritizes pages that were manually added by the user through the configuration file as well as pages whose parent snapshot contains specific words and plugin media.')
+parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to scout. Omit or set to %(default)s to run forever.')
 args = parser.parse_args()
 
 ####################################################################################################

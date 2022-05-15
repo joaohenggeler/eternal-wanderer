@@ -1,0 +1,4 @@
+# {comment}
+
+deployment.system.config=file:///{system_config_path}
+deployment.system.config.mandatory=true

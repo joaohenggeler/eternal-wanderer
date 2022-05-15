@@ -1,21 +1,35 @@
 #!/usr/bin/env python3
 
 """
-	This script approves any snapshot recordings for uploading.
-	Note that this should only be done if the uploader script started with the "require_approval" option set to true.
+	This script approves snapshot recordings for publishing.
+	This operation is optional and may only be done if the publisher script was started with the "require_approval" option set to true.
 """
 
 import os
 import sqlite3
 from argparse import ArgumentParser
 
-from common import Database, Recording, Snapshot, delete_file
+from common import CommonConfig, Database, Recording, Snapshot, delete_file
 
 ####################################################################################################
 
-parser = ArgumentParser(description='Approve snapshot recordings for uploading. This should only be used if the uploader script requires approval.')
+class PartialPublishConfig(CommonConfig):
+
+	# From the config file.
+	require_approval: bool
+
+	def __init__(self):
+		super().__init__()
+		self.load_subconfig('publish')
+
+config = PartialPublishConfig()
+
+parser = ArgumentParser(description='Approves snapshot recordings for publishing. This operation is optional and may be done if the publisher script was started with the "require_approval" option set to true.')
 parser.add_argument('-delete', action='store_true', help='Whether to delete unapproved videos (rejected or to record again) and their archived copies without asking for confirmation.')
 args = parser.parse_args()
+
+if not config.require_approval:
+	parser.error('This script can only be used if the "require_approval" option is set to true.')
 
 with Database() as db:
 	
@@ -137,3 +151,5 @@ with Database() as db:
 	except sqlite3.Error as error:
 		print(f'Failed to update the recorded snapshots with the error: {repr(error)}')
 		db.rollback()
+
+print('Finished running.')

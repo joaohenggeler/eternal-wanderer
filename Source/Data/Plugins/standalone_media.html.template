@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<!-- {comment} -->
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width; height=device-height;">
+	
+	<style>
+		html, body {
+			height: 100%;
+		}
+
+		body {
+			margin: 0;
+			background-color: {background_color};
+		}
+
+		.center {
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			width: 100%;
+			height: 100%;
+		}
+
+		.media {
+			width: {width};
+			height: {height};
+		}
+	</style>
+</head>
+
+<body>
+	<div class="center">
+		<div class="media">
+			<embed src="{url}" width="100%" height="100%" autoplay="true" autostart="true" loop="{loop}" windowless="true" bgcolor="{background_color}" quality="best" wmode="direct">
+		</div>
+	</div>
+</body>
+
+</html>

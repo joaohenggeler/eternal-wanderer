@@ -2,5 +2,26 @@
 
 Source/*
 !Source/*.py
-!Source/config_template.json
+!Source/config.template.json
 !Source/requirements.txt
+!Source/*.md
+
+!Source/Data
+Source/Data/*.db
+Source/Data/Drivers
+Source/Data/Extensions
+Source/Data/Firefox
+
+Source/Data/Other/*
+!Source/Data/Other/Queries
+
+Source/Data/Plugins/*
+!Source/Data/Plugins/Java
+Source/Data/Plugins/Java/*
+!Source/Data/Plugins/Java/*.template
+!Source/Data/Plugins/BrowserPluginExtender.dll
+!Source/Data/Plugins/standalone_media.html.template
+
+Source/Data/Profile/pluginreg.dat
+
+Source/Data/Recordings

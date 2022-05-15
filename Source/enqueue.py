@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 """
-	This script adds a Wayback Machine snapshot with a given priority to the database.
-	This can be used to scout, record, or upload any existing or new snapshots as soon as possible.
+	This script adds a Wayback Machine snapshot to the Eternal Wanderer queue with a given priority.
+	This can be used to scout, record, or publish any existing or new snapshots as soon as possible.
 """
 
 import sqlite3
@@ -15,15 +15,15 @@ from common import CommonConfig, Database, Snapshot, is_wayback_machine_availabl
 
 ####################################################################################################
 
-parser = ArgumentParser(description='Adds a Wayback Machine snapshot (URL and timestamp) to the Eternal Wanderer queue.')
-parser.add_argument('priority', choices=['scout', 'record', 'upload'], help='The priority to assign to the snapshot.')
+parser = ArgumentParser(description='Adds a Wayback Machine snapshot to the Eternal Wanderer queue with a given priority. This can be used to scout, record, or publish any existing or new snapshots as soon as possible.')
+parser.add_argument('priority', choices=['scout', 'record', 'publish'], help='The priority to assign to the snapshot.')
 parser.add_argument('url', help='The URL of the snapshot.')
 parser.add_argument('timestamp', help='The timestamp of the snapshot.')
 parser.add_argument('-standalone', action='store_true', help='If it\'s a snapshot of standalone media.')
 parser.add_argument('-filtered', action='store_true', help='If the standalone media snapshot should be filtered.')
 args = parser.parse_args()
 
-names_to_values = {'scout': Snapshot.SCOUT_PRIORITY, 'record': Snapshot.RECORD_PRIORITY, 'upload': Snapshot.UPLOAD_PRIORITY}
+names_to_values = {'scout': Snapshot.SCOUT_PRIORITY, 'record': Snapshot.RECORD_PRIORITY, 'publish': Snapshot.PUBLISH_PRIORITY}
 priority = names_to_values[args.priority]
 
 with Database() as db:
@@ -65,7 +65,7 @@ with Database() as db:
 						new_state = first_state
 					elif priority == Snapshot.RECORD_PRIORITY:
 						new_state = Snapshot.SCOUTED if old_state >= Snapshot.SCOUTED else first_state
-					elif priority == Snapshot.UPLOAD_PRIORITY:
+					elif priority == Snapshot.PUBLISH_PRIORITY:
 						new_state = Snapshot.RECORDED if old_state >= Snapshot.RECORDED else (Snapshot.SCOUTED if old_state >= Snapshot.SCOUTED else first_state)
 					else:
 						assert False, f'Unhandled priority "{args.priority}" ({priority}).'
@@ -93,3 +93,5 @@ with Database() as db:
 		print(f'Failed to find a snapshot at "{args.url}" near {args.timestamp} with the error: {repr(error)}')
 		if not is_wayback_machine_available():
 			print('The Wayback Machine is not currently available.')
+
+print('Finished running.')

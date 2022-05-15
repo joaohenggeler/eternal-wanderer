@@ -3,6 +3,19 @@
 """
 	A module that defines any general purpose functions used by all scripts, including loading configuration files,
 	connecting to the database, and interfacing with Firefox.
+
+	@TODO: Docs
+	@TODO: Create pluginreg.dat dynamically? browse.py -generate (parse.error() is plugin_mode is static)
+
+	@TODO: Classic Theme Restorer
+	@TODO: FTS5 for page text?
+	@TODO: The recorder proxy
+	@TODO: Mastodon support
+
+	@TODO: Add VRML support via OpenVRML
+	@TODO: Handle Crescendo tags
+	@TODO: Java parameters for Japanese sites (requires a Greasemonkey user script since we can't change the Java environment variable at runtime)
+	@TODO: Censor email addresses and phone numbers like wayback_exe?
 """
 
 import json
@@ -14,6 +27,7 @@ import re
 import shutil
 import sqlite3
 import tempfile
+import warnings
 import winreg
 from datetime import datetime, timezone
 from glob import iglob
@@ -24,7 +38,7 @@ from urllib.parse import urlparse
 from winreg import CreateKeyEx, DeleteKey, DeleteValue, OpenKey, QueryValueEx, SetValueEx
 from xml.etree import ElementTree
 
-import ratelimit
+import ratelimit # type: ignore
 import requests
 from pywinauto.application import Application as WinApplication, WindowSpecification, ProcessNotFoundError as WinProcessNotFoundError, TimeoutError as WinTimeoutError # type: ignore
 from selenium import webdriver # type: ignore
@@ -259,7 +273,7 @@ class Database():
 									ArchiveFilename TEXT,
 									UploadFilename TEXT NOT NULL,
 									CreationTime TIMESTAMP NOT NULL,
-									UploadTime TIMESTAMP,
+									PublishTime TIMESTAMP,
 									MediaId INTEGER,
 									TweetId INTEGER,
 
@@ -314,12 +328,12 @@ class Snapshot():
 	RECORDED = 3
 	APPROVED = 4
 	REJECTED = 5
-	UPLOADED = 6
+	PUBLISHED = 6
 	
 	NO_PRIORITY = 0
 	SCOUT_PRIORITY = 1
 	RECORD_PRIORITY = 2
-	UPLOAD_PRIORITY = 3
+	PUBLISH_PRIORITY = 3
 
 	IFRAME_MODIFIER = 'if_'
 	OBJECT_EMBED_MODIFIER = 'oe_'
@@ -353,7 +367,7 @@ class Recording():
 	ArchiveFilename: Optional[str]
 	UploadFilename: str
 	CreationTime: str
-	UploadTime: Optional[str]
+	PublishTime: Optional[str]
 	MediaId: Optional[int]
 	MediaUrl: Optional[str]
 	TweetId: Optional[int]
@@ -418,9 +432,11 @@ class Browser():
 	firefox_directory_path: str
 	webdriver_path: str
 	autoit_processes: List[Popen]
+	registry: 'TemporaryRegistry'
 	java_deployment_path: str
 
 	driver: WebDriver
+	profile_path: str
 	pid: int
 	application: Optional[WinApplication]
 	window: Optional[WindowSpecification]
@@ -441,6 +457,7 @@ class Browser():
 		self.firefox_path = config.headless_firefox_path if self.headless else config.gui_firefox_path
 		self.firefox_directory_path = os.path.dirname(self.firefox_path)
 		self.autoit_processes = []
+		self.registry = TemporaryRegistry()
 		self.java_deployment_path = os.path.join(os.environ['USERPROFILE'], 'AppData', 'LocalLow', 'Sun', 'Java', 'Deployment')
 
 		log.info('Configuring Firefox.')
@@ -483,6 +500,11 @@ class Browser():
 			plugin_extender_source_path = os.path.join(config.plugins_path, 'BrowserPluginExtender.dll')
 			shutil.copy(plugin_extender_source_path, self.firefox_directory_path)
 
+			# The value we're changing here is the default one that is usually displayed as "(Default)",
+			# even though the subkey is actually an empty string.
+			self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\allowfallback\\', 'y')
+			self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\allowfallback\\', 'y')
+
 			self.configure_java_plugin()
 		else:
 			os.environ['MOZ_PLUGIN_PATH'] = ''
@@ -518,6 +540,7 @@ class Browser():
 		self.driver.set_page_load_timeout(config.page_load_timeout)
 		self.driver.maximize_window()
 
+		self.profile_path = self.driver.capabilities['moz:profile']
 		self.pid = self.driver.capabilities['moz:processID']
 
 		try:
@@ -561,12 +584,13 @@ class Browser():
 	def configure_java_plugin(self) -> None:
 		""" Configures the Java Plugin by generating the appropriate deployment files and passing any useful paramters to the JRE. """
 
-		java_jre_search_path = os.path.join(config.plugins_path, '**', 'jdk*/jre')
-		java_jre_path = next(iglob(java_jre_search_path, recursive=True), None)
-		if java_jre_path is None:
+		java_plugin_search_path = os.path.join(config.plugins_path, '**', 'jre*', 'bin', 'plugin2')
+		java_plugin_path = next(iglob(java_plugin_search_path, recursive=True), None)
+		if java_plugin_path is None:
 			log.error('Could not find the path to the Java Runtime Environment. The Java Plugin was not be set up correctly.')
 			return
 
+		java_jre_path = os.path.dirname(os.path.dirname(java_plugin_path))
 		log.info(f'Configuring the Java Plugin using the runtime environment located in "{java_jre_path}".')
 
 		java_lib_path = os.path.join(java_jre_path, 'lib')
@@ -590,10 +614,10 @@ class Browser():
 		with open(java_properties_template_path, encoding='utf-8') as file:
 			content = file.read()
 
-		java_product = re.findall(r'jdk(\d+\.\d+\.\d+)(_\d+)?', java_lib_path, flags=re.IGNORECASE)[-1]
-		java_product = ''.join(str(part) for part in java_product) if isinstance(java_product, tuple) else java_product
-		java_platform, _ = java_product.rsplit('.', 1)
-		_, java_version = java_platform.split('.', 1)
+		# E.g. "1.8.0" or "1.8.0_11"
+		java_product = re.findall(r'(?:jdk|jre)((?:\d+\.\d+\.\d+)(?:_\d+)?)', java_jre_path, flags=re.IGNORECASE)[-1]
+		java_platform, _ = java_product.rsplit('.', 1) # E.g. "1.8"
+		_, java_version = java_platform.split('.', 1) # E.g. "8"
 
 		java_firefox_path = os.path.join(java_bin_path, 'javaws.exe')
 
@@ -678,6 +702,8 @@ class Browser():
 					process.terminate()
 				except OSError as error:
 					log.error(f'Failed to terminate the process {process} with the error: {repr(error)}')
+
+		self.registry.restore()
 
 	def __enter__(self):
 		return (self, self.driver)
@@ -838,9 +864,10 @@ class TemporaryRegistry():
 	def partition_key(key: str) -> Tuple[int, str, str]:
 		""" Separates a registry key string into its hkey, key path, and sub key components. """
 
-		first_key, key_path = key.lower().split('\\', 1)
+		first_key, key_path = key.split('\\', 1)
 		key_path, sub_key = key_path.rsplit('\\', 1)
 
+		first_key = first_key.lower()
 		if first_key not in TemporaryRegistry.OPEN_HKEYS:
 			raise KeyError(f'The registry key "{key}" does not start with a valid HKEY.')
 
@@ -1030,7 +1057,6 @@ def delete_directory(path: str) -> None:
 		pass
 
 # Ignore the warning about connecting to a 32-bit executable while using a 64-bit Python environment.
-import warnings
 warnings.simplefilter('ignore', category=UserWarning)
 
 def kill_processes_by_path(path: str, timeout: int = 5) -> None:

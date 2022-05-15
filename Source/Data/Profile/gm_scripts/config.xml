@@ -1,0 +1,22 @@
+<UserScriptConfig>
+	<Script basedir="Disable_Alert_Confirm_Prompt" checkRemoteUpdates="0" dependhash="da39a3ee5e6b4b0d3255bfef95601890afd80709" description="Disables the alert, confirm, and prompt functions. These last two will always return false and null, respectively." enabled="true" filename="disable_alert_confirm_prompt.user.js" installTime="1650841200000" modified="1650841200000" name="Disable Alert Confirm Prompt" namespace="" noframes="false" runAt="document-start" updateMetaStatus="unknown" uuid="eadc3f51-b3f9-477f-9312-e446d8f78ca7" version="1.0.0" installurl="" updateurl="">
+		<Grant>none</Grant>
+		<Include>*</Include>
+	</Script>
+	<Script basedir="Bgsound_To_Embed" checkRemoteUpdates="0" dependhash="da39a3ee5e6b4b0d3255bfef95601890afd80709" description="Converts bgsound to embed tags. Avoids converting bgsound tags whose audio is already being played using an embed tag. Adapted from: https://userscripts-mirror.org/scripts/show/1827" enabled="true" filename="bgsound_to_embed.user.js" installTime="1650841200000" modified="1650841200000" name="Bgsound To Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="775286c9-2f6d-4918-8c5b-d2f8841c9f5f" version="1.0.0" installurl="" updateurl="">
+		<Grant>none</Grant>
+		<Include>*</Include>
+	</Script>
+	<Script basedir="Fix_Vlc_Embed" checkRemoteUpdates="0" dependhash="da39a3ee5e6b4b0d3255bfef95601890afd80709" description="Fixes an issue where a video meant to be played by the VLC plugin would be displayed in the wrong position on the page. Also fixes an issue where embedded audio that isn't supposed to loop is played twice by VLC. The first fix removes the video's controls so the script allows you to toggle pause by clicking on it. Videos can also be played from the beginning by right-clicking on them." enabled="true" filename="fix_vlc_embed.user.js" installTime="1650841200000" modified="1650841200000" name="Fix Vlc Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="3c517509-dd93-41bf-89c1-a7ae05d1f6d4" version="1.0.0" installurl="" updateurl="">
+		<Grant>none</Grant>
+		<Include>*</Include>
+	</Script>
+	<Script basedir="Autoplay_Random_Audio_And_Video" checkRemoteUpdates="0" dependhash="da39a3ee5e6b4b0d3255bfef95601890afd80709" description="Makes a random audio and video element start playing as soon as possible. This includes both the audio and video tags as well as any object and embed tags that specify audio and video MIME types." enabled="true" filename="autoplay_random_audio_and_video.user.js" installTime="1650841200000" modified="1650841200000" name="Autoplay Random Audio And Video" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="1b4f7b27-0da6-4171-aaba-569668e61b22" version="1.0.0" installurl="" updateurl="">
+		<Grant>none</Grant>
+		<Include>*</Include>
+	</Script>
+	<Script basedir="Random_Yamaha_Midplug_Skin" checkRemoteUpdates="0" dependhash="da39a3ee5e6b4b0d3255bfef95601890afd80709" description="Picks a random skin for the YAMAHA MIDPLUG for XG plugin's player if one isn't set explicitly." enabled="true" filename="random_yamaha_midplug_skin.user.js" installTime="1650841200000" modified="1650841200000" name="Random Yamaha Midplug Skin" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="a08d1bbc-035b-42d4-8702-7dddd5cfe068" version="1.0.0" installurl="" updateurl="">
+		<Grant>none</Grant>
+		<Include>*</Include>
+	</Script>
+</UserScriptConfig>
