@@ -2,6 +2,7 @@
 	"common":
 	{
 		"debug": false,
+		"show_java_console": false,
 		"locale": "en_US",
 
 		"database_path": "Data/wanderer.db",
@@ -24,6 +25,8 @@
 			"app.update.service.enabled": false,
 
 			"browser.cache.disk.enable": false,
+			"browser.cache.memory.capacity": -1,
+			"browser.cache.memory.enable": true,
 			"browser.download.manager.retention": 1,
 			"browser.download.useDownloadDir": false,
 			"browser.shell.checkDefaultBrowser": false,
@@ -130,12 +133,19 @@
 		"recordings_path": "Data/Recordings",
 		"max_recordings_per_directory": 1000,
 
-		"max_wayback_machine_requests_per_minute": 25,
+		"cdx_api_rate_limit_amount": 3,
+		"cdx_api_rate_limit_multiple": 5,
+		"wayback_machine_rate_limit_amount": 25,
+		"wayback_machine_rate_limit_multiple": 60,
+		"rate_limit_poll_frequency": 0.5,
 		"unavailable_wayback_machine_wait": 900
 	},
 
 	"scout":
 	{
+		"extension_filter": ["greasemonkey-3.17-fx.xpi"],
+		"user_script_filter": ["Disable Alert Confirm Prompt"],
+
 		"initial_snapshots":
 		[
 			{"url": "http://www.geocities.com/", "timestamp": "19961022173245"},
@@ -193,6 +203,7 @@
 			"applet": 200,
 			"applets": 200,
 			"silverlight": 200,
+			"authorware": 200,
 			"virtools": 200,
 			"3dvia": 200,
 			"vrml": 200,
@@ -215,7 +226,9 @@
 			"marquee": 150
 		},
 
-		"word_filter": ["nude", "naked", "xxx", "porn"]
+		"word_filter": ["nude", "naked", "xxx", "porn"],
+
+		"store_all_words_and_tags": true
 	},
 
 	"record":
@@ -224,12 +237,21 @@
 		"num_snapshots_per_scheduled_batch": 3,
 
 		"ranking_constant": 900.0,
+		"min_year": null,
+		"max_year": null,
 		"record_filtered_snapshots": true,
 		"min_publish_days_for_new_recording": 365,
 
-		"viewport_scroll_percentage": 0.85,
-		"cache_wait_after_load_multiplier": 2.0,
+		"use_proxy": true,
+		"proxy_port": null,
+		"proxy_queue_timeout": 10,
+		"proxy_total_timeout": 300,
+		"find_missing_proxy_snapshots_using_cdx": true,
+		"max_missing_proxy_snapshot_path_components": 2,
 
+		"viewport_scroll_percentage": 0.85,
+		
+		"cache_wait_after_load_multiplier": 2.0,
 		"max_wait_after_load_video_percentage": 0.20,
 		"points_per_extra_wait": 500,
 

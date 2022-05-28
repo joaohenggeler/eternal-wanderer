@@ -20,9 +20,13 @@ The following Python packages are used:
 
 * [Waybackpy](https://github.com/akamhy/waybackpy): to retrieve metadata from the Wayback Machine CDX API.
 
-* [requests](https://github.com/psf/requests): to check if the Wayback Machine is available.
+* [requests](https://github.com/psf/requests): to check if specific Wayback Machine snapshots are available.
 
-* [ratelimit](https://github.com/tomasbasham/ratelimit): to avoid making too many requests to the Wayback Machine.
+* [limits](https://github.com/alisaifee/limits): to avoid making too many requests to the Wayback Machine and CDX API.
+
+* [mitmproxy](https://github.com/mitmproxy/mitmproxy) to intercept all HTTP/HTTPS requests made by Firefox and its plugins. Used to locate missing resources in other subdomains via the CDX API while also allowing plugin media that loads slowly to finish requesting assets. Only used if the `use_proxy` option is true.
+
+* [tldextract](https://github.com/john-kurkowski/tldextract) to determine the correct registered domain from a URL. Only used if the `use_proxy` option is true.
 
 * [ffmpeg-python](https://github.com/kkroening/ffmpeg-python): to record the screen using ffmpeg.
 
@@ -45,6 +49,8 @@ Below is a summary of the Python scripts located in [the source directory](Sourc
 * `enqueue.py`: adds a Wayback Machine snapshot to the Eternal Wanderer queue with a given priority. This can be used to scout, record, or publish any existing or new snapshots as soon as possible.
 
 * `browse.py`: opens a URL in a Firefox version equipped with various plugins and extensions. Avoid using this version to browse live websites.
+
+* `wayback_proxy_addon.py`: a mitmproxy script that tells the recorder script if the page is still making requests while also checking if any missing files are available in a different subdomain. This script should not be run directly and is instead started automatically by the recorder if the `use_proxy` option is true.
 
 * `common.py`: a module that defines any general purpose functions used by all scripts, including loading configuration files, connecting to the database, and interfacing with Firefox.
 

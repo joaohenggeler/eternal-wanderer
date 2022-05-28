@@ -4,18 +4,21 @@
 	A module that defines any general purpose functions used by all scripts, including loading configuration files,
 	connecting to the database, and interfacing with Firefox.
 
-	@TODO: Docs
-	@TODO: Create pluginreg.dat dynamically? browse.py -generate (parse.error() is plugin_mode is static)
-
 	@TODO: Classic Theme Restorer
-	@TODO: FTS5 for page text?
-	@TODO: The recorder proxy
+	@TODO: Hide status bar with userChrome.css
+	@TODO: Revisit UTF-8 issue in Classic Theme Restorer
 	@TODO: Mastodon support
 
 	@TODO: Add VRML support via OpenVRML
 	@TODO: Handle Crescendo tags
 	@TODO: Java parameters for Japanese sites (requires a Greasemonkey user script since we can't change the Java environment variable at runtime)
 	@TODO: Censor email addresses and phone numbers like wayback_exe?
+
+	@TODO: -config param=value
+	@TODO: Check if we're determining the maximum frame height at the best time in the recorder script.
+	@TODO: ffmpeg output arguments
+	- "vf": "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+	- "sws_flags": "area+accurate_rnd",
 """
 
 import json
@@ -27,9 +30,12 @@ import re
 import shutil
 import sqlite3
 import tempfile
+import time
 import warnings
 import winreg
+from collections import namedtuple
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from glob import iglob
 from math import ceil
 from subprocess import Popen
@@ -38,8 +44,10 @@ from urllib.parse import urlparse
 from winreg import CreateKeyEx, DeleteKey, DeleteValue, OpenKey, QueryValueEx, SetValueEx
 from xml.etree import ElementTree
 
-import ratelimit # type: ignore
 import requests
+from limits import RateLimitItemPerSecond
+from limits.storage import MemoryStorage
+from limits.strategies import MovingWindowRateLimiter
 from pywinauto.application import Application as WinApplication, WindowSpecification, ProcessNotFoundError as WinProcessNotFoundError, TimeoutError as WinTimeoutError # type: ignore
 from selenium import webdriver # type: ignore
 from selenium.common.exceptions import NoSuchElementException, NoSuchWindowException, StaleElementReferenceException, TimeoutException, WebDriverException # type: ignore
@@ -49,6 +57,8 @@ from selenium.webdriver.firefox.webdriver import WebDriver # type: ignore
 from selenium.webdriver.remote.webelement import WebElement # type: ignore
 from selenium.webdriver.support import expected_conditions # type: ignore
 from selenium.webdriver.support.ui import WebDriverWait # type: ignore
+from waybackpy import WaybackMachineCDXServerAPI as Cdx
+from waybackpy.cdx_snapshot import CDXSnapshot
 
 ####################################################################################################
 
@@ -69,6 +79,7 @@ class CommonConfig():
 	json_config: dict
 
 	debug: bool
+	show_java_console: bool
 	locale: str
 
 	database_path: str
@@ -99,8 +110,20 @@ class CommonConfig():
 	recordings_path: str
 	max_recordings_per_directory: int
 
-	max_wayback_machine_requests_per_minute: int
+	cdx_api_rate_limit_amount: int
+	cdx_api_rate_limit_multiple: int
+	wayback_machine_rate_limit_amount: int
+	wayback_machine_rate_limit_multiple: int
+	rate_limit_poll_frequency: float
 	unavailable_wayback_machine_wait: int
+
+	# Determined at runtime.
+	cdx_api_memory_storage: MemoryStorage
+	cdx_api_rate_limiter: MovingWindowRateLimiter
+	cdx_api_requests_per_second: RateLimitItemPerSecond
+	wayback_machine_memory_storage: MemoryStorage
+	wayback_machine_rate_limiter: MovingWindowRateLimiter
+	wayback_machine_requests_per_minute: RateLimitItemPerSecond
 
 	def __init__(self):
 
@@ -124,6 +147,14 @@ class CommonConfig():
 		self.plugins = container_to_lowercase(self.plugins)
 		assert self.plugins_mode in ['static', 'dynamic'], f'Unknown plugins mode "{self.plugins_mode}".'
 
+		self.cdx_api_memory_storage = MemoryStorage()
+		self.cdx_api_rate_limiter = MovingWindowRateLimiter(self.cdx_api_memory_storage)
+		self.cdx_api_requests_per_second = RateLimitItemPerSecond(self.cdx_api_rate_limit_amount, self.cdx_api_rate_limit_multiple)
+
+		self.wayback_machine_memory_storage = MemoryStorage()
+		self.wayback_machine_rate_limiter = MovingWindowRateLimiter(self.wayback_machine_memory_storage)
+		self.wayback_machine_requests_per_minute = RateLimitItemPerSecond(self.wayback_machine_rate_limit_amount, self.wayback_machine_rate_limit_multiple)
+
 	def load_subconfig(self, name: str) -> None:
 		""" Loads a specific JSON object from the configuration file. """
 		self.__dict__.update(self.json_config[name])
@@ -133,8 +164,25 @@ class CommonConfig():
 		bucket = ceil(id / self.max_recordings_per_directory) * self.max_recordings_per_directory
 		return os.path.join(self.recordings_path, str(bucket))
 
-def setup_root_logger(filename: str) -> logging.Logger:
-	""" Adds a stream and file handler to the root logger. """
+	def wait_for_cdx_api_rate_limit(self) -> None:
+		""" Waits for a given amount of time if the user-specified CDX API rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
+		while not self.cdx_api_rate_limiter.hit(self.cdx_api_requests_per_second):
+			time.sleep(self.rate_limit_poll_frequency)
+
+	def wait_for_wayback_machine_rate_limit(self) -> None:
+		""" Waits for a given amount of time if the user-specified Wayback Machine rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
+		while not self.wayback_machine_rate_limiter.hit(self.wayback_machine_requests_per_minute):
+			time.sleep(self.rate_limit_poll_frequency)
+
+config = CommonConfig()
+locale.setlocale(locale.LC_ALL, config.locale)
+
+log = logging.getLogger('eternal wanderer')
+log.setLevel(logging.DEBUG if config.debug else logging.INFO)
+log.debug('Running in debug mode.')
+
+def setup_logger(filename: str) -> logging.Logger:
+	""" Adds a stream and file handler to the Eternal Wanderer logger. """
 
 	stream_handler = logging.StreamHandler()
 	stream_formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s', datefmt='%H:%M:%S')
@@ -144,17 +192,11 @@ def setup_root_logger(filename: str) -> logging.Logger:
 	file_formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] %(filename)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 	file_handler.setFormatter(file_formatter)
 
-	log = logging.getLogger()
+	global log
 	log.addHandler(stream_handler)
 	log.addHandler(file_handler)
 	
 	return log
-
-config = CommonConfig()
-locale.setlocale(locale.LC_ALL, config.locale)
-
-log = logging.getLogger()
-log.setLevel(logging.DEBUG if config.debug else logging.INFO)
 
 ####################################################################################################
 
@@ -175,7 +217,15 @@ class Database():
 		self.connection.execute('PRAGMA journal_mode = WAL;')
 		self.connection.execute('PRAGMA synchronous = NORMAL;')
 		self.connection.execute('PRAGMA temp_store = MEMORY;')
-		
+	
+		# E.g. https://web.archive.org/web/20010203164200if_/http://www.tripod.lycos.com:80/service/welcome/preferences
+		# And https://web.archive.org/web/20010203180900if_/http://www.tripod.lycos.com:80/bin/membership/login
+
+		# Some examples of the Url, Timestamp, UrlKey, and Digest columns from the CDX API:
+		# http://www.geocities.com/Heartland/Plains/1036/africa.gif 20090730213441 com,geocities)/heartland/plains/1036/africa.gif RRCC3TTUVIQTMFN6BDRRIXR7OBNCGS6X
+		# http://geocities.com/Heartland/Plains/1036/africa.gif 	20090820053240 com,geocities)/heartland/plains/1036/africa.gif RRCC3TTUVIQTMFN6BDRRIXR7OBNCGS6X
+		# http://geocities.com/Heartland/Plains/1036/africa.gif 	20091026145159 com,geocities)/heartland/plains/1036/africa.gif RRCC3TTUVIQTMFN6BDRRIXR7OBNCGS6X	
+
 		self.connection.execute(f'''
 								CREATE TABLE IF NOT EXISTS Snapshot
 								(
@@ -185,15 +235,14 @@ class Database():
 									Depth INTEGER NOT NULL,
 									Priority INTEGER NOT NULL DEFAULT {Snapshot.NO_PRIORITY},
 									Title TEXT,
-									-- Points INTEGER,
 									UsesPlugins BOOLEAN,
-									IsFiltered BOOLEAN,
 									IsStandaloneMedia BOOLEAN NOT NULL,
 									Url TEXT NOT NULL,
 									Timestamp VARCHAR(14) NOT NULL,
+									LastModifiedTime VARCHAR(14),
 									IsExcluded BOOLEAN NOT NULL,
 									UrlKey TEXT,
-									Digest VARCHAR(64) UNIQUE,
+									Digest VARCHAR(64),
 
 									UNIQUE (Url, Timestamp)
 
@@ -219,7 +268,8 @@ class Database():
 									Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 									Word TEXT NOT NULL,
 									IsTag BOOLEAN NOT NULL,
-									Points INTEGER NOT NULL,
+									Points INTEGER NOT NULL DEFAULT 0,
+									IsFiltered BOOLEAN NOT NULL DEFAULT FALSE,
 
 									UNIQUE (Word, IsTag)
 								);
@@ -247,7 +297,7 @@ class Database():
 								''')
 
 		self.connection.execute(f'''
-								CREATE VIEW IF NOT EXISTS SnapshotScore AS
+								CREATE VIEW IF NOT EXISTS SnapshotInfo AS
 								SELECT
 									S.Id AS Id,
 									(
@@ -257,7 +307,12 @@ class Database():
 															  ELSE SUM(MIN(SW.Count, 1) * W.Points)
 														 END, 0)
 										END
-									) AS Points
+									) AS Points,
+									(
+										CASE WHEN S.State = {Snapshot.QUEUED} THEN NULL
+										ELSE IFNULL(MAX(W.IsFiltered), FALSE)
+										END
+									) AS IsFiltered
 								FROM Snapshot S
 								LEFT JOIN SnapshotWord SW ON S.Id = SW.SnapshotId
 								LEFT JOIN Word W ON SW.WordId = W.Id
@@ -304,19 +359,22 @@ class Snapshot():
 	# From the database.
 	Id: int
 	ParentId: Optional[int]
-	State: str
+	State: int
 	Depth: int
 	Priority: int
 	Title: Optional[str]
-	Points: Optional[int] # Determined dynamically if joined with the SnapshotScore view.
 	UsesPlugins: Optional[bool]
-	IsFiltered: Optional[bool]
 	IsStandaloneMedia: bool
 	Url: str
 	Timestamp: str
+	LastModifiedTime: Optional[str]
 	IsExcluded: bool
 	UrlKey: Optional[str]
 	Digest: Optional[str]
+
+	# Determined dynamically if joined with the SnapshotInfo view.
+	Points: Optional[int]
+	IsFiltered: Optional[bool]
 
 	# Determined at runtime.
 	WaybackUrl: str
@@ -329,7 +387,8 @@ class Snapshot():
 	APPROVED = 4
 	REJECTED = 5
 	PUBLISHED = 6
-	
+	ARCHIVED = 7
+
 	NO_PRIORITY = 0
 	SCOUT_PRIORITY = 1
 	RECORD_PRIORITY = 2
@@ -337,10 +396,12 @@ class Snapshot():
 
 	IFRAME_MODIFIER = 'if_'
 	OBJECT_EMBED_MODIFIER = 'oe_'
+	IDENTICAL_MODIFIER = 'id_'
 
 	def __init__(self, **kwargs):
 		
 		self.Points = None
+		self.IsFiltered = None
 		self.__dict__.update(kwargs)
 		
 		def bool_or_none(value: Any) -> Union[bool, None]:
@@ -352,7 +413,7 @@ class Snapshot():
 		self.IsExcluded = bool_or_none(self.IsExcluded)
 
 		modifier = Snapshot.OBJECT_EMBED_MODIFIER if self.IsStandaloneMedia else Snapshot.IFRAME_MODIFIER
-		self.WaybackUrl = f'https://web.archive.org/web/{self.Timestamp}{modifier}/{self.Url}'
+		self.WaybackUrl = compose_wayback_machine_snapshot_url(timestamp=self.Timestamp, modifier=modifier, url=self.Url)
 
 	def __str__(self):
 		return f'({self.Url}, {self.Timestamp})'
@@ -412,7 +473,7 @@ class CustomFirefoxProfile(FirefoxProfile):
 					directory = script.get('basedir')
 
 					if name and directory and name not in user_script_filter:
-						log.info(f'Removing the user script "{name}" from the temporary Firefox profile.')
+						log.info(f'Skipping the user script "{name}" at the user\'s request.')
 						script_directory_path = os.path.join(scripts_path, directory)
 						delete_directory(script_directory_path)
 
@@ -423,7 +484,9 @@ class Browser():
 	""" A Firefox browser instance created by Selenium. """
 
 	headless: bool
+	extra_preferences: Optional[Dict[str, Union[bool, int, str]]]
 	use_extensions: bool
+	extension_filter: Optional[List[str]]
 	user_script_filter: Optional[List[str]]
 	use_plugins: bool
 	use_autoit: bool
@@ -442,20 +505,24 @@ class Browser():
 	window: Optional[WindowSpecification]
 	
 	def __init__(self, 	headless: bool = False,
+						extra_preferences: Optional[Dict[str, Union[bool, int, str]]] = None,
 						use_extensions: bool = False,
+						extension_filter: Optional[List[str]] = None,
 						user_script_filter: Optional[List[str]] = None,
 						use_plugins: bool = False,
 						use_autoit: bool = False):
 
 		self.headless = headless
-		self.use_plugins = use_plugins
+		self.extra_preferences = extra_preferences
 		self.use_extensions = use_extensions
+		self.extension_filter = extension_filter
 		self.user_script_filter = user_script_filter
+		self.use_plugins = use_plugins
 		self.use_autoit = use_autoit
 
-		self.webdriver_path = config.headless_webdriver_path if self.headless else config.gui_webdriver_path
 		self.firefox_path = config.headless_firefox_path if self.headless else config.gui_firefox_path
 		self.firefox_directory_path = os.path.dirname(self.firefox_path)
+		self.webdriver_path = config.headless_webdriver_path if self.headless else config.gui_webdriver_path
 		self.autoit_processes = []
 		self.registry = TemporaryRegistry()
 		self.java_deployment_path = os.path.join(os.environ['USERPROFILE'], 'AppData', 'LocalLow', 'Sun', 'Java', 'Deployment')
@@ -471,6 +538,11 @@ class Browser():
 		
 		for key, value in config.preferences.items():
 			profile.set_preference(key, value)
+
+		if self.extra_preferences is not None:
+			log.info(f'Setting additional preferences: {self.extra_preferences}')
+			for key, value in self.extra_preferences.items():
+				profile.set_preference(key, value)
 
 		if self.use_plugins:
 
@@ -514,7 +586,10 @@ class Browser():
 			log.info(f'Installing the extensions in "{config.extensions_path}".')
 
 			for extension, enabled in config.extensions_before_running.items():
-				if enabled:
+				
+				filtered = self.extension_filter is not None and extension not in self.extension_filter
+
+				if enabled and not filtered:
 					log.info(f'Installing the extension "{extension}".')
 					full_extension_path = os.path.join(config.extensions_path, extension)
 					profile.add_extension(full_extension_path)
@@ -543,20 +618,25 @@ class Browser():
 		self.profile_path = self.driver.capabilities['moz:profile']
 		self.pid = self.driver.capabilities['moz:processID']
 
-		try:
-			log.info(f'Connecting to the Firefox executable with the PID {self.pid}.')
-			self.application = WinApplication(backend='win32')
-			self.application.connect(process=self.pid, timeout=30)
-			self.window = self.application.top_window()
-		except (WinProcessNotFoundError, WinTimeoutError, RuntimeError):
-			log.error('Failed to connect to the Firefox executable.')
-			self.application = None
-			self.window = None
+		self.application = None
+		self.window = None
 
+		if not self.headless:
+			try:
+				log.info(f'Connecting to the Firefox executable with the PID {self.pid}.')
+				self.application = WinApplication(backend='win32')
+				self.application.connect(process=self.pid, timeout=30)
+				self.window = self.application.top_window()
+			except (WinProcessNotFoundError, WinTimeoutError, RuntimeError):
+				log.error('Failed to connect to the Firefox executable.')
+			
 		if self.use_extensions:
 
 			for extension, enabled in config.extensions_after_running.items():
-				if enabled:
+				
+				filtered = self.extension_filter is not None and extension not in self.extension_filter
+
+				if enabled and not filtered:
 					log.info(f'Installing the extension "{extension}".')
 					full_extension_path = os.path.join(config.extensions_path, extension)
 					self.driver.install_addon(full_extension_path)
@@ -635,7 +715,7 @@ class Browser():
 		content = content.replace('{jre_version}', java_version)
 		content = content.replace('{security_level}', 'LOW' if java_product <= '1.7.0_17' else 'MEDIUM')
 		content = content.replace('{exception_sites_path}', escape_java_deployment_properties_path(java_exception_sites_path))
-		content = content.replace('{console_startup}', 'SHOW' if config.debug else 'NEVER')
+		content = content.replace('{console_startup}', 'SHOW' if config.show_java_console else 'NEVER')
 
 		with open(java_properties_path, 'w', encoding='utf-8') as file:
 			file.write(content)
@@ -661,7 +741,7 @@ class Browser():
 		java_cache_path = os.path.join(self.java_deployment_path, 'cache')
 		delete_directory(java_cache_path)
 
-	def terminate(self):
+	def shutdown(self):
 		""" Closes the browser, quits the WebDriver, and performs any other cleanup operations. """
 
 		try:
@@ -709,25 +789,54 @@ class Browser():
 		return (self, self.driver)
 
 	def __exit__(self, exception_type, exception_value, traceback):
-		self.terminate()
+		self.shutdown()
 
-	def switch_through_frames(self) -> Iterator[WebDriver]:
-		""" Traverses recursively through the current web page's frames. This function always yields the WebDriver. """
+	def go_to_wayback_url(self, wayback_url: str) -> None:
+		""" Navigates to a Wayback Machine URL, taking into account any rate limiting and retrying if the service is unavailable. """
 
-		def traverse_frames() -> Iterator[WebDriver]:
+		try:
+			config.wait_for_wayback_machine_rate_limit()
+			self.driver.get(wayback_url)
+
+			while not self.is_current_url_valid_wayback_machine_page():
+				log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
+				time.sleep(config.unavailable_wayback_machine_wait)
+				self.driver.get(wayback_url)
+
+		except TimeoutException:
+			log.warning(f'Timed out while loading the page "{wayback_url}".')
+
+	def switch_through_frames(self) -> Iterator[str]:
+		""" Traverses recursively through the current web page's frames. This function yields the frame's source URL.
+		Note that, for pages archived by the Wayback Machine, only the root window's URL will be a snapshot URL."""
+
+		def traverse_frames(current_url: str) -> Iterator[str]:
 			""" Helper function used to traverse through every frame recursively. """
 
-			yield self.driver
+			log.debug(f'Traversing the frame "{current_url}".')
+			yield current_url
 			
 			frame_list = self.driver.find_elements_by_tag_name('frame') + self.driver.find_elements_by_tag_name('iframe')
 			for frame in frame_list:
 				
-				# Skip any frames that were added by the Internet Archive (e.g. https://archive.org/includes/donate.php).
 				frame_source = frame.get_attribute('src')
-				if frame_source is not None:
-					parts = urlparse(frame_source)
-					if parts.hostname is not None and (parts.hostname == 'archive.org' or parts.hostname.endswith('.archive.org')):
-						continue
+
+				# Skip frames whose source would be converted to "https://web.archive.org/".
+				if not frame_source:
+					log.debug('Skipping a frame without a source.')
+					continue
+
+				parts = urlparse(frame_source)
+
+				# Skip frames without valid URLs.
+				if not parts.netloc:
+					log.debug(f'Skipping the invalid frame "{frame_source}".')
+					continue
+
+				# Skip any frames that were added by the Internet Archive (e.g. https://archive.org/includes/donate.php).
+				if parts.hostname is not None and (parts.hostname == 'archive.org' or parts.hostname.endswith('.archive.org')):
+					log.debug(f'Skipping the Internet Archive frame "{frame_source}".')
+					continue
 
 				try:
 					condition = expected_conditions.frame_to_be_available_and_switch_to_it(frame)
@@ -735,17 +844,17 @@ class Browser():
 				except TimeoutException:
 					continue
 				
-				yield from traverse_frames()
+				yield from traverse_frames(frame_source)
 				self.driver.switch_to.parent_frame()
 
 		try:
-			yield from traverse_frames()
+			yield from traverse_frames(self.driver.current_url)
 		except WebDriverException as error:
 			log.error(f'Failed to traverse the frames with the error: {repr(error)}')
 
 		self.driver.switch_to.default_content()
 	
-	def reload_all_plugin_media(self) -> None:
+	def reload_plugin_media(self) -> None:
 		""" Reloads any content embedded using the object, embed, or applet tags in the current web page and its frames. """
 
 		try:
@@ -1004,11 +1113,70 @@ def get_current_timestamp() -> str:
 	""" Retrieves the current timestamp in UTC. """
 	return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
-@ratelimit.sleep_and_retry
-@ratelimit.limits(calls=config.max_wayback_machine_requests_per_minute, period=60)
-def wait_for_wayback_machine_rate_limit() -> None:
-	""" Waits for a given amount of time if the user-specified Wayback Machine rate limit has been reached. Otherwise, returns immediately. """
-	return
+def find_best_wayback_machine_snapshot(timestamp: str, url: str, standalone_media: bool) -> CDXSnapshot:
+	""" Finds the best Wayback Machine snapshot given its timestamp and URL. By best snapshot we mean
+	locating the nearest one and then finding the oldest capture where the content is identical. """
+
+	mime_type_filter = r'!mimetype:text/.*' if standalone_media else r'mimetype:text/html'
+
+	config.wait_for_cdx_api_rate_limit()
+	cdx = Cdx(url=url, filters=['statuscode:200', mime_type_filter])
+	snapshot = cdx.near(wayback_machine_timestamp=timestamp)
+
+	cdx.filters.append(f'digest:{snapshot.digest}')
+	snapshot = cdx.oldest()
+
+	return snapshot
+
+def find_wayback_machine_snapshot_last_modified_time(wayback_url: str) -> Optional[str]:
+	""" Finds the last modified time of a Wayback Machine snapshot. Note that not every snapshot has this information. """
+
+	try:
+		response = requests.head(wayback_url)
+		response.raise_for_status()
+		
+		last_modified = response.headers.get('x-archive-orig-last-modified')
+		if last_modified is not None:
+			last_modified_datetime = parsedate_to_datetime(last_modified)
+			last_modified = last_modified_datetime.strftime('%Y%m%d%H%M%S')
+
+	except (requests.RequestException, ValueError):
+		last_modified = None
+
+	return last_modified
+
+WaybackParts = namedtuple('WaybackParts', ['Timestamp', 'Modifier', 'Url'])
+WAYBACK_MACHINE_SNAPSHOT_URL_REGEX = re.compile(r'https?://web\.archive\.org/web/(?P<timestamp>\d+)(?P<modifier>[a-z]+_)?/(?P<url>.+)', re.IGNORECASE)
+
+def parse_wayback_machine_snapshot_url(url: str) -> Optional[WaybackParts]:
+	""" Divides the URL to a Wayback Machine snapshot into its basic components. """
+	
+	result = None
+
+	match = WAYBACK_MACHINE_SNAPSHOT_URL_REGEX.fullmatch(url)
+	if match is not None:
+		
+		timestamp = match.group('timestamp')
+		modifier = match.group('modifier')
+		url = match.group('url')
+		result = WaybackParts(timestamp, modifier, url)
+
+	return result
+
+def compose_wayback_machine_snapshot_url(	timestamp: Optional[str] = None, modifier: Optional[str] = None, url: Optional[str] = None,
+											parts: Optional[WaybackParts] = None) -> str:
+	""" Combines the basic components of a Wayback Machine snapshot into a URL. """
+
+	if parts is not None:
+		timestamp = parts.Timestamp
+		modifier = parts.Modifier
+		url = parts.Url
+
+	if timestamp is None or url is None:
+		raise ValueError('Missing the Wayback Machine timestamp and URL.')
+
+	modifier = modifier or ''
+	return f'https://web.archive.org/web/{timestamp}{modifier}/{url}'
 
 def is_wayback_machine_available() -> bool:
 	""" Determines if the Wayback Machine website is available. """
@@ -1056,7 +1224,7 @@ def delete_directory(path: str) -> None:
 	except OSError:
 		pass
 
-# Ignore the warning about connecting to a 32-bit executable while using a 64-bit Python environment.
+# Ignore the PyWinAuto warning about connecting to a 32-bit executable while using a 64-bit Python environment.
 warnings.simplefilter('ignore', category=UserWarning)
 
 def kill_processes_by_path(path: str, timeout: int = 5) -> None:
@@ -1073,3 +1241,6 @@ def kill_processes_by_path(path: str, timeout: int = 5) -> None:
 		pass
 	except Exception as error:
 		log.error(f'Failed to kill the processes using the path "{path}" with the error: {repr(error)}')
+
+if __name__ == '__main__':
+	pass
