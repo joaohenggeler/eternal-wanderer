@@ -4,21 +4,13 @@
 	A module that defines any general purpose functions used by all scripts, including loading configuration files,
 	connecting to the database, and interfacing with Firefox.
 
-	@TODO: Classic Theme Restorer
-	@TODO: Hide status bar with userChrome.css
-	@TODO: Revisit UTF-8 issue in Classic Theme Restorer
-	@TODO: Mastodon support
-
+	@TODO: Make the compile.py script to join multiple videos into a single one
 	@TODO: Add VRML support via OpenVRML
-	@TODO: Handle Crescendo tags
-	@TODO: Java parameters for Japanese sites (requires a Greasemonkey user script since we can't change the Java environment variable at runtime)
-	@TODO: Censor email addresses and phone numbers like wayback_exe?
-
-	@TODO: -config param=value
-	@TODO: Check if we're determining the maximum frame height at the best time in the recorder script.
-	@TODO: ffmpeg output arguments
-	- "vf": "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
-	- "sws_flags": "area+accurate_rnd",
+	
+	@TODO: Add Mastodon support
+	@TODO: Make the stats.py script to print statistics
+	
+	@TODO: Docs
 """
 
 import json
@@ -99,6 +91,7 @@ class CommonConfig():
 	extensions_path: str
 	extensions_before_running: Dict[str, bool]
 	extensions_after_running: Dict[str, bool]
+	user_scripts: Dict[str, bool]
 
 	plugins_path: str
 	plugins_mode: str
@@ -144,6 +137,9 @@ class CommonConfig():
 		self.compiled_autoit_path = os.path.abspath(self.compiled_autoit_path)
 		self.recordings_path = os.path.abspath(self.recordings_path)
 
+		self.extensions_before_running = container_to_lowercase(self.extensions_before_running)
+		self.extensions_after_running = container_to_lowercase(self.extensions_after_running)
+		self.user_scripts = container_to_lowercase(self.user_scripts)
 		self.plugins = container_to_lowercase(self.plugins)
 		assert self.plugins_mode in ['static', 'dynamic'], f'Unknown plugins mode "{self.plugins_mode}".'
 
@@ -269,7 +265,7 @@ class Database():
 									Word TEXT NOT NULL,
 									IsTag BOOLEAN NOT NULL,
 									Points INTEGER NOT NULL DEFAULT 0,
-									IsFiltered BOOLEAN NOT NULL DEFAULT FALSE,
+									IsSensitive BOOLEAN NOT NULL DEFAULT FALSE,
 
 									UNIQUE (Word, IsTag)
 								);
@@ -310,9 +306,9 @@ class Database():
 									) AS Points,
 									(
 										CASE WHEN S.State = {Snapshot.QUEUED} THEN NULL
-										ELSE IFNULL(MAX(W.IsFiltered), FALSE)
+										ELSE IFNULL(MAX(W.IsSensitive), FALSE)
 										END
-									) AS IsFiltered
+									) AS IsSensitive
 								FROM Snapshot S
 								LEFT JOIN SnapshotWord SW ON S.Id = SW.SnapshotId
 								LEFT JOIN Word W ON SW.WordId = W.Id
@@ -374,10 +370,11 @@ class Snapshot():
 
 	# Determined dynamically if joined with the SnapshotInfo view.
 	Points: Optional[int]
-	IsFiltered: Optional[bool]
+	IsSensitive: Optional[bool]
 
 	# Determined at runtime.
 	WaybackUrl: str
+	OldestTimestamp: str
 
 	# Constants. Each of these must be greater than the last.
 	QUEUED = 0
@@ -401,19 +398,24 @@ class Snapshot():
 	def __init__(self, **kwargs):
 		
 		self.Points = None
-		self.IsFiltered = None
+		self.IsSensitive = None
 		self.__dict__.update(kwargs)
 		
 		def bool_or_none(value: Any) -> Union[bool, None]:
 			return bool(value) if value is not None else None
 
 		self.UsesPlugins = bool_or_none(self.UsesPlugins)
-		self.IsFiltered = bool_or_none(self.IsFiltered)
+		self.IsSensitive = bool_or_none(self.IsSensitive)
 		self.IsStandaloneMedia = bool_or_none(self.IsStandaloneMedia)
 		self.IsExcluded = bool_or_none(self.IsExcluded)
 
 		modifier = Snapshot.OBJECT_EMBED_MODIFIER if self.IsStandaloneMedia else Snapshot.IFRAME_MODIFIER
 		self.WaybackUrl = compose_wayback_machine_snapshot_url(timestamp=self.Timestamp, modifier=modifier, url=self.Url)
+
+		if self.LastModifiedTime is not None:
+			self.OldestTimestamp = min(self.Timestamp, self.LastModifiedTime)
+		else:
+			self.OldestTimestamp = self.Timestamp
 
 	def __str__(self):
 		return f'({self.Url}, {self.Timestamp})'
@@ -461,24 +463,33 @@ class CustomFirefoxProfile(FirefoxProfile):
 			plugin_reg_path = os.path.join(self.profile_dir, 'pluginreg.dat')
 			delete_file(plugin_reg_path)
 
-		if user_script_filter is not None:
-			scripts_path = os.path.join(self.profile_dir, 'gm_scripts')
-			scripts_config_path = os.path.join(scripts_path, 'config.xml')
+		scripts_path = os.path.join(self.profile_dir, 'gm_scripts')
+		scripts_config_path = os.path.join(scripts_path, 'config.xml')
 
-			try:
-				tree = ElementTree.parse(scripts_config_path)
-				for script in tree.getroot():
-					
-					name = script.get('name')
-					directory = script.get('basedir')
+		try:
+			tree = ElementTree.parse(scripts_config_path)
+			for script in tree.getroot():
+				
+				name = script.get('name')
+				directory = script.get('basedir')
 
-					if name and directory and name not in user_script_filter:
-						log.info(f'Skipping the user script "{name}" at the user\'s request.')
-						script_directory_path = os.path.join(scripts_path, directory)
-						delete_directory(script_directory_path)
+				if name is not None and directory is not None:
 
-			except ElementTree.ParseError as error:
-				log.error(f'Failed to parse the user scripts configuration file with the error: {repr(error)}')
+					name = name.lower()
+					enabled = config.user_scripts.get(name, False)
+					filtered = user_script_filter is not None and name not in user_script_filter
+
+					if enabled and not filtered:
+						log.info(f'Enabling the user script "{name}".')
+						script.set('enabled', 'true')
+					else:
+						log.info(f'Disabling the user script "{name}" at the user\'s request.')
+						script.set('enabled', 'false')
+
+			tree.write(scripts_config_path)
+
+		except ElementTree.ParseError as error:
+			log.error(f'Failed to update the user scripts configuration file with the error: {repr(error)}')
 
 class Browser():
 	""" A Firefox browser instance created by Selenium. """
@@ -515,8 +526,8 @@ class Browser():
 		self.headless = headless
 		self.extra_preferences = extra_preferences
 		self.use_extensions = use_extensions
-		self.extension_filter = extension_filter
-		self.user_script_filter = user_script_filter
+		self.extension_filter = container_to_lowercase(extension_filter) if extension_filter else extension_filter # type: ignore
+		self.user_script_filter = container_to_lowercase(user_script_filter) if user_script_filter else user_script_filter # type: ignore
 		self.use_plugins = use_plugins
 		self.use_autoit = use_autoit
 
@@ -724,8 +735,16 @@ class Browser():
 		java_policy_template_path = os.path.join(config.plugins_path, 'Java', 'java.policy.template')
 		shutil.copy(java_policy_template_path, java_policy_path)
 
+		# Disable Java bytecode verification to run older applets correctly.
+		# Originally, we wanted to pass the character encoding and locale Java arguments on a page-by-page basis.
+		# This would allow Japanese applets to display their content correctly. Although the code to do this still
+		# exists in the "Improve Java Applets" Greasemonkey user script, it has since been commented out. This is
+		# because, in practice, the applets wouldn't change their encoding or locale even when the "java_arguments"
+		# and "java-vm-args" parameters were set. We'll just set them globally since that seems to work out, though
+		# it means that we only support Latin and Japanese text. Note that changing this to a different language may
+		# require you to add the localized security prompt's title to the "close_java_popups" AutoIt script.
 		os.environ['deployment.expiration.check.enabled'] = 'false'
-		os.environ['JAVA_TOOL_OPTIONS'] = '-Xverify:none -Dfile.encoding=UTF8'
+		os.environ['JAVA_TOOL_OPTIONS'] = '-Xverify:none -Dfile.encoding=UTF8 -Duser.language=ja -Duser.country=JP'
 		os.environ['_JAVA_OPTIONS'] = ''
 
 		self.delete_user_level_java_properties()
@@ -785,20 +804,23 @@ class Browser():
 
 		self.registry.restore()
 
+		# Kill a potential orphan Firefox process because of the bug described above.
+		kill_process_by_pid(self.pid)
+
 	def __enter__(self):
 		return (self, self.driver)
 
 	def __exit__(self, exception_type, exception_value, traceback):
 		self.shutdown()
 
-	def go_to_wayback_url(self, wayback_url: str) -> None:
+	def go_to_wayback_url(self, wayback_url: str, allow_redirects: bool = False) -> None:
 		""" Navigates to a Wayback Machine URL, taking into account any rate limiting and retrying if the service is unavailable. """
 
 		try:
 			config.wait_for_wayback_machine_rate_limit()
 			self.driver.get(wayback_url)
 
-			while not self.is_current_url_valid_wayback_machine_page():
+			while not self.is_current_url_valid_wayback_machine_page(allow_redirects=allow_redirects):
 				log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
 				time.sleep(config.unavailable_wayback_machine_wait)
 				self.driver.get(wayback_url)
@@ -908,8 +930,8 @@ class Browser():
 		except NoSuchWindowException:
 			pass
 
-	def is_current_url_valid_wayback_machine_page(self) -> bool:
-		""" Checks if the current web page is """
+	def is_current_url_valid_wayback_machine_page(self, allow_redirects: bool = False) -> bool:
+		""" Checks if the current web page points to a Wayback Machine snapshot. """
 
 		if self.driver.current_url.lower().startswith('file:'):
 			return True
@@ -919,14 +941,10 @@ class Browser():
 			self.driver.find_element_by_xpath(r'//script[contains(@src, "/_static/js/wombat.js")]')
 			result = True
 		except NoSuchElementException:
-			try:
-				# Check if the page exists by sending a request to the Wayback Machine.
-				# Used for uncommon cases where the previous script isn't embedded in the page.
-				# E.g. https://web.archive.org/web/19961220114110if_/http://store.geocities.com:80/
-				response = requests.head(self.driver.current_url)
-				result = response.status_code == 200
-			except requests.RequestException:
-				result = False
+			# Check if the page exists by sending a request to the Wayback Machine.
+			# Used for uncommon cases where the previous script isn't embedded in the page.
+			# E.g. https://web.archive.org/web/19961220114110if_/http://store.geocities.com:80/
+			result = is_url_available(self.driver.current_url, allow_redirects=allow_redirects)
 			
 		return result
 
@@ -1131,6 +1149,8 @@ def find_best_wayback_machine_snapshot(timestamp: str, url: str, standalone_medi
 def find_wayback_machine_snapshot_last_modified_time(wayback_url: str) -> Optional[str]:
 	""" Finds the last modified time of a Wayback Machine snapshot. Note that not every snapshot has this information. """
 
+	result = None
+
 	try:
 		response = requests.head(wayback_url)
 		response.raise_for_status()
@@ -1138,12 +1158,12 @@ def find_wayback_machine_snapshot_last_modified_time(wayback_url: str) -> Option
 		last_modified = response.headers.get('x-archive-orig-last-modified')
 		if last_modified is not None:
 			last_modified_datetime = parsedate_to_datetime(last_modified)
-			last_modified = last_modified_datetime.strftime('%Y%m%d%H%M%S')
+			result = last_modified_datetime.strftime('%Y%m%d%H%M%S')
 
 	except (requests.RequestException, ValueError):
-		last_modified = None
+		pass
 
-	return last_modified
+	return result
 
 WaybackParts = namedtuple('WaybackParts', ['Timestamp', 'Modifier', 'Url'])
 WAYBACK_MACHINE_SNAPSHOT_URL_REGEX = re.compile(r'https?://web\.archive\.org/web/(?P<timestamp>\d+)(?P<modifier>[a-z]+_)?/(?P<url>.+)', re.IGNORECASE)
@@ -1178,16 +1198,21 @@ def compose_wayback_machine_snapshot_url(	timestamp: Optional[str] = None, modif
 	modifier = modifier or ''
 	return f'https://web.archive.org/web/{timestamp}{modifier}/{url}'
 
-def is_wayback_machine_available() -> bool:
-	""" Determines if the Wayback Machine website is available. """
-
+def is_url_available(url: str, allow_redirects: bool = False) -> bool:
+	""" Checks if a URL is available. """
+	
 	try:
-		response = requests.head('https://web.archive.org/')
-		result = response.status_code == 200
+		response = requests.head(url, allow_redirects=allow_redirects)
+		response.raise_for_status()
+		result = True
 	except requests.RequestException:
 		result = False
 
 	return result
+
+def is_wayback_machine_available() -> bool:
+	""" Checks if the Wayback Machine website is available. """
+	return is_url_available('https://web.archive.org/', allow_redirects=True)
 
 def was_exit_command_entered() -> bool:
 	""" Checks if an exit command was typed. Used to stop the execution of scripts that can't use Ctrl-C to terminate. """
@@ -1241,6 +1266,18 @@ def kill_processes_by_path(path: str, timeout: int = 5) -> None:
 		pass
 	except Exception as error:
 		log.error(f'Failed to kill the processes using the path "{path}" with the error: {repr(error)}')
+
+def kill_process_by_pid(pid: int, timeout: int = 5) -> None:
+	""" Kills a process given its PID. """
+
+	try:
+		application = WinApplication(backend='win32')
+		application.connect(process=pid, timeout=timeout)
+		application.kill(soft=False)	
+	except (WinProcessNotFoundError, WinTimeoutError):
+		pass
+	except Exception as error:
+		log.error(f'Failed to kill the process using the PID {pid} with the error: {repr(error)}')
 
 if __name__ == '__main__':
 	pass

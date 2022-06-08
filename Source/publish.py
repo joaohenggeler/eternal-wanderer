@@ -39,7 +39,7 @@ class PublishConfig(CommonConfig):
 	twitter_retry_wait: int
 
 	max_tweet_length: int
-	mark_filtered_snapshots_as_sensitive: bool
+	flag_sensitive_snapshots: bool
 	delete_video_after_upload: bool
 
 	def __init__(self):
@@ -92,7 +92,7 @@ if __name__ == '__main__':
 
 					try:
 						cursor = db.execute('''
-											SELECT S.*, R.*, R.Id AS RecordingId
+											SELECT S.*, SI.IsSensitive, R.*, R.Id AS RecordingId
 											FROM Snapshot S
 											INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 											INNER JOIN Recording R ON S.Id = R.SnapshotId
@@ -113,7 +113,7 @@ if __name__ == '__main__':
 							snapshot = Snapshot(**row, Id=row['SnapshotId'])
 							recording = Recording(**row, Id=row['RecordingId'])
 
-							assert snapshot.IsFiltered is not None, 'The IsFiltered column is not being computed properly.'
+							assert snapshot.IsSensitive is not None, 'The IsSensitive column is not being computed properly.'
 						else:
 							log.info('Ran out of snapshots to publish.')
 							break
@@ -131,7 +131,7 @@ if __name__ == '__main__':
 						if config.delete_video_after_upload:
 							delete_file(recording.UploadFilePath)
 
-						snapshot_datetime = datetime.strptime(snapshot.LastModifiedTime or snapshot.Timestamp, '%Y%m%d%H%M%S')			
+						snapshot_datetime = datetime.strptime(snapshot.OldestTimestamp, '%Y%m%d%H%M%S')			
 						# date = snapshot_datetime.strftime('%B %Y')
 						# api.create_media_metadata(media_id, f'The web page "{snapshot.Url}" as seen on {date} via the Wayback Machine.')
 						
@@ -140,6 +140,7 @@ if __name__ == '__main__':
 						required_length = len(required_text)
 
 						if snapshot.UsesPlugins:
+							# Emojis count for two characters.
 							emoji = '\N{jigsaw puzzle piece}'
 							required_text += '\n' + emoji
 							required_length += len('\n') + len(emoji) * 2
@@ -151,7 +152,7 @@ if __name__ == '__main__':
 
 						max_title_length = max(config.max_tweet_length - required_length, 0)
 						tweet = title[:max_title_length] + required_text
-						sensitive = config.mark_filtered_snapshots_as_sensitive and snapshot.IsFiltered
+						sensitive = config.flag_sensitive_snapshots and snapshot.IsSensitive
 
 						status = api.update_status(tweet, media_ids=[media_id], possibly_sensitive=sensitive)
 						

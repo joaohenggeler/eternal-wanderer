@@ -10,12 +10,15 @@ const LOG = true;
 // See:
 // - https://developer.mozilla.org/en-US/docs/Web/HTML/Element/object
 // - https://developer.mozilla.org/en-US/docs/Web/HTML/Element/embed
+// - https://docs.oracle.com/javase/8/docs/technotes/guides/jweb/applet/using_tags.html
 // - https://wiki.videolan.org/Documentation:WebPlugin/#Required_elements
-const SOURCE_ATTRIBUTES = ["data", "src", "target", "mrl", "filename"];
+const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
+
+// The attribute names used in get_object_embed_attributes() and set_object_embed_attributes() must be lowercase.
 
 function get_object_embed_attributes(element, attributes_map)
 {
-	if(element.tagName === "OBJECT")
+	if(element.tagName === "OBJECT" || element.tagName === "APPLET")
 	{
 		for(const name of attributes_map.keys())
 		{
@@ -23,10 +26,11 @@ function get_object_embed_attributes(element, attributes_map)
 			
 			if(value == null)
 			{
-				const param_tags = element.getElementsByTagName("param");
+				const param_tags = element.querySelectorAll("param");
 				for(const param of param_tags)
 				{
-					const param_name = param.getAttribute("name");
+					let param_name = param.getAttribute("name");
+					if(param_name) param_name = param_name.toLowerCase();
 					if(param_name === name)
 					{
 						value = param.getAttribute("value");
@@ -50,14 +54,13 @@ function get_object_embed_attributes(element, attributes_map)
 
 function set_object_embed_attributes(element, attributes_map)
 {
-	if(element.tagName === "OBJECT")
+	if(element.tagName === "OBJECT" || element.tagName === "APPLET")
 	{
-		// Convert the live collection to an array since we're going to remove
-		// elements from the page while iterating.
-		const param_tags = Array.from(element.getElementsByTagName("param"));
+		const param_tags = element.querySelectorAll("param");
 		for(const param of param_tags)
 		{
-			const name = param.getAttribute("name");
+			let name = param.getAttribute("name");
+			if(name) name = name.toLowerCase();
 			if(attributes_map.has(name)) param.remove();
 		}
 
@@ -78,7 +81,7 @@ function set_object_embed_attributes(element, attributes_map)
 	}
 }
 
-// This is a hacky way of reloading embedded videos so that any changes we make are applied correctly.
+// This is a hacky way of reloading embedded media so that any changes we make are applied correctly.
 // See: https://stackoverflow.com/questions/86428/what-s-the-best-way-to-reload-refresh-an-iframe
 function reload_object_embed(element)
 {
@@ -120,7 +123,7 @@ function object_embed_uses_vlc_plugin(element)
 			if(result) break;
 		}
 
-		const param_tags = element.getElementsByTagName("param");
+		const param_tags = element.querySelectorAll("param");
 		for(const param of param_tags)
 		{
 			const name = param.getAttribute("name");
@@ -152,10 +155,9 @@ if(vlc_plugin)
 		}
 	}
 
-	const object_tags = Array.from(document.getElementsByTagName("object"));
-	const embed_tags = Array.from(document.getElementsByTagName("embed"));
-	
-	for(const element of object_tags.concat(embed_tags))
+	const object_and_embed_tags = document.querySelectorAll("object, embed");
+
+	for(const element of object_and_embed_tags)
 	{
 		if(object_embed_uses_vlc_plugin(element))
 		{
@@ -207,7 +209,7 @@ if(vlc_plugin)
 			// - https://wiki.videolan.org/Documentation:WebPlugin/#Root_object
 			// - https://wiki.videolan.org/Documentation:WebPlugin/#Video_object
 			attributes_map.set("loop", null);
-			get_object_embed_attributes(element, attributes_map);			
+			get_object_embed_attributes(element, attributes_map);
 
 			const loop = attributes_map.get("loop");
 			if(loop == null || loop === "false" || loop === "0")

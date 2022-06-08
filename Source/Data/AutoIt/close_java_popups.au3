@@ -7,7 +7,7 @@ EndIf
 Opt("WinWaitDelay", $delay)
 
 While True
-	Local $handle = WinWaitActive("[TITLE:Security Warning; CLASS:SunAwtDialog]")
+	Local $handle = WinWaitActive("[REGEXPTITLE:(Security Warning|セキュリティ警告); CLASS:SunAwtDialog]")
 	Send("+{TAB}{ENTER}")
 	WinWaitClose($handle)
 WEnd

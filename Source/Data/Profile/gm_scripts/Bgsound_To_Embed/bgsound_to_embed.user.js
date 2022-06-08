@@ -12,7 +12,7 @@ const LOG = true;
 // for older pages that included both to support the most popular
 // browsers at the time.
 const playing_tracks = [];
-const embed_tags = document.getElementsByTagName("embed");
+const embed_tags = document.querySelectorAll("embed");
 
 for(const embed of embed_tags)
 {
@@ -20,8 +20,7 @@ for(const embed of embed_tags)
 	if(source) playing_tracks.push(source);
 }
 
-// Convert the live collection to an array since we're going to remove elements from the page while iterating.
-const bgsound_tags = Array.from(document.getElementsByTagName("bgsound"));
+const bgsound_tags = document.querySelectorAll("bgsound");
 
 for(const bgsound of bgsound_tags)
 {

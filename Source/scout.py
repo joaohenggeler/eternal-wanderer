@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlparse
 from selenium.common.exceptions import SessionNotCreatedException, StaleElementReferenceException, WebDriverException # type: ignore
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
-from common import Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url, container_to_lowercase, find_best_wayback_machine_snapshot, find_wayback_machine_snapshot_last_modified_time, is_wayback_machine_available, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
+from common import Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url, container_to_lowercase, find_best_wayback_machine_snapshot, find_wayback_machine_snapshot_last_modified_time, is_url_available, is_wayback_machine_available, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
 
 ####################################################################################################
 
@@ -41,7 +41,7 @@ class ScoutConfig(CommonConfig):
 	standalone_media_points: int
 	word_points: Dict[str, int]
 	tag_points: Dict[str, int]
-	word_filter: Dict[str, bool] # Different from the config data type.
+	sensitive_words: Dict[str, bool] # Different from the config data type.
 	store_all_words_and_tags: bool
 
 	def __init__(self):
@@ -71,7 +71,7 @@ class ScoutConfig(CommonConfig):
 		self.standalone_media_file_extensions = {extension: True for extension in container_to_lowercase(self.standalone_media_file_extensions)}
 		self.word_points = container_to_lowercase(self.word_points)
 		self.tag_points = container_to_lowercase(self.tag_points)
-		self.word_filter = {word: True for word in container_to_lowercase(self.word_filter)}
+		self.sensitive_words = {word: True for word in container_to_lowercase(self.sensitive_words)}
 
 if __name__ == '__main__':
 
@@ -80,6 +80,7 @@ if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Traverses web pages archived by the Wayback Machine (snapshots) and collects metadata from their content and from the CDX API. The scout script prioritizes pages that were manually added by the user through the configuration file as well as pages whose parent snapshot contains specific words and plugin media.')
 	parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to scout. Omit or set to %(default)s to run forever.')
+	parser.add_argument('-skip', action='store_true', help='Whether to skip the initial snapshots specified in the configuration file.')
 	args = parser.parse_args()
 
 	####################################################################################################
@@ -129,81 +130,86 @@ if __name__ == '__main__':
 
 		db.create_function('IS_SNAPSHOT_DOMAIN_IGNORED_FOR_YEAR_FILTER', 1, is_snapshot_domain_ignored_for_year_filter)
 
-		try:
-			log.info('Inserting the initial Wayback Machine snapshots.')
+		if not args.skip:
+			try:
+				log.info('Inserting the initial Wayback Machine snapshots.')
 
-			initial_snapshots = []
-			for page in config.initial_snapshots:
+				initial_snapshots = []
+				for page in config.initial_snapshots:
+					
+					url = page['url']
+					timestamp = page['timestamp']
+					
+					try:
+						log.debug(f'Locating the initial snapshot at "{url}" near {timestamp}.')
+						best_snapshot = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url, standalone_media=False)
+						last_modified_time = find_wayback_machine_snapshot_last_modified_time(best_snapshot.archive_url)
+
+						initial_snapshots.append({'state': Snapshot.QUEUED, 'depth': 0, 'is_standalone_media': False,
+												   'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
+												   'last_modified_time': last_modified_time, 'is_excluded': False,
+												   'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest})
+					except NoCDXRecordFound:
+						log.warning(f'Could not find any snapshots for the initial page at "{url}" near {timestamp}.')	
+					
+					except BlockedSiteError:
+						log.warning(f'The snapshot for the initial page at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
+						initial_snapshots.append({'state': Snapshot.SCOUTED, 'depth': 0, 'is_standalone_media': False, 'url': url,
+												  'timestamp': timestamp, 'last_modified_time': None, 'is_excluded': True, 'url_key': None, 'digest': None})
+
+					except Exception as error:
+						log.error(f'Failed to find a snapshot for the initial page at "{url}" near {timestamp} with the error: {repr(error)}')
+
+						while not is_wayback_machine_available():
+							log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
+							time.sleep(config.unavailable_wayback_machine_wait)
+
+				db.executemany(	'''
+								INSERT OR IGNORE INTO Snapshot (State, Depth, IsStandaloneMedia, Url, Timestamp, LastModifiedTime, IsExcluded, UrlKey, Digest)
+								VALUES (:state, :depth, :is_standalone_media, :url, :timestamp, :last_modified_time, :is_excluded, :url_key, :digest);
+								''', initial_snapshots)
+
+				db.execute('UPDATE Word SET Points = 0, IsSensitive = FALSE;')
+
+				word_and_tag_points = []
 				
-				url = page['url']
-				timestamp = page['timestamp']
+				for word, points in config.word_points.items():
+					word_and_tag_points.append({'word': word, 'is_tag': False, 'points': points})
+
+				for tag, points in config.tag_points.items():
+					word_and_tag_points.append({'word': tag, 'is_tag': True, 'points': points})
+
+				# Do an upsert instead of replacing to avoid messing with the primary keys of previously inserted words.
+				db.executemany(	'''
+								INSERT INTO Word (Word, IsTag, Points)
+								VALUES (:word, :is_tag, :points)
+								ON CONFLICT (Word, IsTag)
+								DO UPDATE SET Points = :points;
+								''', word_and_tag_points)
 				
-				try:
-					best_snapshot = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url, standalone_media=False)
-					last_modified_time = find_wayback_machine_snapshot_last_modified_time(best_snapshot.archive_url)
-
-					initial_snapshots.append({'state': Snapshot.QUEUED, 'depth': 0, 'is_standalone_media': False,
-											   'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
-											   'last_modified_time': last_modified_time, 'is_excluded': False,
-											   'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest})
-				except NoCDXRecordFound:
-					log.warning(f'Could not find any snapshots for the initial page at "{url}" near {timestamp}.')	
+				sensitive_words = []
 				
-				except BlockedSiteError:
-					log.warning(f'The snapshot for the initial page at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
-					initial_snapshots.append({'state': Snapshot.SCOUTED, 'depth': 0, 'is_standalone_media': False, 'url': url,
-											  'timestamp': timestamp, 'last_modified_time': None, 'is_excluded': True, 'url_key': None, 'digest': None})
+				for word in config.sensitive_words:
+					sensitive_words.append({'word': word, 'is_tag': False, 'is_sensitive': True})
 
-				except Exception as error:
-					log.error(f'Failed to find a snapshot for the initial page at "{url}" near {timestamp} with the error: {repr(error)}')
+				db.executemany(	'''
+								INSERT INTO Word (Word, IsTag, IsSensitive)
+								VALUES (:word, :is_tag, :is_sensitive)
+								ON CONFLICT (Word, IsTag)
+								DO UPDATE SET IsSensitive = :is_sensitive;
+								''', sensitive_words)
 
-					while not is_wayback_machine_available():
-						log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
-						time.sleep(config.unavailable_wayback_machine_wait)
+				db.execute('INSERT OR REPLACE INTO Config (Name, Value) VALUES (:name, :value);', {'name': 'standalone_media_points', 'value': config.standalone_media_points})
 
-			db.executemany(	'''
-							INSERT OR IGNORE INTO Snapshot (State, Depth, IsStandaloneMedia, Url, Timestamp, LastModifiedTime, IsExcluded, UrlKey, Digest)
-							VALUES (:state, :depth, :is_standalone_media, :url, :timestamp, :last_modified_time, :is_excluded, :url_key, :digest);
-							''', initial_snapshots)
+				db.commit()
 
-			db.execute('UPDATE Word SET Points = 0, IsFiltered = FALSE;')
+			except sqlite3.Error as error:
+				log.error(f'Could not insert the initial snapshots and word points with the error: {repr(error)}')
+				db.rollback()
+				raise
 
-			word_and_tag_points = []
-			
-			for word, points in config.word_points.items():
-				word_and_tag_points.append({'word': word, 'is_tag': False, 'points': points})
-
-			for tag, points in config.tag_points.items():
-				word_and_tag_points.append({'word': tag, 'is_tag': True, 'points': points})
-
-			# Do an upsert instead of replacing to avoid messing with the primary keys of previously inserted words.
-			db.executemany(	'''
-							INSERT INTO Word (Word, IsTag, Points)
-							VALUES (:word, :is_tag, :points)
-							ON CONFLICT (Word, IsTag)
-							DO UPDATE SET Points = :points;
-							''', word_and_tag_points)
-			
-			filtered_words = []
-			
-			for word in config.word_filter:
-				filtered_words.append({'word': word, 'is_tag': False, 'is_filtered': True})
-
-			db.executemany(	'''
-							INSERT INTO Word (Word, IsTag, IsFiltered)
-							VALUES (:word, :is_tag, :is_filtered)
-							ON CONFLICT (Word, IsTag)
-							DO UPDATE SET IsFiltered = :is_filtered;
-							''', filtered_words)
-
-			db.execute('INSERT OR REPLACE INTO Config (Name, Value) VALUES (:name, :value);', {'name': 'standalone_media_points', 'value': config.standalone_media_points})
-
-			db.commit()
-
-		except sqlite3.Error as error:
-			log.error(f'Could not insert the initial snapshots and word points with the error: {repr(error)}')
-			db.rollback()
-			raise
+		else:
+			log.info('Skipping the initial snapshots at the user\'s request.')
 
 	####################################################################################################
 
@@ -348,6 +354,7 @@ if __name__ == '__main__':
 					mime_type_filter = r'!mimetype:text/.*' if is_standalone else r'mimetype:text/html'
 					
 					try:
+						log.debug(f'Locating the next snapshot at "{url}" near {snapshot.Timestamp}.')
 						best_snapshot = find_best_wayback_machine_snapshot(timestamp=snapshot.Timestamp, url=url, standalone_media=is_standalone)
 						last_modified_time = find_wayback_machine_snapshot_last_modified_time(best_snapshot.archive_url)
 
@@ -371,17 +378,19 @@ if __name__ == '__main__':
 							log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
 							time.sleep(config.unavailable_wayback_machine_wait)
 
-				log.info(f'Found {len(child_snapshots)} snapshots.')
+				log.info(f'Found {len(child_snapshots)} valid snapshots out of {len(url_list)} links.')
 		
 				try:
 					# Find the URL to every frame so we can analyze the original pages without any changes.
-					# Otherwise, we would be counting tags added by the Wayback Machine.
+					# Otherwise, we would be counting tags inserted by the Wayback Machine.
 					frame_url_list = [frame_url for frame_url in browser.switch_through_frames()]
 
 					word_and_tag_counter: Counter = Counter()
 					title = driver.title
 					uses_plugins = False
 
+					# The same frame may show up more than once, which is fine since that's what the user
+					# sees meaning we want to count duplicate words and tags in this case.
 					for frame_url in frame_url_list:
 
 						# Convert the URL to the unmodified archived page.
@@ -393,7 +402,18 @@ if __name__ == '__main__':
 						else:
 							raw_wayback_url = compose_wayback_machine_snapshot_url(timestamp=snapshot.Timestamp, modifier=Snapshot.IDENTICAL_MODIFIER, url=frame_url)
 
-						browser.go_to_wayback_url(raw_wayback_url)
+						# Avoid counting words and tags from 404 Wayback Machine pages.
+						# Redirects are allowed here since the frame's timestamp is
+						# inherited from the main page's snapshot, meaning that in the
+						# vast majority of cases we're going to be redirected to the
+						# nearest archived copy (if one exists). Redirected pages keep
+						# their modifier.
+						# E.g. https://web.archive.org/web/19970702100947if_/http://www.informatik.uni-rostock.de:80/~knorr/homebomb.html
+						if not is_url_available(raw_wayback_url, allow_redirects=True):
+							log.warning(f'Skipping the frame "{raw_wayback_url}" since it was not archived by the Wayback Machine.')
+							continue
+
+						browser.go_to_wayback_url(raw_wayback_url, allow_redirects=True)
 
 						page_text = driver.execute_script('return window.document.documentElement.innerText;')
 						for word in page_text.lower().split():

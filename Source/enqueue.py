@@ -10,7 +10,7 @@ from argparse import ArgumentParser
 
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
-from common import Database, Snapshot, find_best_wayback_machine_snapshot, find_wayback_machine_snapshot_last_modified_time, is_wayback_machine_available
+from common import Database, Snapshot, find_best_wayback_machine_snapshot, find_wayback_machine_snapshot_last_modified_time, is_wayback_machine_available, parse_wayback_machine_snapshot_url
 
 ####################################################################################################
 
@@ -18,10 +18,17 @@ if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Adds a Wayback Machine snapshot to the Eternal Wanderer queue with a given priority. This can be used to scout, record, or publish any existing or new snapshots as soon as possible.')
 	parser.add_argument('priority', choices=['scout', 'record', 'publish'], help='The priority to assign to the snapshot.')
-	parser.add_argument('timestamp', help='The timestamp of the snapshot.')
 	parser.add_argument('url', help='The URL of the snapshot.')
+	parser.add_argument('timestamp', nargs='?', help='The timestamp of the snapshot. May be omitted if the URL already points to a Wayback Machine snapshot.')
 	parser.add_argument('-standalone', action='store_true', help='If it\'s a snapshot of standalone media.')
 	args = parser.parse_args()
+
+	wayback_parts = parse_wayback_machine_snapshot_url(args.url)
+	if wayback_parts is not None:
+		args.url = wayback_parts.Url
+		args.timestamp = wayback_parts.Timestamp
+	elif args.timestamp is None:
+		parser.error('The timestamp cannot be omitted unless the URL already points to a Wayback Machine snapshot.')
 
 	names_to_values = {'scout': Snapshot.SCOUT_PRIORITY, 'record': Snapshot.RECORD_PRIORITY, 'publish': Snapshot.PUBLISH_PRIORITY}
 	priority = names_to_values[args.priority]
@@ -44,7 +51,8 @@ if __name__ == '__main__':
 								  'digest': best_snapshot.digest})
 				db.commit()
 				print(f'Added the snapshot ({best_snapshot.original}, {best_snapshot.timestamp}) with the "{args.priority}" priority.')
-			
+				print('The snapshot must be scouted before it can be recorded or published.')
+
 			except sqlite3.IntegrityError:
 				
 				try:

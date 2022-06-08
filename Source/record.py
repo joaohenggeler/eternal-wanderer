@@ -42,7 +42,7 @@ class RecordConfig(CommonConfig):
 	ranking_constant: float
 	min_year: Optional[int]
 	max_year: Optional[int]
-	record_filtered_snapshots: bool
+	record_sensitive_snapshots: bool
 	min_publish_days_for_new_recording: int
 
 	use_proxy: bool
@@ -205,6 +205,29 @@ if __name__ == '__main__':
 			except OSError as error:
 				log.error(f'Failed to terminate the proxy process with the error: {repr(error)}')
 
+	class ProxyContext():
+		""" @TODO """
+
+		proxy: Optional[Proxy]
+		timestamp: Optional[str]
+
+		def __init__(self, proxy: Optional[Proxy] = None):
+			self.proxy = proxy
+			self.timestamp = None
+
+		def __call__(self, timestamp: str):
+			self.timestamp = timestamp
+			return self
+
+		def __enter__(self):
+			if self.proxy is not None:
+				self.proxy.clear()
+				self.proxy.exec(f'current_timestamp = "{self.timestamp}"')
+
+		def __exit__(self, exception_type, exception_value, traceback):
+			if self.proxy is not None:
+				self.proxy.exec('current_timestamp = None')
+
 	class PluginCrashTimer():
 		""" A special timer that kills Firefox's plugin container child processes after a given time has elapsed (e.g. the recording duration). """
 
@@ -328,6 +351,9 @@ if __name__ == '__main__':
 
 		if config.use_proxy:
 			proxy = Proxy.create()
+			proxy_context = ProxyContext(proxy)
+		else:
+			proxy_context = ProxyContext()
 
 		try:
 			extra_preferences: dict = {
@@ -407,7 +433,8 @@ if __name__ == '__main__':
 						cursor = db.execute('''
 											SELECT 	S.*,
 													CAST(MIN(SUBSTR(S.Timestamp, 1, 4), IFNULL(SUBSTR(S.LastModifiedTime, 1, 4), '9999')) AS INTEGER) AS OldestYear,
-													SI.Points, RANK_SNAPSHOT_BY_POINTS(SI.Points) AS Rank,
+													SI.Points,
+													RANK_SNAPSHOT_BY_POINTS(SI.Points) AS Rank,
 													LR.DaysSinceLastPublished
 											FROM Snapshot S
 											INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
@@ -426,7 +453,7 @@ if __name__ == '__main__':
 												AND NOT S.IsExcluded
 												AND (:min_year IS NULL OR OldestYear >= :min_year)
 												AND (:max_year IS NULL OR OldestYear <= :max_year)
-												AND (:record_filtered_snapshots OR NOT SI.IsFiltered)
+												AND (:record_sensitive_snapshots OR NOT SI.IsSensitive)
 											ORDER BY
 												S.Priority DESC,
 												Rank DESC
@@ -434,7 +461,7 @@ if __name__ == '__main__':
 											''', {'scouted_state': Snapshot.SCOUTED, 'published_state': Snapshot.PUBLISHED,
 												  'min_publish_days_for_new_recording': config.min_publish_days_for_new_recording,
 												  'min_year': config.min_year, 'max_year': config.max_year,
-												  'record_filtered_snapshots': config.record_filtered_snapshots})
+												  'record_sensitive_snapshots': config.record_sensitive_snapshots})
 						
 						row = cursor.fetchone()
 						if row is not None:
@@ -494,67 +521,68 @@ if __name__ == '__main__':
 						browser.bring_to_front()
 						pywinauto.mouse.move(coords=(0, config.physical_screen_height // 2))
 						
-						if config.use_proxy:
-							proxy.clear()
-							proxy.exec(f'current_timestamp = "{snapshot.Timestamp}"')
+						with proxy_context(timestamp=snapshot.Timestamp):
 
-						browser.go_to_wayback_url(content_url)
+							browser.go_to_wayback_url(content_url)
 
-						wait_after_load: float
-						wait_per_scroll: float
+							wait_after_load: float
+							wait_per_scroll: float
 
-						if snapshot.IsStandaloneMedia:
-							scroll_step = 0.0
-							num_scrolls_to_bottom = 0
-							wait_after_load = max(config.min_video_duration, min(standalone_media_duration + 1, config.max_video_duration))
-							wait_per_scroll = 0.0
-							cache_wait = wait_after_load
-						else:
-							scroll_height = 0
-							for _ in browser.switch_through_frames():
-								
-								frame_scroll_height = driver.execute_script('return document.body.scrollHeight;')
-								if frame_scroll_height > scroll_height:
-
-									scroll_height = frame_scroll_height
-									client_height = driver.execute_script('return document.body.clientHeight;')
-
-							scroll_step = client_height * config.viewport_scroll_percentage
-							num_scrolls_to_bottom = ceil((scroll_height - client_height) / scroll_step)
-
-							wait_after_load = config.base_wait_after_load + config.extra_wait_after_load * cast(int, snapshot.Points) / config.points_per_extra_wait
-							wait_after_load = max(config.min_video_duration, min(wait_after_load, config.max_video_duration * config.max_wait_after_load_video_percentage))
-							
-							wait_per_scroll = config.base_wait_per_scroll + config.extra_wait_per_scroll * cast(int, snapshot.Points) / config.points_per_extra_wait
-							wait_per_scroll = min(wait_per_scroll, (config.max_video_duration - wait_after_load) / max(num_scrolls_to_bottom, 1))
-
-							cache_wait = wait_after_load * config.cache_wait_after_load_multiplier
-
-						log.info(f'Waiting {cache_wait:.1f} seconds for the page to cache.')
-						time.sleep(cache_wait)
-
-						if config.use_proxy:
-							log.info('Waiting for the proxy.')
-							begin_proxy_time = time.time()
-							
-							try:
-								while True:
+							if snapshot.IsStandaloneMedia:
+								scroll_step = 0.0
+								num_scrolls_to_bottom = 0
+								wait_after_load = max(config.min_video_duration, min(standalone_media_duration + 1, config.max_video_duration))
+								wait_per_scroll = 0.0
+								cache_wait = wait_after_load
+							else:
+								scroll_height = 0
+								for _ in browser.switch_through_frames():
 									
+									frame_scroll_height = driver.execute_script('return document.body.scrollHeight;')
+									if frame_scroll_height > scroll_height:
+
+										scroll_height = frame_scroll_height
+										client_height = driver.execute_script('return document.body.clientHeight;')
+
+								# While this works for most cases, there are pages where the scroll and client
+								# height have the same value even though there's a scrollbar. This happens even
+								# in modern Mozilla and Chromium browsers.
+								# E.g. https://web.archive.org/web/20070122030542if_/http://www.youtube.com/index.php?v=6Gwn0ARKXgE
+								scroll_step = client_height * config.viewport_scroll_percentage
+								num_scrolls_to_bottom = ceil((scroll_height - client_height) / scroll_step)
+
+								wait_after_load = config.base_wait_after_load + config.extra_wait_after_load * cast(int, snapshot.Points) / config.points_per_extra_wait
+								wait_after_load = max(config.min_video_duration, min(wait_after_load, config.max_video_duration * config.max_wait_after_load_video_percentage))
+								
+								wait_per_scroll = config.base_wait_per_scroll + config.extra_wait_per_scroll * cast(int, snapshot.Points) / config.points_per_extra_wait
+								wait_per_scroll = min(wait_per_scroll, (config.max_video_duration - wait_after_load) / max(num_scrolls_to_bottom, 1))
+
+								cache_wait = wait_after_load * config.cache_wait_after_load_multiplier
+
+							log.info(f'Waiting {cache_wait:.1f} seconds for the page to cache.')
+							time.sleep(cache_wait)
+
+							if config.use_proxy:
+								log.info('Waiting for the proxy.')
+								begin_proxy_time = time.time()
+								
+								try:
+									while True:
+										
+										elapsed_proxy_time = time.time() - begin_proxy_time
+										if elapsed_proxy_time > config.proxy_total_timeout:
+											log.debug('Timed out while reading proxy messages.')
+											break
+
+										message = proxy.get(timeout=config.proxy_queue_timeout)
+										log.debug(message)
+										proxy.task_done()
+
+								except queue.Empty:
+									log.debug('No more proxy messages.')
+								finally:
 									elapsed_proxy_time = time.time() - begin_proxy_time
-									if elapsed_proxy_time > config.proxy_total_timeout:
-										log.debug('Timed out while reading proxy messages.')
-										break
-
-									message = proxy.get(timeout=config.proxy_queue_timeout)
-									log.debug(message)
-									proxy.task_done()
-
-							except queue.Empty:
-								log.debug('No more proxy messages.')
-							finally:
-								proxy.exec('current_timestamp = None')
-								elapsed_proxy_time = time.time() - begin_proxy_time
-								log.info(f'Waited {elapsed_proxy_time:.1f} extra seconds for the proxy.')
+									log.info(f'Waited {elapsed_proxy_time:.1f} extra seconds for the proxy.')
 
 						subdirectory_path = config.get_recording_subdirectory_path(recording_id)
 						os.makedirs(subdirectory_path, exist_ok=True)
@@ -591,7 +619,7 @@ if __name__ == '__main__':
 						# @Future: There's support for taking full page screenshots with Firefox in Selenium 3.150.0, but the latest 3.x Python bindings
 						# package is 3.141.0. See: https://github.com/SeleniumHQ/selenium/blob/selenium-3.150.0/py/selenium/webdriver/firefox/webdriver.py
 
-						was_redirected = content_url != driver.current_url
+						was_redirected = not snapshot.IsStandaloneMedia and content_url != driver.current_url
 						driver.get('about:blank')
 						browser.close_all_windows_except(original_window)
 

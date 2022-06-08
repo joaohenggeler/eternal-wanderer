@@ -10,7 +10,7 @@
 
 		"gui_webdriver_path": "Data/Drivers/0.17.0/geckodriver.exe",
 		"headless_webdriver_path": "Data/Drivers/0.20.1/geckodriver.exe",
-		"page_load_timeout": 120,
+		"page_load_timeout": 300,
 
 		"gui_firefox_path": "Data/Firefox/52.9.0/App/Firefox/firefox.exe",
 		"headless_firefox_path": "Data/Firefox/56.0.2/App/Firefox/firefox.exe",
@@ -71,7 +71,6 @@
 			"plugin.state.flash": 2,
 			"plugin.state.java": 2,
 
-			"security.csp.enable": false,
 			"security.fileuri.strict_origin_policy": false,
 			"security.mixed_content.block_active_content": false,
 			"security.mixed_content.block_display_content": false,
@@ -99,7 +98,6 @@
 		"extensions_before_running":
 		{
 			"blink_enable-1.1-fx.xpi": true,
-			"classic_theme_restorer_fx29_56-1.7.7.2-fx.xpi": true,
 			"greasemonkey-3.17-fx.xpi": true
 		},
 
@@ -108,9 +106,21 @@
 			"ca-archive-2.0.3.xpi": false
 		},
 
+		"user_scripts":
+		{
+			"Disable Alert Confirm Prompt": true,
+			"Crescendo To Standard Embed": true,
+			"Bgsound To Embed": true,
+			"Fix Vlc Embed": true,
+			"Autoplay Random Audio And Video": true,
+			"Force Java Applet Version": true,
+			"Random Yamaha Midplug Skin": true,
+			"Add Stylesheets To Wayback Machine Snapshots": true
+		},
+
 		"plugins_path": "Data/Plugins",
 
-		"plugins_mode": "dynamic",
+		"plugins_mode": "static",
 		"plugins":
 		{
 			"NPSWF32_32_0_0_363.dll": true,
@@ -133,8 +143,8 @@
 		"recordings_path": "Data/Recordings",
 		"max_recordings_per_directory": 1000,
 
-		"cdx_api_rate_limit_amount": 3,
-		"cdx_api_rate_limit_multiple": 5,
+		"cdx_api_rate_limit_amount": 5,
+		"cdx_api_rate_limit_multiple": 1,
 		"wayback_machine_rate_limit_amount": 25,
 		"wayback_machine_rate_limit_multiple": 60,
 		"rate_limit_poll_frequency": 0.5,
@@ -226,7 +236,7 @@
 			"marquee": 150
 		},
 
-		"word_filter": ["nude", "naked", "xxx", "porn"],
+		"sensitive_words": ["nude", "naked", "xxx", "porn"],
 
 		"store_all_words_and_tags": true
 	},
@@ -239,13 +249,13 @@
 		"ranking_constant": 900.0,
 		"min_year": null,
 		"max_year": null,
-		"record_filtered_snapshots": true,
+		"record_sensitive_snapshots": true,
 		"min_publish_days_for_new_recording": 365,
 
 		"use_proxy": true,
 		"proxy_port": null,
 		"proxy_queue_timeout": 10,
-		"proxy_total_timeout": 300,
+		"proxy_total_timeout": 600,
 		"find_missing_proxy_snapshots_using_cdx": true,
 		"max_missing_proxy_snapshot_path_components": 2,
 
@@ -300,9 +310,8 @@
 		{
 			"f": "dshow",
 			"framerate": 60,
-			"ar": "48K",
-			"ac": 2,
-			"rtbufsize": "100M"
+			"rtbufsize": "100M",
+			"guess_layout_max": 0
 		},
 
 		"ffmpeg_recording_output":
@@ -312,7 +321,9 @@
 			"preset": "ultrafast",
 			"tune": "zerolatency",
 			"color_range": 2,
-			"c:a": "flac"
+			"c:a": "flac",
+			"ar": "48K",
+			"ac": 2
 		},
 
 		"ffmpeg_archive_output":
@@ -334,6 +345,8 @@
 			"preset": "veryslow",
 			"pix_fmt": "yuv420p",
 			"vsync": "vfr",
+			"vf": "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1:color=black",
+			"sws_flags": "lanczos",
 			"c:a": "aac",
 			"profile:a": "aac_low",
 			"b:a": "384K",
@@ -357,7 +370,7 @@
 		"twitter_retry_wait": 60,
 
 		"max_tweet_length": 280,
-		"mark_filtered_snapshots_as_sensitive": true,
+		"flag_sensitive_snapshots": true,
 		"delete_video_after_upload": false
 	}
 }

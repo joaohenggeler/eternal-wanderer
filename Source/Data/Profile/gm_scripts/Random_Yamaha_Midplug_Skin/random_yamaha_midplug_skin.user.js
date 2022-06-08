@@ -10,11 +10,15 @@ const LOG = true;
 // See:
 // - https://developer.mozilla.org/en-US/docs/Web/HTML/Element/object
 // - https://developer.mozilla.org/en-US/docs/Web/HTML/Element/embed
-const SOURCE_ATTRIBUTES = ["data", "src"];
+// - https://docs.oracle.com/javase/8/docs/technotes/guides/jweb/applet/using_tags.html
+// - https://wiki.videolan.org/Documentation:WebPlugin/#Required_elements
+const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
+
+// The attribute names used in get_object_embed_attributes() and set_object_embed_attributes() must be lowercase.
 
 function get_object_embed_attributes(element, attributes_map)
 {
-	if(element.tagName === "OBJECT")
+	if(element.tagName === "OBJECT" || element.tagName === "APPLET")
 	{
 		for(const name of attributes_map.keys())
 		{
@@ -22,10 +26,11 @@ function get_object_embed_attributes(element, attributes_map)
 			
 			if(value == null)
 			{
-				const param_tags = element.getElementsByTagName("param");
+				const param_tags = element.querySelectorAll("param");
 				for(const param of param_tags)
 				{
-					const param_name = param.getAttribute("name");
+					let param_name = param.getAttribute("name");
+					if(param_name) param_name = param_name.toLowerCase();
 					if(param_name === name)
 					{
 						value = param.getAttribute("value");
@@ -49,14 +54,13 @@ function get_object_embed_attributes(element, attributes_map)
 
 function set_object_embed_attributes(element, attributes_map)
 {
-	if(element.tagName === "OBJECT")
+	if(element.tagName === "OBJECT" || element.tagName === "APPLET")
 	{
-		// Convert the live collection to an array since we're going to remove
-		// elements from the page while iterating.
-		const param_tags = Array.from(element.getElementsByTagName("param"));
+		const param_tags = element.querySelectorAll("param");
 		for(const param of param_tags)
 		{
-			const name = param.getAttribute("name");
+			let name = param.getAttribute("name");
+			if(name) name = name.toLowerCase();
 			if(attributes_map.has(name)) param.remove();
 		}
 
@@ -77,7 +81,7 @@ function set_object_embed_attributes(element, attributes_map)
 	}
 }
 
-// This is a hacky way of reloading embedded videos so that any changes we make are applied correctly.
+// This is a hacky way of reloading embedded media so that any changes we make are applied correctly.
 // See: https://stackoverflow.com/questions/86428/what-s-the-best-way-to-reload-refresh-an-iframe
 function reload_object_embed(element)
 {
@@ -119,7 +123,7 @@ function object_embed_uses_midplug_plugin(element)
 			if(result) break;
 		}
 
-		const param_tags = element.getElementsByTagName("param");
+		const param_tags = element.querySelectorAll("param");
 		for(const param of param_tags)
 		{
 			const name = param.getAttribute("name");
@@ -151,10 +155,9 @@ if(midplug_plugin)
 		}
 	}
 
-	const object_tags = Array.from(document.getElementsByTagName("object"));
-	const embed_tags = Array.from(document.getElementsByTagName("embed"));
+	const object_and_embed_tags = document.querySelectorAll("object, embed");
 	
-	for(const element of object_tags.concat(embed_tags))
+	for(const element of object_and_embed_tags)
 	{
 		if(object_embed_uses_midplug_plugin(element))
 		{
@@ -166,10 +169,13 @@ if(midplug_plugin)
 			const panel = attributes_map.get("panel");
 			if(panel == null)
 			{
-				// See: https://web.archive.org/web/20020614163533/http://www.yamaha-xg.com/midplug/server.html
-				attributes_map.set("panel", Math.round(Math.random()));
+				// See: https://web.archive.org/web/20020614163533if_/http://www.yamaha-xg.com/midplug/server.html
+				const random_panel = Math.round(Math.random());
+				attributes_map.set("panel", random_panel);
 				set_object_embed_attributes(element, attributes_map);
+				
 				reload_object_embed(element);
+				
 				if(LOG) console.log("Random Yamaha Midplug Skin - Changed:", element);
 			}
 			else

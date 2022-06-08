@@ -10,12 +10,15 @@ const LOG = true;
 // See:
 // - https://developer.mozilla.org/en-US/docs/Web/HTML/Element/object
 // - https://developer.mozilla.org/en-US/docs/Web/HTML/Element/embed
+// - https://docs.oracle.com/javase/8/docs/technotes/guides/jweb/applet/using_tags.html
 // - https://wiki.videolan.org/Documentation:WebPlugin/#Required_elements
-const SOURCE_ATTRIBUTES = ["data", "src", "target", "mrl", "filename"];
+const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
+
+// The attribute names used in get_object_embed_attributes() and set_object_embed_attributes() must be lowercase.
 
 function get_object_embed_attributes(element, attributes_map)
 {
-	if(element.tagName === "OBJECT")
+	if(element.tagName === "OBJECT" || element.tagName === "APPLET")
 	{
 		for(const name of attributes_map.keys())
 		{
@@ -23,10 +26,11 @@ function get_object_embed_attributes(element, attributes_map)
 			
 			if(value == null)
 			{
-				const param_tags = element.getElementsByTagName("param");
+				const param_tags = element.querySelectorAll("param");
 				for(const param of param_tags)
 				{
-					const param_name = param.getAttribute("name");
+					let param_name = param.getAttribute("name");
+					if(param_name) param_name = param_name.toLowerCase();
 					if(param_name === name)
 					{
 						value = param.getAttribute("value");
@@ -50,14 +54,13 @@ function get_object_embed_attributes(element, attributes_map)
 
 function set_object_embed_attributes(element, attributes_map)
 {
-	if(element.tagName === "OBJECT")
+	if(element.tagName === "OBJECT" || element.tagName === "APPLET")
 	{
-		// Convert the live collection to an array since we're going to remove
-		// elements from the page while iterating.
-		const param_tags = Array.from(element.getElementsByTagName("param"));
+		const param_tags = element.querySelectorAll("param");
 		for(const param of param_tags)
 		{
-			const name = param.getAttribute("name");
+			let name = param.getAttribute("name");
+			if(name) name = name.toLowerCase();
 			if(attributes_map.has(name)) param.remove();
 		}
 
@@ -78,7 +81,7 @@ function set_object_embed_attributes(element, attributes_map)
 	}
 }
 
-// This is a hacky way of reloading embedded videos so that any changes we make are applied correctly.
+// This is a hacky way of reloading embedded media so that any changes we make are applied correctly.
 // See: https://stackoverflow.com/questions/86428/what-s-the-best-way-to-reload-refresh-an-iframe
 function reload_object_embed(element)
 {
@@ -170,37 +173,28 @@ function is_autoplaying(element)
 	return playing_by_default || (autoplay && autoplay !== "false" && autoplay !== "0") || (autostart && autostart !== "false" && autostart !== "0");
 }
 
-function find_all_object_embed_parents_and_children(element, object_tags, embed_tags)
-{
-	const parent_or_child_object_tags = object_tags.filter(object => object !== element && (object.contains(element) || element.contains(object)));
-	const parent_or_child_embed_tags = embed_tags.filter(embed => embed !== element && (embed.contains(element) || element.contains(embed)));
-	return parent_or_child_object_tags.concat(parent_or_child_embed_tags);
-}
-
 const tag_mime_types = new Map();
 tag_mime_types.set("audio", new RegExp("audio/.*", "i"));
 tag_mime_types.set("video", new RegExp("video/.*", "i"));
 
-const object_tags = Array.from(document.getElementsByTagName("object"));
-const embed_tags = Array.from(document.getElementsByTagName("embed"));
+const object_and_embed_tags = Array.from(document.querySelectorAll("object, embed"));
 
 // For each type of tag (audio and video), make a random element start playing if there isn't one already doing so.
 // If that random element contains or is contained by an object or embed tag then these will also start playing.
 for(const [tag_name, mime_type_regex] of tag_mime_types)
 {
-	const mime_type_in_object_tags = object_tags.filter(object => object_embed_has_mime_type(object, mime_type_regex));
-	const mime_type_in_embed_tags = embed_tags.filter(embed => object_embed_has_mime_type(embed, mime_type_regex));
-
-	const regular_tags = Array.from(document.getElementsByTagName(tag_name));
-	const tags = mime_type_in_object_tags.concat(mime_type_in_embed_tags).concat(regular_tags);
+	const object_and_embed_tags_with_mime_type = object_and_embed_tags.filter(element => object_embed_has_mime_type(element, mime_type_regex));
+	const regular_tags = Array.from(document.querySelectorAll(tag_name));
+	const tags = object_and_embed_tags_with_mime_type.concat(regular_tags);
 
 	const autoplaying = tags.some(is_autoplaying);
 	if(tags && tags.length && !autoplaying)
 	{
 		const random_index = Math.floor(Math.random() * tags.length);
 		const random_element = tags[random_index];
-		const elements_with_same_content = find_all_object_embed_parents_and_children(random_element, mime_type_in_object_tags, mime_type_in_embed_tags);
-		elements_with_same_content.push(random_element);
+		
+		// An element contains itself which works for our case since we want to iterate at least once below.
+		const elements_with_same_content = object_and_embed_tags_with_mime_type.filter(element => element.contains(random_element) || random_element.contains(element));
 
 		// Take into account embed tags that are contained inside object tags (a common design pattern).
 		// In cases like these, we can assume that both tags are meant to be playing the same content.
