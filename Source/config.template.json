@@ -2,7 +2,6 @@
 	"common":
 	{
 		"debug": false,
-		"show_java_console": false,
 		"locale": "en_US",
 
 		"database_path": "Data/wanderer.db",
@@ -120,12 +119,13 @@
 
 		"plugins_path": "Data/Plugins",
 
-		"plugins_mode": "static",
+		"use_master_plugin_registry": true,
 		"plugins":
 		{
 			"NPSWF32_32_0_0_363.dll": true,
 			"np32dsw.dll": true,
 			"npjp2.dll": true,
+			"npcosmop211.dll": true,
 			"npctrl.dll": true,
 			"npvirtools.dll": true,
 			"np32asw.dll": true,
@@ -137,18 +137,24 @@
 			"npvlc.dll": true
 		},
 		
+		"show_java_console": false,
+		"show_cosmo_player_console": false,
+
 		"compiled_autoit_path": "Data/AutoIt",
 		"autoit_poll_frequency": 20,		
 		
 		"recordings_path": "Data/Recordings",
 		"max_recordings_per_directory": 1000,
+		"compilations_path": "Data/Compilations",
 
 		"cdx_api_rate_limit_amount": 5,
 		"cdx_api_rate_limit_multiple": 1,
 		"wayback_machine_rate_limit_amount": 25,
 		"wayback_machine_rate_limit_multiple": 60,
 		"rate_limit_poll_frequency": 0.5,
-		"unavailable_wayback_machine_wait": 900
+		"unavailable_wayback_machine_wait": 900,
+
+		"excluded_domains": null
 	},
 
 	"scout":
@@ -173,35 +179,8 @@
 
 		"min_year": null,
 		"max_year": 2010,
-		"ignore_year_filter_for_domains": ["geocities.*", "angelfire.*", "tripod.*", "fortunecity.*"],
 		"max_depth": null,
 		"max_required_depth": 2,
-
-		"standalone_media_file_extensions":
-		[
-			"spl", "swf",
-			"dcr", "dir", "dxr",
-
-			"mid", "midi",
-			"it", "itz", "mdz", "med", "mod", "s3m", "s3z", "xm", "xmz",
-			"sid",
-			
-			"3g2", "3gp", "3gpp", "3gpp2",
-			"aac", "aif", "aifc", "aiff", "amr", "asf", "asx", "au", "avi", "awb",
-			"dif", "divx", "dv",
-			"flac", "fli", "flv",
-			"gsm",
-			"kar",
-			"m3u", "m4a", "m4v", "mka", "mkv", "mov", "mp2",
-			"mp3", "mp4", "mpe", "mpeg", "mpega", "mpg", "mpg4", "mpga", "mpv", "mxf", "mxu",
-			"oga", "ogg", "ogv", "opus",
-			"pls",
-			"ra", "ram", "rm",
-			"snd", "swfl",
-			"vob",
-			"wav", "webm", "wm", "wma", "wmv", "wmx", "wvx",
-			"xspf"
-		],
 
 		"standalone_media_points": 750,
 
@@ -252,6 +231,33 @@
 		"record_sensitive_snapshots": true,
 		"min_publish_days_for_new_recording": 365,
 
+		"allowed_standalone_media_file_extensions":
+		[
+			"spl", "swf",
+			"dcr", "dir", "dxr",
+			"wrl", "wrz",
+
+			"mid", "midi",
+			"it", "itz", "mdz", "med", "mod", "s3m", "s3z", "xm", "xmz",
+			"sid",
+			
+			"3g2", "3gp", "3gpp", "3gpp2",
+			"aac", "aif", "aifc", "aiff", "amr", "asf", "asx", "au", "avi", "awb",
+			"dif", "divx", "dv",
+			"flac", "fli", "flv",
+			"gsm",
+			"kar",
+			"m3u", "m4a", "m4v", "mka", "mkv", "mov", "mp2",
+			"mp3", "mp4", "mpe", "mpeg", "mpega", "mpg", "mpg4", "mpga", "mpv", "mxf", "mxu",
+			"oga", "ogg", "ogv", "opus",
+			"pls",
+			"ra", "ram", "rm",
+			"snd", "swfl",
+			"vob",
+			"wav", "webm", "wm", "wma", "wmv", "wmx", "wvx",
+			"xspf"
+		],
+
 		"use_proxy": true,
 		"proxy_port": null,
 		"proxy_queue_timeout": 10,
@@ -271,9 +277,9 @@
 		"base_wait_per_scroll": 5,
 		"extra_wait_per_scroll": 2,
 
-		"standalone_media_fallback_duration": 20,
-		"standalone_media_width": "60%",
-		"standalone_media_height": "60%",
+		"standalone_media_fallback_duration": 30,
+		"standalone_media_width": "75%",
+		"standalone_media_height": "75%",
 		"standalone_media_background_color": "#000000",
 
 		"fullscreen_browser": true,
@@ -283,25 +289,12 @@
 		"max_video_duration": 135,
 		"keep_archive_copy": false,
 
-		"screen_capture_recorder_config":
+		"screen_capture_recorder_settings":
 		{
 			"capture_width": null,
 			"capture_height": null,
-			"start_x": null,
-			"start_y": null,
 			"default_max_fps": null,
-			"stretch_to_width": null,
-			"stretch_to_height": null,
-			"stretch_mode_high_quality_if_1": null,
-			"hwnd_to_track": null,
-			"disable_aero_for_vista_plus_if_1": null,
-			"track_new_x_y_coords_each_frame_if_1": null,
-			"capture_mouse_default_1": 0,
-			"capture_foreground_window_if_1": null,
-			"dedup_if_1": null,
-			"millis_to_sleep_between_poll_for_dedupe_changes": null,
-			"capture_transparent_windows_including_mouse_in_non_aero_if_1_causes_annoying_mouse_flicker": null,
-			"hwnd_to_track_with_window_decoration": null
+			"capture_mouse_default_1": 0
 		},
 
 		"ffmpeg_global": ["-loglevel", "warning", "-nostats"],
@@ -341,6 +334,8 @@
 			"profile:v": "high",
 			"bf": 2,
 			"g": 30,
+			"r": 60,
+			"video_track_timescale": "90K",
 			"crf": 18,
 			"preset": "veryslow",
 			"pix_fmt": "yuv420p",
@@ -350,6 +345,8 @@
 			"c:a": "aac",
 			"profile:a": "aac_low",
 			"b:a": "384K",
+			"ar": "48K",
+			"ac": 2,
 			"movflags": "faststart",
 			"fs": "512M"
 		}
@@ -357,7 +354,7 @@
 
 	"publish":
 	{
-		"scheduler": {"minute": "*/10"},
+		"scheduler": {"minute": "*/3"},
 		"num_snapshots_per_scheduled_batch": 1,
 		"require_approval": false,
 

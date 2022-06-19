@@ -24,8 +24,8 @@ if __name__ == '__main__':
 	parser.add_argument('-pluginreg', action='store_true', help='Whether to generate the pluginreg.dat file inside the profile template directory.')
 	args = parser.parse_args()
 
-	if args.pluginreg and config.plugins_mode == 'static':
-		parser.error('The "plugins_mode" configuration option must be set to "dynamic" in order to generate the pluginreg.dat file.')
+	if args.pluginreg and config.use_master_plugin_registry:
+		parser.error('The "use_master_plugin_registry" configuration option must be set to false in order to generate the pluginreg.dat file.')
 
 	try:
 		with Browser(use_extensions=True, use_plugins=True) as (browser, driver):

@@ -20,7 +20,7 @@ if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Approves snapshot recordings for publishing. This operation is optional and may be done if the publisher script was started with the "require_approval" option set to true.')
 	parser.add_argument('max_recordings', nargs='?', type=int, default=-1, help='How many recordings to approve. Omit or set to %(default)s to approve all recordings.')
-	parser.add_argument('-delete', action='store_true', help='Whether to delete unapproved videos (rejected or to record again) and their archived copies without asking for confirmation.')
+	parser.add_argument('-delete', action='store_true', help='Whether to delete unapproved recordings (rejected or to be recorded again) and their archived copies without asking for confirmation.')
 	args = parser.parse_args()
 
 	if not config.require_approval:
@@ -58,10 +58,10 @@ if __name__ == '__main__':
 				recording = Recording(**row, Id=row['RecordingId'])
 
 				try:
-					print(f'Evaluating the video "{recording.UploadFilename}" for snapshot #{snapshot.Id} {snapshot}.')
+					print(f'Evaluating the recording "{recording.UploadFilename}" for snapshot #{snapshot.Id} {snapshot}.')
 					os.startfile(recording.UploadFilePath)
 				except FileNotFoundError:
-					print('The video file does not exist.')
+					print('The recording file does not exist.')
 					num_missing += 1
 					continue
 
@@ -119,7 +119,7 @@ if __name__ == '__main__':
 				if not delete_unapproved:
 					
 					while True:
-						option = input('Delete unapproved videos (including the archived copy) [(y)es, (n)o]: ').lower()
+						option = input('Delete unapproved recordings (including the archived copy) [(y)es, (n)o]: ').lower()
 
 						if not option:
 							continue
@@ -133,7 +133,7 @@ if __name__ == '__main__':
 							continue
 
 				if delete_unapproved:
-					print(f'Deleting {len(unapproved_snapshots_and_recordings) * 2} unapproved video files.')
+					print(f'Deleting {len(unapproved_snapshots_and_recordings) * 2} unapproved recording files.')
 					
 					for snapshot, recording in unapproved_snapshots_and_recordings:
 
@@ -145,7 +145,7 @@ if __name__ == '__main__':
 							delete_file(recording.ArchiveFilePath)
 
 		except sqlite3.Error as error:
-			print(f'Failed to update the recorded snapshots with the error: {repr(error)}')
+			print(f'Failed to approve the recorded snapshots with the error: {repr(error)}')
 			db.rollback()
 
 	print('Finished running.')

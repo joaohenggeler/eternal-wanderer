@@ -1,6 +1,7 @@
 # {comment}
 
 # General - Network Settings
+# The type must be set to PROX_TYPE_BROWSER (3) in order to work properly with the Eternal Wanderer's proxy feature.
 deployment.proxy.type=3
 deployment.proxy.type.locked
 deployment.proxy.same=true

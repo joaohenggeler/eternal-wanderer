@@ -17,6 +17,7 @@ from queue import Queue
 from random import random
 from subprocess import PIPE, STDOUT
 from subprocess import Popen, TimeoutExpired
+from tempfile import NamedTemporaryFile
 from threading import Thread, Timer
 from typing import Dict, List, Optional, Union, cast
 from urllib.parse import urlparse
@@ -44,6 +45,8 @@ class RecordConfig(CommonConfig):
 	max_year: Optional[int]
 	record_sensitive_snapshots: bool
 	min_publish_days_for_new_recording: int
+
+	allowed_standalone_media_file_extensions: Dict[str, bool] # Different from the config data type.
 
 	use_proxy: bool
 	proxy_port: Optional[int]
@@ -75,7 +78,7 @@ class RecordConfig(CommonConfig):
 	min_video_duration: int
 	max_video_duration: int
 	keep_archive_copy: bool
-	screen_capture_recorder_config: Dict[str, Optional[int]]
+	screen_capture_recorder_settings: Dict[str, Optional[int]]
 
 	ffmpeg_global: List[str]
 	ffmpeg_recording_input: Dict[str, Union[int, str]]
@@ -86,18 +89,18 @@ class RecordConfig(CommonConfig):
 	# Determined at runtime.
 	physical_screen_width: int
 	physical_screen_height: int
-
 	standalone_media_template: str
-	temporary_standalone_media_page_path: str
 
 	def __init__(self):
 		super().__init__()
 		self.load_subconfig('record')
 
+		self.allowed_standalone_media_file_extensions = {extension: True for extension in container_to_lowercase(self.allowed_standalone_media_file_extensions)}
+
 		if self.max_missing_proxy_snapshot_path_components is not None:
 			self.max_missing_proxy_snapshot_path_components = max(self.max_missing_proxy_snapshot_path_components, 1)
 
-		self.screen_capture_recorder_config = container_to_lowercase(self.screen_capture_recorder_config)
+		self.screen_capture_recorder_settings = container_to_lowercase(self.screen_capture_recorder_settings)
 
 		self.ffmpeg_global = container_to_lowercase(self.ffmpeg_global)
 		self.ffmpeg_recording_input = container_to_lowercase(self.ffmpeg_recording_input)
@@ -114,8 +117,6 @@ class RecordConfig(CommonConfig):
 		template_path = os.path.join(self.plugins_path, 'standalone_media.html.template')
 		with open(template_path, 'r', encoding='utf-8') as file:
 			self.standalone_media_template = file.read()
-
-		self.temporary_standalone_media_page_path = template_path.replace('.template', '')
 
 if __name__ == '__main__':
 
@@ -206,7 +207,7 @@ if __name__ == '__main__':
 				log.error(f'Failed to terminate the proxy process with the error: {repr(error)}')
 
 	class ProxyContext():
-		""" @TODO """
+		""" A wrapper that toggles the proxy using a context manager. This can be used even when the proxy is disabled. """
 
 		proxy: Optional[Proxy]
 		timestamp: Optional[str]
@@ -348,14 +349,17 @@ if __name__ == '__main__':
 
 	def record_snapshots(num_snapshots: int) -> None:
 		""" Records a given number of snapshots in a single batch. """
-
-		if config.use_proxy:
-			proxy = Proxy.create()
-			proxy_context = ProxyContext(proxy)
-		else:
-			proxy_context = ProxyContext()
-
+		
 		try:
+			if config.use_proxy:
+				proxy = Proxy.create()
+				proxy_context = ProxyContext(proxy)
+			else:
+				proxy_context = ProxyContext()
+
+			standalone_media_page_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix='wanderer.', suffix='.html', delete=False)
+			log.debug(f'Created the temporary standalone media page file "{standalone_media_page_file.name}".')
+
 			extra_preferences: dict = {
 				'browser.cache.check_doc_frequency': 2, # Always use cached page.
 			} 
@@ -384,12 +388,20 @@ if __name__ == '__main__':
 					# - http://utopia.duth.gr/~pefraimi/research/data/2007EncOfAlg.pdf
 					return random() ** (config.ranking_constant / (points + config.ranking_constant))
 
+				def is_standalone_media_file_extension_allowed(file_extension: str) -> bool:
+					""" Checks if a standalone media snapshot should be recorded. """
+					return bool(config.allowed_standalone_media_file_extensions) and file_extension in config.allowed_standalone_media_file_extensions
+
 				db.create_function('RANK_SNAPSHOT_BY_POINTS', 1, rank_snapshot_by_points)
+				db.create_function('IS_STANDALONE_MEDIA_FILE_EXTENSION_ALLOWED', 1, is_standalone_media_file_extension_allowed)
 
 				if config.fullscreen_browser:
 					browser.toggle_fullscreen()
 
-				for key, value in config.screen_capture_recorder_config.items():
+				for key, value in TemporaryRegistry.traverse('HKEY_CURRENT_USER\\SOFTWARE\\screen-capture-recorder'):
+					registry.delete(key)
+
+				for key, value in config.screen_capture_recorder_settings.items():
 					
 					registry_key = f'HKEY_CURRENT_USER\\SOFTWARE\\screen-capture-recorder\\{key}'
 					registry_value: int
@@ -440,9 +452,9 @@ if __name__ == '__main__':
 											INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 											LEFT JOIN
 											(
-												SELECT SnapshotId, JulianDay('now') - JulianDay(MAX(PublishTime)) AS DaysSinceLastPublished
-												FROM Recording
-												GROUP BY SnapshotId
+												SELECT R.SnapshotId, JulianDay('now') - JulianDay(MAX(R.PublishTime)) AS DaysSinceLastPublished
+												FROM Recording R
+												GROUP BY R.SnapshotId
 											) LR ON S.Id = LR.SnapshotId
 											WHERE
 												(
@@ -451,9 +463,11 @@ if __name__ == '__main__':
 													(S.State = :published_state AND LR.DaysSinceLastPublished >= :min_publish_days_for_new_recording)
 												)
 												AND NOT S.IsExcluded
+												AND NOT IS_URL_DOMAIN_EXCLUDED(S.UrlKey)
 												AND (:min_year IS NULL OR OldestYear >= :min_year)
 												AND (:max_year IS NULL OR OldestYear <= :max_year)
 												AND (:record_sensitive_snapshots OR NOT SI.IsSensitive)
+												AND (NOT S.IsStandaloneMedia OR IS_STANDALONE_MEDIA_FILE_EXTENSION_ALLOWED(S.FileExtension))
 											ORDER BY
 												S.Priority DESC,
 												Rank DESC
@@ -508,10 +522,12 @@ if __name__ == '__main__':
 							content = content.replace('{url}', snapshot.WaybackUrl)
 							content = content.replace('{loop}', loop)
 							
-							with open(config.temporary_standalone_media_page_path, 'w', encoding='utf-8') as file:
-								file.write(content)
+							standalone_media_page_file.seek(0)
+							standalone_media_page_file.truncate(0)
+							standalone_media_page_file.write(content)
+							standalone_media_page_file.flush()
 
-							content_url = 'file:///' + config.temporary_standalone_media_page_path
+							content_url = f'file:///{standalone_media_page_file.name}'
 						else:
 							content_url = snapshot.WaybackUrl
 
@@ -531,7 +547,7 @@ if __name__ == '__main__':
 							if snapshot.IsStandaloneMedia:
 								scroll_step = 0.0
 								num_scrolls_to_bottom = 0
-								wait_after_load = max(config.min_video_duration, min(standalone_media_duration + 1, config.max_video_duration))
+								wait_after_load = max(config.min_video_duration, min(standalone_media_duration + 2, config.max_video_duration))
 								wait_per_scroll = 0.0
 								cache_wait = wait_after_load
 							else:
@@ -589,7 +605,7 @@ if __name__ == '__main__':
 						
 						parts = urlparse(snapshot.Url)
 						media_identifier = 's' if snapshot.IsStandaloneMedia else ('p' if snapshot.UsesPlugins else '')
-						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, snapshot.Timestamp[:4], snapshot.Timestamp[4:6], snapshot.Timestamp[6:8], media_identifier]
+						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, snapshot.FileExtension, snapshot.Timestamp[:4], snapshot.Timestamp[4:6], snapshot.Timestamp[6:8], media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
 						# Using get() instead of refresh() seems yield better results since by
@@ -671,11 +687,12 @@ if __name__ == '__main__':
 			log.error(f'Failed to connect to the database with the error: {repr(error)}')
 		except KeyboardInterrupt:
 			log.warning('Detected a keyboard interrupt when these should not be used to terminate the recorder due to a bug when using both Windows and the Firefox WebDriver.')
+		finally:
+			standalone_media_page_file.close()
+			delete_file(standalone_media_page_file.name)
 
-		delete_file(config.temporary_standalone_media_page_path)
-
-		if config.use_proxy:
-			proxy.shutdown()
+			if config.use_proxy:
+				proxy.shutdown()
 
 	####################################################################################################
 

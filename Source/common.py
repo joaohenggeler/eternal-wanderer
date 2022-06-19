@@ -4,15 +4,13 @@
 	A module that defines any general purpose functions used by all scripts, including loading configuration files,
 	connecting to the database, and interfacing with Firefox.
 
-	@TODO: Make the compile.py script to join multiple videos into a single one
-	@TODO: Add VRML support via OpenVRML
-	
 	@TODO: Add Mastodon support
 	@TODO: Make the stats.py script to print statistics
 	
 	@TODO: Docs
 """
 
+import itertools
 import json
 import locale
 import logging
@@ -32,8 +30,8 @@ from glob import iglob
 from math import ceil
 from subprocess import Popen
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
-from urllib.parse import urlparse
-from winreg import CreateKeyEx, DeleteKey, DeleteValue, OpenKey, QueryValueEx, SetValueEx
+from urllib.parse import unquote, urlparse, urlunparse
+from winreg import CreateKeyEx, DeleteKey, DeleteValue, EnumKey, EnumValue, OpenKey, QueryValueEx, SetValueEx
 from xml.etree import ElementTree
 
 import requests
@@ -71,7 +69,6 @@ class CommonConfig():
 	json_config: dict
 
 	debug: bool
-	show_java_console: bool
 	locale: str
 
 	database_path: str
@@ -94,14 +91,17 @@ class CommonConfig():
 	user_scripts: Dict[str, bool]
 
 	plugins_path: str
-	plugins_mode: str
+	use_master_plugin_registry: bool
 	plugins: Dict[str, bool]
+	show_java_console: bool
+	show_cosmo_player_console: bool
 
 	compiled_autoit_path: str
 	autoit_poll_frequency: int
 
 	recordings_path: str
 	max_recordings_per_directory: int
+	compilations_path: str
 
 	cdx_api_rate_limit_amount: int
 	cdx_api_rate_limit_multiple: int
@@ -109,6 +109,8 @@ class CommonConfig():
 	wayback_machine_rate_limit_multiple: int
 	rate_limit_poll_frequency: float
 	unavailable_wayback_machine_wait: int
+
+	excluded_domains: Optional[List[List[str]]] # Different from the config data type.
 
 	# Determined at runtime.
 	cdx_api_memory_storage: MemoryStorage
@@ -136,12 +138,12 @@ class CommonConfig():
 		self.plugins_path = os.path.abspath(self.plugins_path)
 		self.compiled_autoit_path = os.path.abspath(self.compiled_autoit_path)
 		self.recordings_path = os.path.abspath(self.recordings_path)
+		self.compilations_path = os.path.abspath(self.compilations_path)
 
 		self.extensions_before_running = container_to_lowercase(self.extensions_before_running)
 		self.extensions_after_running = container_to_lowercase(self.extensions_after_running)
 		self.user_scripts = container_to_lowercase(self.user_scripts)
 		self.plugins = container_to_lowercase(self.plugins)
-		assert self.plugins_mode in ['static', 'dynamic'], f'Unknown plugins mode "{self.plugins_mode}".'
 
 		self.cdx_api_memory_storage = MemoryStorage()
 		self.cdx_api_rate_limiter = MovingWindowRateLimiter(self.cdx_api_memory_storage)
@@ -150,6 +152,26 @@ class CommonConfig():
 		self.wayback_machine_memory_storage = MemoryStorage()
 		self.wayback_machine_rate_limiter = MovingWindowRateLimiter(self.wayback_machine_memory_storage)
 		self.wayback_machine_requests_per_minute = RateLimitItemPerSecond(self.wayback_machine_rate_limit_amount, self.wayback_machine_rate_limit_multiple)
+
+		if self.excluded_domains is not None:
+			
+			excluded_domains = []
+			
+			for domain in container_to_lowercase(self.excluded_domains):
+				
+				# Reversed because it makes it easier to work with a snapshot's URL key.
+				components = domain.split('.')
+				components.reverse()
+				excluded_domains.append(components)
+
+				# If the last component was a wildcard, match one or two top or second-level
+				# domains (e.g. example.com or example.co.uk).
+				if components[0] == '*':
+					extra_components = components.copy()
+					extra_components.insert(0, '*')
+					excluded_domains.append(extra_components)
+				
+			self.excluded_domains = excluded_domains
 
 	def load_subconfig(self, name: str) -> None:
 		""" Loads a specific JSON object from the configuration file. """
@@ -194,6 +216,42 @@ def setup_logger(filename: str) -> logging.Logger:
 	
 	return log
 
+checked_excluded_domains: Dict[str, bool] = {}
+
+def is_url_domain_excluded(url_key: str) -> bool:
+	""" Checks whether a URL's domain should be excluded from database queries. """
+
+	result = False
+
+	if config.excluded_domains:
+
+		# E.g. "com,geocities)/hollywood/hills/5988"
+		domain, _ = url_key.lower().split(')')
+		
+		if domain in checked_excluded_domains:
+			return checked_excluded_domains[domain]
+
+		component_list = domain.split(',')
+
+		for excluded_component_list in config.excluded_domains:
+			
+			# If the domain has fewer components then it can't match the allowed pattern.
+			if len(component_list) < len(excluded_component_list):
+				continue
+
+			# If there are more components in the domain than in the allowed pattern, these will be ignored.
+			# Since we're looking at these domains backwards, this means we'll match any subdomains.
+			for component, excluded_component in zip(component_list, excluded_component_list):
+				if excluded_component != '*' and component != excluded_component:
+					break
+			else:
+				result = True
+				break
+
+		checked_excluded_domains[domain] = result
+
+	return result
+
 ####################################################################################################
 
 class Database():
@@ -214,6 +272,8 @@ class Database():
 		self.connection.execute('PRAGMA synchronous = NORMAL;')
 		self.connection.execute('PRAGMA temp_store = MEMORY;')
 	
+		self.connection.create_function('IS_URL_DOMAIN_EXCLUDED', 1, is_url_domain_excluded)
+
 		# E.g. https://web.archive.org/web/20010203164200if_/http://www.tripod.lycos.com:80/service/welcome/preferences
 		# And https://web.archive.org/web/20010203180900if_/http://www.tripod.lycos.com:80/bin/membership/login
 
@@ -230,13 +290,14 @@ class Database():
 									State INTEGER NOT NULL,
 									Depth INTEGER NOT NULL,
 									Priority INTEGER NOT NULL DEFAULT {Snapshot.NO_PRIORITY},
-									Title TEXT,
+									IsExcluded BOOLEAN NOT NULL,
+									IsStandaloneMedia BOOLEAN,
+									FileExtension TEXT,
 									UsesPlugins BOOLEAN,
-									IsStandaloneMedia BOOLEAN NOT NULL,
+									Title TEXT,
 									Url TEXT NOT NULL,
 									Timestamp VARCHAR(14) NOT NULL,
 									LastModifiedTime VARCHAR(14),
-									IsExcluded BOOLEAN NOT NULL,
 									UrlKey TEXT,
 									Digest VARCHAR(64),
 
@@ -321,13 +382,38 @@ class Database():
 									Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 									SnapshotId INTEGER NOT NULL,
 									IsProcessed BOOLEAN NOT NULL,
-									ArchiveFilename TEXT,
-									UploadFilename TEXT NOT NULL,
+									ArchiveFilename TEXT UNIQUE,
+									UploadFilename TEXT NOT NULL UNIQUE,
 									CreationTime TIMESTAMP NOT NULL,
 									PublishTime TIMESTAMP,
 									MediaId INTEGER,
 									TweetId INTEGER,
 
+									FOREIGN KEY (SnapshotId) REFERENCES Snapshot (Id)
+								);
+								''')
+
+		self.connection.execute('''
+								CREATE TABLE IF NOT EXISTS Compilation
+								(
+									Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+									UploadFilename TEXT NOT NULL UNIQUE,
+									TimestampsFilename TEXT NOT NULL UNIQUE,
+									CreationTime TIMESTAMP NOT NULL
+								);
+								''')
+
+		self.connection.execute('''
+								CREATE TABLE IF NOT EXISTS RecordingCompilation
+								(
+									RecordingId INTEGER NOT NULL,
+									CompilationId INTEGER NOT NULL,
+									SnapshotId INTEGER NOT NULL,
+									Position INTEGER NOT NULL,
+
+									PRIMARY KEY (RecordingId, CompilationId),
+									FOREIGN KEY (RecordingId) REFERENCES Recording (Id),
+									FOREIGN KEY (CompilationId) REFERENCES Compilation (Id),
 									FOREIGN KEY (SnapshotId) REFERENCES Snapshot (Id)
 								);
 								''')
@@ -358,13 +444,14 @@ class Snapshot():
 	State: int
 	Depth: int
 	Priority: int
-	Title: Optional[str]
+	IsExcluded: bool
+	IsStandaloneMedia: Optional[bool]
+	FileExtension: Optional[str]
 	UsesPlugins: Optional[bool]
-	IsStandaloneMedia: bool
+	Title: Optional[str]
 	Url: str
 	Timestamp: str
 	LastModifiedTime: Optional[str]
-	IsExcluded: bool
 	UrlKey: Optional[str]
 	Digest: Optional[str]
 
@@ -375,6 +462,7 @@ class Snapshot():
 	# Determined at runtime.
 	WaybackUrl: str
 	OldestTimestamp: str
+	DisplayTitle: str
 
 	# Constants. Each of these must be greater than the last.
 	QUEUED = 0
@@ -404,10 +492,10 @@ class Snapshot():
 		def bool_or_none(value: Any) -> Union[bool, None]:
 			return bool(value) if value is not None else None
 
-		self.UsesPlugins = bool_or_none(self.UsesPlugins)
-		self.IsSensitive = bool_or_none(self.IsSensitive)
-		self.IsStandaloneMedia = bool_or_none(self.IsStandaloneMedia)
 		self.IsExcluded = bool_or_none(self.IsExcluded)
+		self.IsStandaloneMedia = bool_or_none(self.IsStandaloneMedia)
+		self.UsesPlugins = bool_or_none(self.UsesPlugins)	
+		self.IsSensitive = bool_or_none(self.IsSensitive)
 
 		modifier = Snapshot.OBJECT_EMBED_MODIFIER if self.IsStandaloneMedia else Snapshot.IFRAME_MODIFIER
 		self.WaybackUrl = compose_wayback_machine_snapshot_url(timestamp=self.Timestamp, modifier=modifier, url=self.Url)
@@ -416,6 +504,16 @@ class Snapshot():
 			self.OldestTimestamp = min(self.Timestamp, self.LastModifiedTime)
 		else:
 			self.OldestTimestamp = self.Timestamp
+
+		self.DisplayTitle = self.Title
+		if not self.DisplayTitle:
+			
+			parts = urlparse(self.Url)
+			self.DisplayTitle = os.path.basename(parts.path)
+			
+			if not self.DisplayTitle:
+				new_parts = parts._replace(netloc=parts.hostname, params='', query='', fragment='')
+				self.DisplayTitle = urlunparse(new_parts)
 
 	def __str__(self):
 		return f'({self.Url}, {self.Timestamp})'
@@ -450,7 +548,7 @@ class Recording():
 class CustomFirefoxProfile(FirefoxProfile):
 	""" A custom Firefox profile used to bypass the frozen Mozilla preferences dictionary defined by Selenium. """
 
-	def __init__(self, profile_directory: Optional[str] = None, user_script_filter: Optional[List[str]] = None):
+	def __init__(self, profile_directory: Optional[str] = None):
 		
 		if not FirefoxProfile.DEFAULT_PREFERENCES:
 			FirefoxProfile.DEFAULT_PREFERENCES = {}
@@ -458,38 +556,6 @@ class CustomFirefoxProfile(FirefoxProfile):
 			FirefoxProfile.DEFAULT_PREFERENCES['mutable'] = config.preferences
 
 		super().__init__(profile_directory)
-
-		if config.plugins_mode == 'dynamic':
-			plugin_reg_path = os.path.join(self.profile_dir, 'pluginreg.dat')
-			delete_file(plugin_reg_path)
-
-		scripts_path = os.path.join(self.profile_dir, 'gm_scripts')
-		scripts_config_path = os.path.join(scripts_path, 'config.xml')
-
-		try:
-			tree = ElementTree.parse(scripts_config_path)
-			for script in tree.getroot():
-				
-				name = script.get('name')
-				directory = script.get('basedir')
-
-				if name is not None and directory is not None:
-
-					name = name.lower()
-					enabled = config.user_scripts.get(name, False)
-					filtered = user_script_filter is not None and name not in user_script_filter
-
-					if enabled and not filtered:
-						log.info(f'Enabling the user script "{name}".')
-						script.set('enabled', 'true')
-					else:
-						log.info(f'Disabling the user script "{name}" at the user\'s request.')
-						script.set('enabled', 'false')
-
-			tree.write(scripts_config_path)
-
-		except ElementTree.ParseError as error:
-			log.error(f'Failed to update the user scripts configuration file with the error: {repr(error)}')
 
 class Browser():
 	""" A Firefox browser instance created by Selenium. """
@@ -545,8 +611,40 @@ class Browser():
 		else:
 			log.info(f'Using a temporary Firefox profile.')
 
-		profile = CustomFirefoxProfile(config.profile_path, self.user_script_filter)
+		profile = CustomFirefoxProfile(config.profile_path)
 		
+		if not config.use_master_plugin_registry:
+			plugin_reg_path = os.path.join(profile.profile_dir, 'pluginreg.dat')
+			delete_file(plugin_reg_path)
+
+		try:
+			scripts_path = os.path.join(profile.profile_dir, 'gm_scripts')
+			scripts_config_path = os.path.join(scripts_path, 'config.xml')
+
+			tree = ElementTree.parse(scripts_config_path)
+			for script in tree.getroot():
+				
+				name = script.get('name')
+				directory = script.get('basedir')
+
+				if name is not None and directory is not None:
+
+					name = name.lower()
+					enabled = config.user_scripts.get(name, False)
+					filtered = self.user_script_filter is not None and name not in self.user_script_filter
+
+					if enabled and not filtered:
+						log.info(f'Enabling the user script "{name}".')
+						script.set('enabled', 'true')
+					else:
+						log.info(f'Disabling the user script "{name}" at the user\'s request.')
+						script.set('enabled', 'false')
+
+			tree.write(scripts_config_path)
+
+		except ElementTree.ParseError as error:
+			log.error(f'Failed to update the user scripts configuration file with the error: {repr(error)}')
+
 		for key, value in config.preferences.items():
 			profile.set_preference(key, value)
 
@@ -589,6 +687,7 @@ class Browser():
 			self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\allowfallback\\', 'y')
 
 			self.configure_java_plugin()
+			self.configure_cosmo_player()
 		else:
 			os.environ['MOZ_PLUGIN_PATH'] = ''
 
@@ -673,7 +772,7 @@ class Browser():
 					log.error(f'Failed to run the compiled AutoIt script "{path}" with the error: {repr(error)}')
 
 	def configure_java_plugin(self) -> None:
-		""" Configures the Java Plugin by generating the appropriate deployment files and passing any useful paramters to the JRE. """
+		""" Configures the Java Plugin by generating the appropriate deployment files and passing any useful parameters to the JRE. """
 
 		java_plugin_search_path = os.path.join(config.plugins_path, '**', 'jre*', 'bin', 'plugin2')
 		java_plugin_path = next(iglob(java_plugin_search_path, recursive=True), None)
@@ -735,7 +834,23 @@ class Browser():
 		java_policy_template_path = os.path.join(config.plugins_path, 'Java', 'java.policy.template')
 		shutil.copy(java_policy_template_path, java_policy_path)
 
-		# Disable Java bytecode verification to run older applets correctly.
+		java_security_path = os.path.join(java_lib_path, 'security', 'java.security')
+
+		with open(java_security_path, encoding='utf-8') as file:
+			content = file.read()
+
+		content = re.sub(r'^jdk\.certpath\.disabledAlgorithms=.*', 'jdk.certpath.disabledAlgorithms=', content, flags=re.MULTILINE | re.IGNORECASE)
+
+		with open(java_security_path, 'w', encoding='utf-8') as file:
+			file.write(content)
+
+		escaped_java_security_path = java_security_path.replace('\\', '/')
+
+		# Override any security properties from other locally installed Java versions in order to allow applets
+		# to run even if they use a disabled cryptographic algorithm.
+		#
+		# Disable Java bytecode verification in order to run older applets correctly.
+		#
 		# Originally, we wanted to pass the character encoding and locale Java arguments on a page-by-page basis.
 		# This would allow Japanese applets to display their content correctly. Although the code to do this still
 		# exists in the "Improve Java Applets" Greasemonkey user script, it has since been commented out. This is
@@ -744,11 +859,83 @@ class Browser():
 		# it means that we only support Latin and Japanese text. Note that changing this to a different language may
 		# require you to add the localized security prompt's title to the "close_java_popups" AutoIt script.
 		os.environ['deployment.expiration.check.enabled'] = 'false'
-		os.environ['JAVA_TOOL_OPTIONS'] = '-Xverify:none -Dfile.encoding=UTF8 -Duser.language=ja -Duser.country=JP'
+		os.environ['JAVA_TOOL_OPTIONS'] = f'-Djava.security.properties=="file:///{escaped_java_security_path}" -Xverify:none -Dfile.encoding=UTF8 -Duser.language=ja -Duser.country=JP'
 		os.environ['_JAVA_OPTIONS'] = ''
 
 		self.delete_user_level_java_properties()
 		self.delete_java_plugin_cache()
+
+	def configure_cosmo_player(self) -> None:
+		""" Configures the Cosmo Player by setting the appropriate registry keys. """
+		
+		cosmo_player_search_path = os.path.join(config.plugins_path, '**', 'npcosmop211.dll')
+		cosmo_player_path = next(iglob(cosmo_player_search_path, recursive=True), None)
+		if cosmo_player_path is None:
+			log.error('Could not find the path to the Cosmo Player plugin files. The Cosmo Player was not be set up correctly.')
+			return
+
+		cosmo_player_path = os.path.dirname(cosmo_player_path)
+		log.info(f'Configuring the Cosmo Player using the plugin files located in "{cosmo_player_path}".')
+
+		cosmo_player_system32_path = os.path.join(cosmo_player_path, 'System32')
+		path = os.environ.get('PATH', '')
+		os.environ['PATH'] = f'{cosmo_player_system32_path};{path}'
+
+		REQUIRED_REGISTRY_KEYS: Dict[str, Union[int, str]] = {
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia AudioRenderer3',
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\': os.path.join(cosmo_player_system32_path, 'cm12_dshow.dll'),
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\THREADINGMODEL': 'Both',	
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia AudioRenderer3',
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\MERIT': 2097152,
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\DIRECTION': 0,
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\ISRENDERED': 0,
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\ALLOWEDZERO': 0,
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\ALLOWEDMANY': 0,
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\CONNECTSTOPIN': 'Output',
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\TYPES\\{73647561-0000-0010-8000-00AA00389B71}\\{00000000-0000-0000-0000-000000000000}\\': '',
+			
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia VideoRenderer3',
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\': os.path.join(cosmo_player_system32_path, 'cm12_dshow.dll'),
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\THREADINGMODEL': 'Both',
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia VideoRenderer3',
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\MERIT': 2097152,
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\INPUT\\DIRECTION': 0,
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\INPUT\\ISRENDERED': 0,
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\INPUT\\ALLOWEDZERO': 0,
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\INPUT\\ALLOWEDMANY': 0,
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\INPUT\\CONNECTSTOPIN': 'Output',
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\INS\\INPUT\\TYPES\\{73646976-0000-0010-8000-00AA00389B71}\\{00000000-0000-0000-0000-000000000000}\\': '',
+			
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\D3D\\PATH': os.path.join(cosmo_player_system32_path, 'rob10_d3d.dll'),
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\D3D\\UINAME': 'Direct3D Renderer',
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\NORENDER\\PATH': os.path.join(cosmo_player_system32_path, 'rob10_none.dll'),
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\NORENDER\\UINAME': 'NonRendering Renderer',
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\OPENGL\\PATH': os.path.join(cosmo_player_system32_path, 'rob10_gl.dll'),
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\OPENGL\\UINAME': 'OpenGL Renderer',
+		}
+
+		SETTINGS_REGISTRY_KEYS: Dict[str, Union[int, str]] = {
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\PANEL_MAXIMIZED': 0, # Minimize dashboard.
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\renderer': 'OPENGL', # OpenGL renderer.
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\textureQuality': 1, # Best quality.
+		}
+
+		if config.show_cosmo_player_console:
+			SETTINGS_REGISTRY_KEYS['HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\showConsoleType'] = 2 # Show console on startup.
+
+		try:
+			for key, value in REQUIRED_REGISTRY_KEYS.items():
+				self.registry.set(key, value)
+
+			for key, value in TemporaryRegistry.traverse('HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1'):
+				self.registry.delete(key)
+
+			# These don't require elevated privileges but there's no point in setting them if the Cosmo Player isn't set up correctly.
+			for key, value in SETTINGS_REGISTRY_KEYS.items():
+				self.registry.set(key, value)
+
+		except PermissionError:
+			log.error('Failed to set up the Cosmo Player since elevated privileges are required to temporarily set the appropriate registry keys.')
 
 	def delete_user_level_java_properties(self) -> None:
 		""" Deletes the current user-level Java deployment properties file. """
@@ -843,11 +1030,15 @@ class Browser():
 				
 				frame_source = frame.get_attribute('src')
 
-				# Skip frames whose source would be converted to "https://web.archive.org/".
+				# Skip missing frames whose source would otherwise be converted to "https://web.archive.org/".
 				if not frame_source:
 					log.debug('Skipping a frame without a source.')
 					continue
 
+				# Checking for valid URLs using netloc only makes sense if it was properly decoded.
+				# E.g. "http%3A//www.geocities.com/Hollywood/Hills/5988/main.html" would result in
+				# an empty netloc instead of "www.geocities.com".
+				frame_source = unquote(frame_source)
 				parts = urlparse(frame_source)
 
 				# Skip frames without valid URLs.
@@ -951,6 +1142,21 @@ class Browser():
 class TemporaryRegistry():
 	""" A temporary registry that remembers and undos any changes (key additions and deletions) made to the Windows registry. """
 
+	# For the sake of convenience, this class mostly deals with registry key values and forces all queries to look at the
+	# 32-bit view of the registry in both 32 and 64-bit applications. Although key values are the main focus, we do keep
+	# track of any keys to delete since setting a value may require creating any missing intermediate keys.
+	#
+	# Focusing only on 32-bit applications makes sense since we're configuring old web plugins. Depending on the registry
+	# key, Windows will redirect a query to a different location. For example, writing a value to the registry key
+	# "HKEY_CLASSES_ROOT\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}" will store the value in
+	# "HKEY_CLASSES_ROOT\WOW6432Node\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}" and
+	# "HKEY_LOCAL_MACHINE\SOFTWARE\Classes\WOW6432Node\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}" and
+	# "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Classes\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}".
+	#
+	# See:
+	# - https://docs.microsoft.com/en-us/windows/win32/winprog64/registry-reflection
+	# - https://docs.microsoft.com/en-us/windows/win32/winprog64/accessing-an-alternate-registry-view
+
 	original_state: Dict[Tuple[int, str, str], Tuple[Optional[int], Any]]
 	keys_to_delete: Set[Tuple[int, str, str]]
 	key_paths_to_delete: Dict[Tuple[int, str], bool]
@@ -1006,7 +1212,7 @@ class TemporaryRegistry():
 
 		try:
 			hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
-			with OpenKey(hkey, key_path, access=winreg.KEY_READ) as key_handle:
+			with OpenKey(hkey, key_path, access=winreg.KEY_READ | winreg.KEY_WOW64_32KEY) as key_handle:
 				value, _ = QueryValueEx(key_handle, sub_key)
 		except OSError:
 			value = None
@@ -1033,8 +1239,6 @@ class TemporaryRegistry():
 	
 		if (hkey, key_path) not in self.key_paths_to_delete:
 
-			self.key_paths_to_delete[(hkey, key_path)] = True
-
 			intermediate_keys = key_path.split('\\')
 			while len(intermediate_keys) > 1:
 
@@ -1053,10 +1257,12 @@ class TemporaryRegistry():
 				else:
 					self.keys_to_delete.add((hkey, intermediate_key_path, intermediate_sub_key))
 
+			self.key_paths_to_delete[(hkey, key_path)] = True
+
 		original_state_key = (hkey, key_path, sub_key)
 		original_state_value: Tuple[Optional[int], Any]
 
-		with CreateKeyEx(hkey, key_path, access=winreg.KEY_ALL_ACCESS) as key_handle:
+		with CreateKeyEx(hkey, key_path, access=winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_32KEY) as key_handle:
 			try:
 				original_value, original_type = QueryValueEx(key_handle, sub_key)
 				original_state_value = (original_type, original_value)
@@ -1072,13 +1278,13 @@ class TemporaryRegistry():
 
 		return result
 
-	def delete(self, key: str) -> bool:
-		""" Removes a registry key. Returns true if it existed, otherwise false. """
+	def delete(self, key: str) -> Tuple[bool, Any]:
+		""" Removes a value from a registry key. Returns true and its data if it existed, otherwise false and None. """
 
 		hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
 
 		try:
-			with OpenKey(hkey, key_path, access=winreg.KEY_ALL_ACCESS) as key_handle:
+			with OpenKey(hkey, key_path, access=winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_32KEY) as key_handle:
 				original_value, original_type = QueryValueEx(key_handle, sub_key)
 				DeleteValue(key_handle, sub_key)
 
@@ -1089,17 +1295,46 @@ class TemporaryRegistry():
 				self.original_state[original_state_key] = original_state_value
 
 			success = True
+			result = original_value
 		except OSError:
 			success = False
+			result = None
 
-		return success
+		return success, result
+
+	@staticmethod
+	def traverse(key: str, recursive: bool = False) -> Iterator[Tuple[str, Any]]:
+		""" Iterates over the values of a registry key. """
+
+		hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
+		key_path = f'{key_path}\\{sub_key}'
+
+		try:
+			with OpenKey(hkey, key_path, access=winreg.KEY_READ | winreg.KEY_WOW64_32KEY) as key_handle: 
+				try:
+					for index in itertools.count():
+						name, data, type = EnumValue(key_handle, index)
+						yield f'{key}\\{name}', data
+				except OSError:
+					pass
+
+				if recursive:
+					try:
+						for index in itertools.count():
+							sub_key = EnumKey(key_handle, index)
+							yield from TemporaryRegistry.traverse(f'{key}\\{sub_key}', recursive=recursive)
+					except OSError:
+						pass
+
+		except OSError:
+			pass
 
 	def restore(self) -> None:
 		""" Restores the Windows registry to its original state by undoing any changes, additions, and deletions. """
 
 		for (hkey, key_path, sub_key), (type, value) in self.original_state.items():
 			try:
-				with OpenKey(hkey, key_path, access=winreg.KEY_WRITE) as key_handle:
+				with OpenKey(hkey, key_path, access=winreg.KEY_WRITE | winreg.KEY_WOW64_32KEY) as key_handle:
 					if type is None:
 						DeleteValue(key_handle, sub_key)
 					else:
@@ -1110,7 +1345,7 @@ class TemporaryRegistry():
 		keys_to_delete = sorted(self.keys_to_delete, key=lambda x: len(x[1]), reverse=True)
 		for (hkey, key_path, sub_key) in keys_to_delete:
 			try:
-				with OpenKey(hkey, key_path, access=winreg.KEY_WRITE) as key_handle:
+				with OpenKey(hkey, key_path, access=winreg.KEY_WRITE | winreg.KEY_WOW64_32KEY) as key_handle:
 					DeleteKey(key_handle, sub_key)
 			except OSError as error:
 				log.error(f'Failed to delete the registry key "{hkey}\\{key_path}\\{sub_key}" with the error: {repr(error)}')
@@ -1131,20 +1366,32 @@ def get_current_timestamp() -> str:
 	""" Retrieves the current timestamp in UTC. """
 	return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
-def find_best_wayback_machine_snapshot(timestamp: str, url: str, standalone_media: bool) -> CDXSnapshot:
+def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> Tuple[CDXSnapshot, bool, str]:
 	""" Finds the best Wayback Machine snapshot given its timestamp and URL. By best snapshot we mean
 	locating the nearest one and then finding the oldest capture where the content is identical. """
 
-	mime_type_filter = r'!mimetype:text/.*' if standalone_media else r'mimetype:text/html'
-
 	config.wait_for_cdx_api_rate_limit()
-	cdx = Cdx(url=url, filters=['statuscode:200', mime_type_filter])
+	cdx = Cdx(url=url, filters=['statuscode:200'])
 	snapshot = cdx.near(wayback_machine_timestamp=timestamp)
 
 	cdx.filters.append(f'digest:{snapshot.digest}')
 	snapshot = cdx.oldest()
 
-	return snapshot
+	# Consider plain text files since regular HTML pages may be served with this MIME type.
+	# E.g. https://web.archive.org/web/20011201170113if_/http://www.yahoo.co.jp/bin/top3
+	is_standalone_media = snapshot.mimetype not in ['text/html', 'text/plain']
+
+	parts = urlparse(snapshot.original)
+	path = parts.path.lower()
+
+	# For compressed VRML worlds that would otherwise be stored as "gz".
+	if path.endswith('.wrl.gz'):
+		file_extension = 'wrz'
+	else:
+		_, file_extension = os.path.splitext(path)
+		file_extension = file_extension.strip('.')
+
+	return snapshot, is_standalone_media, file_extension
 
 def find_wayback_machine_snapshot_last_modified_time(wayback_url: str) -> Optional[str]:
 	""" Finds the last modified time of a Wayback Machine snapshot. Note that not every snapshot has this information. """

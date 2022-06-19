@@ -14,7 +14,7 @@ import time
 from argparse import ArgumentParser
 from collections import Counter
 from typing import Dict, List, Optional, Tuple, Union
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from selenium.common.exceptions import SessionNotCreatedException, StaleElementReferenceException, WebDriverException # type: ignore
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
@@ -33,11 +33,9 @@ class ScoutConfig(CommonConfig):
 	initial_snapshots: List[Dict[str, str]]
 	min_year: Optional[int]
 	max_year: Optional[int]
-	ignore_year_filter_for_domains: Optional[List[List[str]]] # Different from the config data type.
 	max_depth: Optional[int]
 	max_required_depth: Optional[int]
 
-	standalone_media_file_extensions: Dict[str, bool] # Different from the config data type.
 	standalone_media_points: int
 	word_points: Dict[str, int]
 	tag_points: Dict[str, int]
@@ -48,27 +46,6 @@ class ScoutConfig(CommonConfig):
 		super().__init__()
 		self.load_subconfig('scout')
 
-		if self.ignore_year_filter_for_domains is not None:
-			
-			allowed_domains = []
-			
-			for domain in container_to_lowercase(self.ignore_year_filter_for_domains):
-				
-				# Reversed because it makes it easier to work with the snapshot's URL key.
-				components = domain.split('.')
-				components.reverse()
-				allowed_domains.append(components)
-
-				# If the last component was a wildcard, match one or two top or second-level
-				# domains (e.g. example.com or example.co.uk).
-				if components[0] == '*':
-					extra_components = components.copy()
-					extra_components.insert(0, '*')
-					allowed_domains.append(extra_components)
-				
-			self.ignore_year_filter_for_domains = allowed_domains
-
-		self.standalone_media_file_extensions = {extension: True for extension in container_to_lowercase(self.standalone_media_file_extensions)}
 		self.word_points = container_to_lowercase(self.word_points)
 		self.tag_points = container_to_lowercase(self.tag_points)
 		self.sensitive_words = {word: True for word in container_to_lowercase(self.sensitive_words)}
@@ -93,43 +70,6 @@ if __name__ == '__main__':
 	# E.g. https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html
 	with Database() as db, Browser(headless=True, use_extensions=True, extension_filter=config.extension_filter, user_script_filter=config.user_script_filter) as (browser, driver):
 
-		checked_domains: Dict[str, bool] = {}
-
-		def is_snapshot_domain_ignored_for_year_filter(url_key: str) -> bool:
-			result = False
-
-			if config.ignore_year_filter_for_domains:
-
-				# E.g. "com,geocities)/hollywood/hills/5988"
-				domain, _ = url_key.lower().split(')')
-				
-				if domain in checked_domains:
-					return checked_domains[domain]
-
-				snapshot_component_list = domain.split(',')
-
-				for allowed_component_list in config.ignore_year_filter_for_domains:
-					
-					# If the snapshot's domain has fewer components then it can't match the allowed pattern.
-					if len(snapshot_component_list) < len(allowed_component_list):
-						continue
-
-					# If there are more components in the snapshot domain than in the allowed pattern, these
-					# will be ignored. Since we're looking at these domains backwards, this means we'll match
-					# any subdomains.
-					for snapshot_component, allowed_component in zip(snapshot_component_list, allowed_component_list):
-						if allowed_component != '*' and snapshot_component != allowed_component:
-							break
-					else:
-						result = True
-						break
-
-				checked_domains[domain] = result
-
-			return result
-
-		db.create_function('IS_SNAPSHOT_DOMAIN_IGNORED_FOR_YEAR_FILTER', 1, is_snapshot_domain_ignored_for_year_filter)
-
 		if not args.skip:
 			try:
 				log.info('Inserting the initial Wayback Machine snapshots.')
@@ -142,31 +82,33 @@ if __name__ == '__main__':
 					
 					try:
 						log.debug(f'Locating the initial snapshot at "{url}" near {timestamp}.')
-						best_snapshot = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url, standalone_media=False)
+						best_snapshot, is_standalone_media, file_extension = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url)
 						last_modified_time = find_wayback_machine_snapshot_last_modified_time(best_snapshot.archive_url)
 
-						initial_snapshots.append({'state': Snapshot.QUEUED, 'depth': 0, 'is_standalone_media': False,
-												   'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
-												   'last_modified_time': last_modified_time, 'is_excluded': False,
-												   'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest})
+						state = Snapshot.SCOUTED if is_standalone_media else Snapshot.QUEUED
+
+						initial_snapshots.append({ 'state': state, 'depth': 0, 'is_excluded': False, 'is_standalone_media': is_standalone_media,
+												   'file_extension': file_extension, 'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
+												   'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest})
 					except NoCDXRecordFound:
-						log.warning(f'Could not find any snapshots for the initial page at "{url}" near {timestamp}.')	
+						log.warning(f'Could not find the initial snapshot at "{url}" near {timestamp}.')	
 					
 					except BlockedSiteError:
-						log.warning(f'The snapshot for the initial page at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
-						initial_snapshots.append({'state': Snapshot.SCOUTED, 'depth': 0, 'is_standalone_media': False, 'url': url,
-												  'timestamp': timestamp, 'last_modified_time': None, 'is_excluded': True, 'url_key': None, 'digest': None})
+						log.warning(f'The initial snapshot at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
+						initial_snapshots.append({'state': Snapshot.SCOUTED, 'depth': 0, 'is_excluded': True, 'is_standalone_media': None,
+												  'file_extension': None, 'url': url, 'timestamp': timestamp, 'last_modified_time': None,
+												  'url_key': None, 'digest': None})
 
 					except Exception as error:
-						log.error(f'Failed to find a snapshot for the initial page at "{url}" near {timestamp} with the error: {repr(error)}')
+						log.error(f'Failed to find the initial snapshot at "{url}" near {timestamp} with the error: {repr(error)}')
 
 						while not is_wayback_machine_available():
 							log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
 							time.sleep(config.unavailable_wayback_machine_wait)
 
 				db.executemany(	'''
-								INSERT OR IGNORE INTO Snapshot (State, Depth, IsStandaloneMedia, Url, Timestamp, LastModifiedTime, IsExcluded, UrlKey, Digest)
-								VALUES (:state, :depth, :is_standalone_media, :url, :timestamp, :last_modified_time, :is_excluded, :url_key, :digest);
+								INSERT OR IGNORE INTO Snapshot (State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+								VALUES (:state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
 								''', initial_snapshots)
 
 				db.execute('UPDATE Word SET Points = 0, IsSensitive = FALSE;')
@@ -242,8 +184,9 @@ if __name__ == '__main__':
 										WHERE S.State = :queued_state
 											AND NOT S.IsStandaloneMedia
 											AND NOT S.IsExcluded
-											AND (:min_year IS NULL OR OldestYear >= :min_year OR IS_SNAPSHOT_DOMAIN_IGNORED_FOR_YEAR_FILTER(S.UrlKey))
-											AND (:max_year IS NULL OR OldestYear <= :max_year OR IS_SNAPSHOT_DOMAIN_IGNORED_FOR_YEAR_FILTER(S.UrlKey))
+											AND NOT IS_URL_DOMAIN_EXCLUDED(S.UrlKey)
+											AND (:min_year IS NULL OR OldestYear >= :min_year)
+											AND (:max_year IS NULL OR OldestYear <= :max_year)
 											AND (:max_depth IS NULL OR S.Depth <= :max_depth)
 										ORDER BY
 											S.Priority DESC,
@@ -279,44 +222,52 @@ if __name__ == '__main__':
 					log.error(f'Failed to load the snapshot with the error: {repr(error)}')
 					continue
 
-				url_list: List[Tuple[str, bool]] = []
+				url_list: List[Tuple[str, Optional[str]]] = []
 
 				try:
 					for _ in browser.switch_through_frames():
 
-						element_list = driver.find_elements_by_xpath(r'//*[@href or @src]')
+						# Retrieve links from all href attributes.
+						# This is useful for snapshots that use tags other than <a> to link to other pages.
+						# E.g. https://web.archive.org/web/19961220170231if_/http://www.geocities.com/NorthPole/
+						element_list = driver.find_elements_by_xpath(r'//*[@href]')
 						for element in element_list:
 
 							try:
 								# From testing, the attribute name is case insensitive
 								# and the tag name is always lowercase.
-								href = element.get_attribute('href')
-								src = element.get_attribute('src')
-								tag_name = element.tag_name
+								url = element.get_attribute('href')
 							except StaleElementReferenceException:
+								log.debug('Skipping stale element.')
 								continue
 
-							for url in filter(None, [href, src]):
+							if url:
 
+								wayback_timestamp = None
+
+								# E.g. https://web.archive.org/web/20110519051847if_/http://www.bloggerheads.com/archives/2005/01/the_evolution_o/
+								# Which links to https://web.archive.org/web/20110519051847if_/http://web.archive.org/web/20031105100709/http://www.turboforce3d.com/annoying/index.htm
+								wayback_parts = parse_wayback_machine_snapshot_url(url)
+								if wayback_parts is not None:
+									url = wayback_parts.Url
+									wayback_timestamp = wayback_parts.Timestamp
+
+								# Checking for valid URLs using netloc only makes sense if it was properly decoded.
+								# E.g. "http%3A//www.geocities.com/Hollywood/Hills/5988/main.html" would result in
+								# an empty netloc instead of "www.geocities.com".
+								url = unquote(url)
 								parts = urlparse(url)
 								is_valid = parts.scheme in ['http', 'https'] and parts.netloc != ''
 								is_archive_org = parts.hostname is not None and (parts.hostname == 'archive.org' or parts.hostname.endswith('.archive.org'))
-
+	
 								if is_valid and not is_archive_org:
 
-									_, file_extension = os.path.splitext(parts.path)
-									is_standalone = tag_name == 'a' and file_extension.strip('.').lower() in config.standalone_media_file_extensions
-									url_list.append((url, is_standalone))
+									url_list.append((url, wayback_timestamp))
 
 									# Retrieve any additional URLs that show up in the query string.
 									# We'll allow Internet Archive URLs here since we know they weren't
 									# autogenerated. Note that the (oversimplified) URL regex already
 									# checks if it's valid for our purposes.
-
-									def is_extra_url_standalone(extra_urL: str) -> bool:
-										extra_parts = urlparse(extra_urL)
-										_, extra_file_extension = os.path.splitext(extra_parts.path)
-										return extra_file_extension.strip('.').lower() in config.standalone_media_file_extensions
 
 									query_dict = parse_qs(parts.query)
 									for key, value_list in query_dict.items():
@@ -324,8 +275,7 @@ if __name__ == '__main__':
 											
 											extra_url_list = URL_REGEX.findall(value)
 											for extra_urL in extra_url_list:
-												is_extra_standalone = is_extra_url_standalone(extra_urL)
-												url_list.append((extra_urL, is_extra_standalone))
+												url_list.append((extra_urL, wayback_timestamp))
 
 									# For cases that have a query string without any key-value pairs.
 									# E.g. "http://example.com/?http://other.com".
@@ -333,8 +283,7 @@ if __name__ == '__main__':
 										
 										extra_url_list = URL_REGEX.findall(parts.query)
 										for extra_urL in extra_url_list:
-											is_extra_standalone = is_extra_url_standalone(extra_urL)
-											url_list.append((extra_urL, is_extra_standalone))
+											url_list.append((extra_urL, wayback_timestamp))
 
 				except SessionNotCreatedException:
 					log.warning('Terminated the WebDriver session abruptly.')
@@ -347,32 +296,31 @@ if __name__ == '__main__':
 				url_list = list(dict.fromkeys(url_list))
 
 				child_snapshots = []
-				for url, is_standalone in url_list:
+				for url, wayback_timestamp in url_list:
 
-					state = Snapshot.SCOUTED if is_standalone else Snapshot.QUEUED
-					uses_plugins = True if is_standalone else None
-					mime_type_filter = r'!mimetype:text/.*' if is_standalone else r'mimetype:text/html'
+					timestamp = wayback_timestamp or snapshot.Timestamp
 					
 					try:
-						log.debug(f'Locating the next snapshot at "{url}" near {snapshot.Timestamp}.')
-						best_snapshot = find_best_wayback_machine_snapshot(timestamp=snapshot.Timestamp, url=url, standalone_media=is_standalone)
+						log.debug(f'Locating the next snapshot at "{url}" near {timestamp}.')
+						best_snapshot, is_standalone_media, file_extension = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url)
 						last_modified_time = find_wayback_machine_snapshot_last_modified_time(best_snapshot.archive_url)
 
-						child_snapshots.append({'parent_id': snapshot.Id, 'state': state, 'depth': snapshot.Depth + 1,
-												'uses_plugins': uses_plugins, 'is_standalone_media': is_standalone,
+						state = Snapshot.SCOUTED if is_standalone_media else Snapshot.QUEUED
+
+						child_snapshots.append({'parent_id': snapshot.Id, 'state': state, 'depth': snapshot.Depth + 1, 'is_excluded': False,
+												'is_standalone_media': is_standalone_media, 'file_extension': file_extension,
 												'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
-												'last_modified_time': last_modified_time, 'is_excluded': False,
-												'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest})
+												'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey,
+												'digest': best_snapshot.digest})
 					except NoCDXRecordFound:
 						pass
 					except BlockedSiteError:
-						log.warning(f'The next snapshot at "{url}" near {snapshot.Timestamp} has been excluded from the Wayback Machine.')
-						child_snapshots.append({'parent_id': snapshot.Id, 'state': state, 'depth': snapshot.Depth + 1,
-												'uses_plugins': uses_plugins, 'is_standalone_media': is_standalone, 'url': url,
-												'timestamp': snapshot.Timestamp, 'last_modified_time': None, 'is_excluded': True,
-												'url_key': None, 'digest': None})
+						log.warning(f'The next snapshot at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
+						child_snapshots.append({'parent_id': snapshot.Id, 'state': Snapshot.QUEUED, 'depth': snapshot.Depth + 1, 'is_excluded': True,
+												'is_standalone_media': None, 'file_extension': None, 'url': url, 'timestamp': timestamp,
+												'last_modified_time': None, 'url_key': None, 'digest': None})
 					except Exception as error:
-						log.error(f'Failed to find the next snapshot at "{url}" near {snapshot.Timestamp} with the error: {repr(error)}')
+						log.error(f'Failed to find the next snapshot at "{url}" near {timestamp} with the error: {repr(error)}')
 
 						while not is_wayback_machine_available():
 							log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
@@ -386,8 +334,8 @@ if __name__ == '__main__':
 					frame_url_list = [frame_url for frame_url in browser.switch_through_frames()]
 
 					word_and_tag_counter: Counter = Counter()
-					title = driver.title
 					uses_plugins = False
+					title = driver.title
 
 					# The same frame may show up more than once, which is fine since that's what the user
 					# sees meaning we want to count duplicate words and tags in this case.
@@ -452,8 +400,8 @@ if __name__ == '__main__':
 
 				try:
 					db.executemany(	'''
-									INSERT OR IGNORE INTO Snapshot (ParentId, State, Depth, UsesPlugins, IsStandaloneMedia, Url, Timestamp, LastModifiedTime, IsExcluded, UrlKey, Digest)
-									VALUES (:parent_id, :state, :depth, :uses_plugins, :is_standalone_media, :url, :timestamp, :last_modified_time, :is_excluded, :url_key, :digest);
+									INSERT OR IGNORE INTO Snapshot (ParentId, State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+									VALUES (:parent_id, :state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
 									''', child_snapshots)
 
 					topology = [{'parent_id': child['parent_id'], 'url': child['url'], 'timestamp': child['timestamp']} for child in child_snapshots]
@@ -474,9 +422,9 @@ if __name__ == '__main__':
 
 					db.execute( '''
 								UPDATE Snapshot
-								SET State = :scouted_state, Title = :title, UsesPlugins = :uses_plugins
+								SET State = :scouted_state, UsesPlugins = :uses_plugins, Title = :title
 								WHERE Id = :id;
-								''', {'scouted_state': Snapshot.SCOUTED, 'title': title, 'uses_plugins': uses_plugins, 'id': snapshot.Id})
+								''', {'scouted_state': Snapshot.SCOUTED, 'uses_plugins': uses_plugins, 'title': title, 'id': snapshot.Id})
 
 					if snapshot.Priority == Snapshot.SCOUT_PRIORITY:
 						db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})

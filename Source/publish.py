@@ -5,14 +5,12 @@
 	The publisher script uploads each snapshot's MP4 video and generates a tweet with the web page's title, its date, and a link to its Wayback Machine capture.
 """
 
-import os
 import sqlite3
 import sys
 import time
 from argparse import ArgumentParser
 from datetime import datetime, timezone
-from typing import Dict, Union, cast
-from urllib.parse import urlparse
+from typing import Dict, Union
 
 import tweepy # type: ignore
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
@@ -139,19 +137,14 @@ if __name__ == '__main__':
 						required_text = f'\n{date}\n{snapshot.WaybackUrl}'
 						required_length = len(required_text)
 
-						if snapshot.UsesPlugins:
+						if snapshot.IsStandaloneMedia or snapshot.UsesPlugins:
 							# Emojis count for two characters.
 							emoji = '\N{jigsaw puzzle piece}'
 							required_text += '\n' + emoji
 							required_length += len('\n') + len(emoji) * 2
 
-						title = cast(str, snapshot.Title)
-						if not title:
-							parts = urlparse(snapshot.Url)
-							title = os.path.basename(parts.path)
-
 						max_title_length = max(config.max_tweet_length - required_length, 0)
-						tweet = title[:max_title_length] + required_text
+						tweet = snapshot.DisplayTitle[:max_title_length] + required_text
 						sensitive = config.flag_sensitive_snapshots and snapshot.IsSensitive
 
 						status = api.update_status(tweet, media_ids=[media_id], possibly_sensitive=sensitive)
