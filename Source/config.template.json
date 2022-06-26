@@ -5,11 +5,11 @@
 		"locale": "en_US",
 
 		"database_path": "Data/wanderer.db",
-		"database_error_wait": 30,
+		"database_error_wait": 15,
 
 		"gui_webdriver_path": "Data/Drivers/0.17.0/geckodriver.exe",
 		"headless_webdriver_path": "Data/Drivers/0.20.1/geckodriver.exe",
-		"page_load_timeout": 300,
+		"page_load_timeout": 180,
 
 		"gui_firefox_path": "Data/Firefox/52.9.0/App/Firefox/firefox.exe",
 		"headless_firefox_path": "Data/Firefox/56.0.2/App/Firefox/firefox.exe",
@@ -26,7 +26,6 @@
 			"browser.cache.disk.enable": false,
 			"browser.cache.memory.capacity": -1,
 			"browser.cache.memory.enable": true,
-			"browser.download.manager.retention": 1,
 			"browser.download.useDownloadDir": false,
 			"browser.shell.checkDefaultBrowser": false,
 			"javascript.options.wasm": true,
@@ -118,8 +117,8 @@
 		},
 
 		"plugins_path": "Data/Plugins",
-
 		"use_master_plugin_registry": true,
+		
 		"plugins":
 		{
 			"NPSWF32_32_0_0_363.dll": true,
@@ -140,21 +139,34 @@
 		"show_java_console": false,
 		"show_cosmo_player_console": false,
 
-		"compiled_autoit_path": "Data/AutoIt",
-		"autoit_poll_frequency": 20,		
+		"autoit_path": "Data/AutoIt",
+		"autoit_poll_frequency": 20,
+
+		"compiled_autoit_scripts":
+		{
+			"close_authorware_popups.exe": true,
+			"close_java_popups.exe": true,
+			"close_shockwave_popups.exe": true
+		},
 		
 		"recordings_path": "Data/Recordings",
 		"max_recordings_per_directory": 1000,
 		"compilations_path": "Data/Compilations",
 
-		"cdx_api_rate_limit_amount": 5,
-		"cdx_api_rate_limit_multiple": 1,
 		"wayback_machine_rate_limit_amount": 25,
 		"wayback_machine_rate_limit_multiple": 60,
+		
+		"cdx_api_rate_limit_amount": 5,
+		"cdx_api_rate_limit_multiple": 1,
+		
+		"save_api_rate_limit_amount": 3,
+		"save_api_rate_limit_multiple": 60,
+		
 		"rate_limit_poll_frequency": 0.5,
 		"unavailable_wayback_machine_wait": 900,
 
-		"excluded_domains": null
+		"allowed_domains": null,
+		"disallowed_domains": null
 	},
 
 	"scout":
@@ -260,30 +272,33 @@
 
 		"use_proxy": true,
 		"proxy_port": null,
-		"proxy_queue_timeout": 10,
+		"proxy_queue_timeout": 20,
 		"proxy_total_timeout": 600,
+		"block_proxy_requests_outside_archive_org": true,
 		"find_missing_proxy_snapshots_using_cdx": true,
 		"max_missing_proxy_snapshot_path_components": 2,
+		"save_missing_proxy_snapshots_that_still_exist_online": true,
 
 		"viewport_scroll_percentage": 0.85,
+		"page_cache_wait": 30,
 		
-		"cache_wait_after_load_multiplier": 2.0,
-		"max_wait_after_load_video_percentage": 0.20,
-		"points_per_extra_wait": 500,
-
 		"base_wait_after_load": 10,
 		"extra_wait_after_load": 5,
 
 		"base_wait_per_scroll": 5,
 		"extra_wait_per_scroll": 2,
 
-		"standalone_media_fallback_duration": 30,
+		"max_wait_after_load_video_percentage": 0.20,
+		"points_per_extra_wait": 500,
+
+		"standalone_media_fallback_duration": 40,
 		"standalone_media_width": "75%",
 		"standalone_media_height": "75%",
 		"standalone_media_background_color": "#000000",
 
 		"fullscreen_browser": true,
 		"reload_plugin_media_before_recording": true,
+		"cosmo_player_viewpoint_wait_per_cycle": 8,
 
 		"min_video_duration": 2,
 		"max_video_duration": 135,
@@ -316,7 +331,8 @@
 			"color_range": 2,
 			"c:a": "flac",
 			"ar": "48K",
-			"ac": 2
+			"ac": 2,
+			"fs": "2G"
 		},
 
 		"ffmpeg_archive_output":

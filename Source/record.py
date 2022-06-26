@@ -9,9 +9,11 @@
 import ctypes
 import os
 import queue
+import re
 import sqlite3
 import time
 from argparse import ArgumentParser
+from contextlib import nullcontext
 from math import ceil
 from queue import Queue
 from random import random
@@ -19,17 +21,20 @@ from subprocess import PIPE, STDOUT
 from subprocess import Popen, TimeoutExpired
 from tempfile import NamedTemporaryFile
 from threading import Thread, Timer
-from typing import Dict, List, Optional, Union, cast
+from typing import Dict, List, Optional, Pattern, Union, cast
 from urllib.parse import urlparse
 
 import ffmpeg # type: ignore
 import pywinauto # type: ignore
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
+from pywinauto.application import Application as WindowsApplication # type: ignore
 from selenium.common.exceptions import SessionNotCreatedException, WebDriverException # type: ignore
 from selenium.webdriver.common.utils import free_port # type: ignore
+from waybackpy import WaybackMachineSaveAPI
+from waybackpy.exceptions import TooManyRequestsError
 
-from common import Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, container_to_lowercase, delete_file, get_current_timestamp, kill_processes_by_path, setup_logger, was_exit_command_entered
+from common import Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, container_to_lowercase, delete_file, get_current_timestamp, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
 
 ####################################################################################################
 
@@ -52,20 +57,24 @@ class RecordConfig(CommonConfig):
 	proxy_port: Optional[int]
 	proxy_queue_timeout: int
 	proxy_total_timeout: int
-	find_missing_proxy_snapshots_using_cdx: bool # Used in the Wayback Proxy Addon script.
-	max_missing_proxy_snapshot_path_components: Optional[int] # Used in the Wayback Proxy Addon script.
+	# Used in the Wayback Proxy Addon script.
+	block_proxy_requests_outside_archive_org: bool
+	find_missing_proxy_snapshots_using_cdx: bool
+	max_missing_proxy_snapshot_path_components: Optional[int]
+	# Used in both scripts.
+	save_missing_proxy_snapshots_that_still_exist_online: bool 
 
 	viewport_scroll_percentage: float
-	
-	cache_wait_after_load_multiplier: float
-	max_wait_after_load_video_percentage: float
-	points_per_extra_wait: int
+	page_cache_wait: int
 
 	base_wait_after_load: int
 	extra_wait_after_load: int
 
 	base_wait_per_scroll: int
 	extra_wait_per_scroll: int
+
+	max_wait_after_load_video_percentage: float
+	points_per_extra_wait: int
 
 	standalone_media_fallback_duration: int
 	standalone_media_width: str
@@ -74,6 +83,7 @@ class RecordConfig(CommonConfig):
 
 	fullscreen_browser: bool
 	reload_plugin_media_before_recording: bool
+	cosmo_player_viewpoint_wait_per_cycle: Optional[int]
 
 	min_video_duration: int
 	max_video_duration: int
@@ -87,9 +97,10 @@ class RecordConfig(CommonConfig):
 	ffmpeg_upload_output: Dict[str, Union[int, str]]
 
 	# Determined at runtime.
+	plugin_crash_timeout: int
+	standalone_media_template: str
 	physical_screen_width: int
 	physical_screen_height: int
-	standalone_media_template: str
 
 	def __init__(self):
 		super().__init__()
@@ -108,15 +119,20 @@ class RecordConfig(CommonConfig):
 		self.ffmpeg_archive_output = container_to_lowercase(self.ffmpeg_archive_output)
 		self.ffmpeg_upload_output = container_to_lowercase(self.ffmpeg_upload_output)
 
+		# This should be enough to work in both the caching and recordings phases.
+		# We'll add some extra time to make sure that the recording isn't aborted
+		# even when the video has the maximum duration.
+		self.plugin_crash_timeout = max(self.page_cache_wait, self.max_video_duration) + 20
+
+		template_path = os.path.join(self.plugins_path, 'standalone_media.html.template')
+		with open(template_path, 'r', encoding='utf-8') as file:
+			self.standalone_media_template = file.read()
+
 		# Get the correct screen resolution by taking into account DPI scaling.
 		user32 = ctypes.windll.user32
 		user32.SetProcessDPIAware()
 		self.physical_screen_width = user32.GetSystemMetrics(0)
 		self.physical_screen_height = user32.GetSystemMetrics(1)
-
-		template_path = os.path.join(self.plugins_path, 'standalone_media.html.template')
-		with open(template_path, 'r', encoding='utf-8') as file:
-			self.standalone_media_template = file.read()
 
 if __name__ == '__main__':
 
@@ -130,12 +146,15 @@ if __name__ == '__main__':
 	####################################################################################################
 
 	class Proxy(Thread):
-		""" A proxy that intercepts all HTTP/HTTPS requests made by Firefox and its plugins. Used to locate missing resources
+		""" A proxy thread that intercepts all HTTP/HTTPS requests made by Firefox and its plugins. Used to locate missing resources
 		in other subdomains via the CDX API while also allowing plugin media that loads slowly to finish requesting assets. """
 
 		port: int
 		process: Popen
 		queue: Queue
+		timestamp: Optional[str]
+
+		SAVE_REGEX: Pattern = re.compile(r'\[SAVE\] \[(?P<url>.+)\]')
 
 		def __init__(self, port: int):
 
@@ -145,6 +164,8 @@ if __name__ == '__main__':
 			os.environ['PYTHONUNBUFFERED'] = '1'
 			self.process = Popen(['mitmdump', '--quiet', '--listen-port', str(self.port), '--script', 'wayback_proxy_addon.py'], stdin=PIPE, stdout=PIPE, stderr=STDOUT, bufsize=1, encoding='utf-8')
 			self.queue = Queue()
+			self.timestamp = None
+
 			self.start()
 
 		@staticmethod
@@ -200,34 +221,19 @@ if __name__ == '__main__':
 			self.task_done()
 
 		def shutdown(self) -> None:
-			""" Terminates the mitmproxy script. """
+			""" Stops the mitmproxy script and proxy thread. """
 			try:
 				self.process.terminate()
+				self.join()
 			except OSError as error:
 				log.error(f'Failed to terminate the proxy process with the error: {repr(error)}')
 
-	class ProxyContext():
-		""" A wrapper that toggles the proxy using a context manager. This can be used even when the proxy is disabled. """
-
-		proxy: Optional[Proxy]
-		timestamp: Optional[str]
-
-		def __init__(self, proxy: Optional[Proxy] = None):
-			self.proxy = proxy
-			self.timestamp = None
-
-		def __call__(self, timestamp: str):
-			self.timestamp = timestamp
-			return self
-
 		def __enter__(self):
-			if self.proxy is not None:
-				self.proxy.clear()
-				self.proxy.exec(f'current_timestamp = "{self.timestamp}"')
+			self.clear()
+			self.exec(f'current_timestamp = "{self.timestamp}"')
 
 		def __exit__(self, exception_type, exception_value, traceback):
-			if self.proxy is not None:
-				self.proxy.exec('current_timestamp = None')
+			self.exec('current_timestamp = None')
 
 	class PluginCrashTimer():
 		""" A special timer that kills Firefox's plugin container child processes after a given time has elapsed (e.g. the recording duration). """
@@ -341,6 +347,55 @@ if __name__ == '__main__':
 			
 			delete_file(self.raw_recording_path)
 
+	class CosmoPlayerViewpointCycler(Thread):
+		""" A thread that periodically tells any VRML world running in the Cosmo Player to move to the next viewpoint. """
+
+		firefox_application: Optional[WindowsApplication]
+		wait_per_cycle: int
+		running: bool
+
+		def __init__(self, firefox_application: Optional[WindowsApplication], wait_per_cycle: int):
+
+			super().__init__(name='cosmo_player_viewpoint_cycler', daemon=True)
+			
+			self.firefox_application = firefox_application
+			self.wait_per_cycle = wait_per_cycle
+			self.running = False
+
+		def run(self):
+			""" Runs the viewpoint cycler on a loop, sending the "Next Viewpoint" hotkey periodically to any Cosmo Player windows. """
+
+			if self.firefox_application is None:
+				return
+
+			while self.running:
+				
+				time.sleep(self.wait_per_cycle)
+				
+				try:
+					cosmo_player_windows = self.firefox_application.MozillaWindowClass.children(class_name='CpWin32RenderWindow')
+					for window in cosmo_player_windows:
+						window.send_keystrokes('{PGDN}')
+				except Exception:
+					pass
+
+		def startup(self) -> None:
+			""" Starts the viewpoint cycler thread. """
+			self.running = True
+			self.start()
+
+		def shutdown(self) -> None:
+			""" Stops the viewpoint cycler thread. """
+			self.running = False
+			self.join()
+
+		def __enter__(self):
+			self.startup()
+			return self
+
+		def __exit__(self, exception_type, exception_value, traceback):
+			self.shutdown()
+
 	####################################################################################################
 
 	log.info('Initializing the recorder.')
@@ -353,9 +408,8 @@ if __name__ == '__main__':
 		try:
 			if config.use_proxy:
 				proxy = Proxy.create()
-				proxy_context = ProxyContext(proxy)
 			else:
-				proxy_context = ProxyContext()
+				proxy = nullcontext() # type: ignore
 
 			standalone_media_page_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix='wanderer.', suffix='.html', delete=False)
 			log.debug(f'Created the temporary standalone media page file "{standalone_media_page_file.name}".')
@@ -463,11 +517,11 @@ if __name__ == '__main__':
 													(S.State = :published_state AND LR.DaysSinceLastPublished >= :min_publish_days_for_new_recording)
 												)
 												AND NOT S.IsExcluded
-												AND NOT IS_URL_DOMAIN_EXCLUDED(S.UrlKey)
 												AND (:min_year IS NULL OR OldestYear >= :min_year)
 												AND (:max_year IS NULL OR OldestYear <= :max_year)
 												AND (:record_sensitive_snapshots OR NOT SI.IsSensitive)
 												AND (NOT S.IsStandaloneMedia OR IS_STANDALONE_MEDIA_FILE_EXTENSION_ALLOWED(S.FileExtension))
+												AND IS_URL_KEY_ALLOWED(S.UrlKey)
 											ORDER BY
 												S.Priority DESC,
 												Rank DESC
@@ -502,6 +556,16 @@ if __name__ == '__main__':
 						time.sleep(config.database_error_wait)
 						continue
 
+					# Due to the way snapshots are labelled, it's possible that a regular page
+					# will be marked as standalone media and vice versa. Let's look at both cases:
+					# - If it's actually a regular page, then the plugin associated with that file
+					# extension won't be able to play it. In most cases, this just results in a
+					# black screen. For others, like Authorware, an AutoIt script is used to close
+					# the error popup.
+					# - If it's actually standalone media, then the scout script will catch it and
+					# label it correctly since all pages have to be scouted before they can be
+					# recorded.
+
 					try:
 						if snapshot.IsStandaloneMedia:
 							try:
@@ -522,6 +586,7 @@ if __name__ == '__main__':
 							content = content.replace('{url}', snapshot.WaybackUrl)
 							content = content.replace('{loop}', loop)
 							
+							# Overwrite the temporary standalone media page.
 							standalone_media_page_file.seek(0)
 							standalone_media_page_file.truncate(0)
 							standalone_media_page_file.write(content)
@@ -537,7 +602,13 @@ if __name__ == '__main__':
 						browser.bring_to_front()
 						pywinauto.mouse.move(coords=(0, config.physical_screen_height // 2))
 						
-						with proxy_context(timestamp=snapshot.Timestamp):
+						missing_urls: List[str] = []
+
+						if config.use_proxy:
+							proxy.timestamp = snapshot.Timestamp
+
+						# Wait for the page and its resources to be cached.
+						with proxy, PluginCrashTimer(browser.firefox_directory_path, config.plugin_crash_timeout) as crash_timer:
 
 							browser.go_to_wayback_url(content_url)
 
@@ -545,12 +616,14 @@ if __name__ == '__main__':
 							wait_per_scroll: float
 
 							if snapshot.IsStandaloneMedia:
+								cache_wait = standalone_media_duration
 								scroll_step = 0.0
 								num_scrolls_to_bottom = 0
 								wait_after_load = max(config.min_video_duration, min(standalone_media_duration + 2, config.max_video_duration))
 								wait_per_scroll = 0.0
-								cache_wait = wait_after_load
 							else:
+								cache_wait = config.page_cache_wait
+
 								scroll_height = 0
 								for _ in browser.switch_through_frames():
 									
@@ -573,11 +646,10 @@ if __name__ == '__main__':
 								wait_per_scroll = config.base_wait_per_scroll + config.extra_wait_per_scroll * cast(int, snapshot.Points) / config.points_per_extra_wait
 								wait_per_scroll = min(wait_per_scroll, (config.max_video_duration - wait_after_load) / max(num_scrolls_to_bottom, 1))
 
-								cache_wait = wait_after_load * config.cache_wait_after_load_multiplier
-
 							log.info(f'Waiting {cache_wait:.1f} seconds for the page to cache.')
 							time.sleep(cache_wait)
 
+							# Keep waiting if the page or its plugins are still requesting data.
 							if config.use_proxy:
 								log.info('Waiting for the proxy.')
 								begin_proxy_time = time.time()
@@ -592,6 +664,14 @@ if __name__ == '__main__':
 
 										message = proxy.get(timeout=config.proxy_queue_timeout)
 										log.debug(message)
+										
+										if config.save_missing_proxy_snapshots_that_still_exist_online:
+											
+											match = Proxy.SAVE_REGEX.fullmatch(message)
+											if match is not None:				
+												url = match.group('url')
+												missing_urls.append(url)
+														
 										proxy.task_done()
 
 								except queue.Empty:
@@ -608,8 +688,11 @@ if __name__ == '__main__':
 						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, snapshot.FileExtension, snapshot.Timestamp[:4], snapshot.Timestamp[4:6], snapshot.Timestamp[6:8], media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
-						# Using get() instead of refresh() seems yield better results since by
-						# default Selenium will wait for the page to load before continuing.
+						browser.bring_to_front()
+						pywinauto.mouse.move(coords=(0, config.physical_screen_height // 2))
+
+						cosmo_player_viewpoint_cycler = CosmoPlayerViewpointCycler(browser.application, config.cosmo_player_viewpoint_wait_per_cycle) if config.cosmo_player_viewpoint_wait_per_cycle is not None else nullcontext()
+
 						log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls_to_bottom} scrolls of {scroll_step:.1f} pixels.')
 						browser.go_to_wayback_url(content_url)
 
@@ -617,11 +700,9 @@ if __name__ == '__main__':
 						# uses various plugins that can potentially start playing at different times.
 						if config.reload_plugin_media_before_recording:
 							browser.reload_plugin_media()
-
-						# >>>> Can Start Recording
 				
-						crash_timeout = config.max_video_duration + 20
-						with PluginCrashTimer(browser.firefox_directory_path, crash_timeout) as crash_timer, ScreenCapture(recording_path_prefix) as capture:
+						# Record the snapshot. The page should load faster now that its resources are cached.
+						with cosmo_player_viewpoint_cycler, PluginCrashTimer(browser.firefox_directory_path, config.plugin_crash_timeout) as crash_timer, ScreenCapture(recording_path_prefix) as capture:
 						
 							time.sleep(wait_after_load)
 
@@ -630,13 +711,8 @@ if __name__ == '__main__':
 									driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
 								time.sleep(wait_per_scroll)
 
-						# >>>> Can Stop Recording
-
-						# @Future: There's support for taking full page screenshots with Firefox in Selenium 3.150.0, but the latest 3.x Python bindings
-						# package is 3.141.0. See: https://github.com/SeleniumHQ/selenium/blob/selenium-3.150.0/py/selenium/webdriver/firefox/webdriver.py
-
 						was_redirected = not snapshot.IsStandaloneMedia and content_url != driver.current_url
-						driver.get('about:blank')
+						driver.get(Browser.BLANK_URL)
 						browser.close_all_windows_except(original_window)
 
 						capture.perform_post_processing()
@@ -647,6 +723,51 @@ if __name__ == '__main__':
 						else:
 							log.info(f'Saved the recording to "{capture.archive_recording_path}".')
 							state = Snapshot.RECORDED
+
+						if config.save_missing_proxy_snapshots_that_still_exist_online:
+							
+							# Remove any duplicates to minimize the amount of requests to the Save API.
+							missing_urls = list(dict.fromkeys(missing_urls))
+							saved_urls = []
+							num_processed = 0
+
+							for i, url in enumerate(missing_urls):
+
+								try:
+									config.wait_for_save_api_rate_limit()
+									save = WaybackMachineSaveAPI(url)
+									wayback_url = save.save()
+
+									if save.cached_save:
+										log.info(f'The missing URL was already saved to "{wayback_url}"')
+									else:
+										log.info(f'Saved the missing URL to "{wayback_url}".')
+
+										wayback_parts = parse_wayback_machine_snapshot_url(wayback_url)
+										if wayback_parts is not None:
+											url = wayback_parts.Url
+											timestamp = wayback_parts.Timestamp
+										else:
+											timestamp = None
+
+										saved_urls.append({'snapshot_id': snapshot.Id, 'url': url, 'timestamp': timestamp, 'failed': False})
+
+								except TooManyRequestsError as error:
+									log.error(f'Reached the Save API limit while trying to save the missing URL "{url}": {repr(error)}')
+									break
+								except Exception as error:
+									log.error(f'Failed to save the missing URL "{url}" with the error: {repr(error)}')
+									saved_urls.append({'snapshot_id': snapshot.Id, 'url': url, 'timestamp': None, 'failed': True})
+
+								num_processed += 1
+
+							if num_processed < len(missing_urls):
+
+								remaining_missing_urls = missing_urls[i:]
+								log.warning(f'Skipping {len(remaining_missing_urls)} missing URLs.')
+
+								for url in remaining_missing_urls:
+									saved_urls.append({'snapshot_id': snapshot.Id, 'url': url, 'timestamp': None, 'failed': True})
 
 					except SessionNotCreatedException:
 						log.warning('Terminated the WebDriver session abruptly.')
@@ -674,6 +795,14 @@ if __name__ == '__main__':
 
 						if snapshot.Priority == Snapshot.RECORD_PRIORITY:
 							db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
+
+						if config.save_missing_proxy_snapshots_that_still_exist_online:
+							db.executemany(	'''
+											INSERT INTO SavedSnapshotUrl (SnapshotId, Url, Timestamp, Failed)
+											VALUES (:snapshot_id, :url, :timestamp, :failed)
+											ON CONFLICT (Url)
+											DO UPDATE SET Timestamp = :timestamp, Failed = :failed;
+											''', saved_urls)
 
 						db.commit()
 

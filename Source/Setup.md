@@ -6,7 +6,7 @@ This page documents every relevant component of the Eternal Wanderer bot includi
 
 ## Dependencies
 
-Before running the scripts, their dependencies must be installed. You can do this by running the following command with the requirements file in this directory.
+Python 3.8 or later is required to run the scripts. You can install their dependencies by running the following command with the requirements file in this directory.
 
 ```
 pip install -r requirements.txt
@@ -21,6 +21,8 @@ The following Python packages are used:
 * [Waybackpy](https://github.com/akamhy/waybackpy): to retrieve metadata from the Wayback Machine CDX API.
 
 * [requests](https://github.com/psf/requests): to check if specific Wayback Machine snapshots are available.
+
+* [brotlicffi](https://github.com/python-hyper/brotlicffi): to automatically decompress Brotli-encoded requests.
 
 * [limits](https://github.com/alisaifee/limits): to avoid making too many requests to the Wayback Machine and CDX API.
 
@@ -47,6 +49,10 @@ Below is a summary of the Python scripts located in [the source directory](Sourc
 * `approve.py`: approves snapshot recordings for publishing. This operation is optional and may only be done if the publisher script was started with the `require_approval` option set to true.
 
 * `enqueue.py`: adds a Wayback Machine snapshot to the Eternal Wanderer queue with a given priority. This can be used to scout, record, or publish any existing or new snapshots as soon as possible.
+
+* `compile.py`: compiles multiple snapshot recordings into a single video. This can be done for published recordings that haven't been compiled yet, or for any recordings given their database IDs. A short transition with a user-defined background color, duration, and sound effect is inserted between each recording.
+
+* `delete.py`: deletes all video files belonging to unapproved and/or compiled recordings.
 
 * `browse.py`: opens a URL in a Firefox version equipped with various plugins and extensions. Avoid using this version to browse live websites.
 

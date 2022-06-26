@@ -197,8 +197,10 @@ if __name__ == '__main__':
 					try:
 						with open(timestamps_path, 'w', encoding='utf-8') as timestamps_file:
 
+							timestamps_file.write(f'{range_identifier}\n\n')
+							
 							print(f'Compiling {num_valid_recordings} valid files out of {total_recordings} selected recordings.')
-
+							
 							for snapshot, recording in snapshots_and_recordings:
 								
 								print(f'- Adding the recording #{recording.Id} for snapshot #{snapshot.Id} {snapshot}.')

@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from selenium.common.exceptions import SessionNotCreatedException, StaleElementReferenceException, WebDriverException # type: ignore
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
-from common import Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url, container_to_lowercase, find_best_wayback_machine_snapshot, find_wayback_machine_snapshot_last_modified_time, is_url_available, is_wayback_machine_available, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
+from common import Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url, container_to_lowercase, find_best_wayback_machine_snapshot, find_wayback_machine_snapshot_last_modified_time, is_url_available, is_url_from_domain, is_wayback_machine_available, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
 
 ####################################################################################################
 
@@ -62,6 +62,58 @@ if __name__ == '__main__':
 
 	####################################################################################################
 
+	def find_child_snapshot(parent_snapshot: Optional[Snapshot], url: str, timestamp: str) -> Optional[dict]:
+		""" Retrieves a snapshot's metadata from the Wayback Machine. """
+
+		result = None
+
+		if parent_snapshot is None:
+			parent_id = None
+			depth = 0
+		else:
+			parent_id = parent_snapshot.Id
+			depth = parent_snapshot.Depth + 1
+
+		while True:
+
+			retry = False
+
+			try:
+				log.debug(f'Locating the snapshot at "{url}" near {timestamp}.')
+				best_snapshot, is_standalone_media, file_extension = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url)
+				last_modified_time = find_wayback_machine_snapshot_last_modified_time(best_snapshot.archive_url)
+
+				state = Snapshot.SCOUTED if is_standalone_media else Snapshot.QUEUED
+
+				result = {'parent_id': parent_id, 'state': state, 'depth': depth, 'is_excluded': False,
+						  'is_standalone_media': is_standalone_media, 'file_extension': file_extension,
+						  'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
+						  'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey,
+						  'digest': best_snapshot.digest}
+			except NoCDXRecordFound:
+				pass
+			except BlockedSiteError:
+				log.warning(f'The snapshot at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
+				result = {'parent_id': parent_id, 'state': Snapshot.QUEUED, 'depth': depth, 'is_excluded': True,
+						  'is_standalone_media': None, 'file_extension': None, 'url': url, 'timestamp': timestamp,
+						  'last_modified_time': None, 'url_key': None, 'digest': None}
+			except Exception as error:
+				log.error(f'Failed to find the snapshot at "{url}" near {timestamp} with the error: {repr(error)}')
+
+				while not is_wayback_machine_available():
+					retry = True
+					log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
+					time.sleep(config.unavailable_wayback_machine_wait)
+			finally:
+				if retry:
+					continue
+				else:
+					break
+
+		return result
+
+	####################################################################################################
+
 	log.info('Initializing the scout.')
 
 	# We don't want any extensions or user scripts that change the HTML document, but we do need to use the Greasemonkey extension with a user script
@@ -74,42 +126,23 @@ if __name__ == '__main__':
 			try:
 				log.info('Inserting the initial Wayback Machine snapshots.')
 
-				initial_snapshots = []
+				initial_snapshot_list = []
 				for page in config.initial_snapshots:
 					
 					url = page['url']
 					timestamp = page['timestamp']
 					
-					try:
-						log.debug(f'Locating the initial snapshot at "{url}" near {timestamp}.')
-						best_snapshot, is_standalone_media, file_extension = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url)
-						last_modified_time = find_wayback_machine_snapshot_last_modified_time(best_snapshot.archive_url)
+					initial_snapshot = find_child_snapshot(None, url, timestamp)
 
-						state = Snapshot.SCOUTED if is_standalone_media else Snapshot.QUEUED
-
-						initial_snapshots.append({ 'state': state, 'depth': 0, 'is_excluded': False, 'is_standalone_media': is_standalone_media,
-												   'file_extension': file_extension, 'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
-												   'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest})
-					except NoCDXRecordFound:
-						log.warning(f'Could not find the initial snapshot at "{url}" near {timestamp}.')	
-					
-					except BlockedSiteError:
-						log.warning(f'The initial snapshot at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
-						initial_snapshots.append({'state': Snapshot.SCOUTED, 'depth': 0, 'is_excluded': True, 'is_standalone_media': None,
-												  'file_extension': None, 'url': url, 'timestamp': timestamp, 'last_modified_time': None,
-												  'url_key': None, 'digest': None})
-
-					except Exception as error:
-						log.error(f'Failed to find the initial snapshot at "{url}" near {timestamp} with the error: {repr(error)}')
-
-						while not is_wayback_machine_available():
-							log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
-							time.sleep(config.unavailable_wayback_machine_wait)
+					if initial_snapshot is not None:
+						initial_snapshot_list.append(initial_snapshot)
+					else:
+						log.warning(f'Could not find the initial snapshot at "{url}" near {timestamp}.')
 
 				db.executemany(	'''
 								INSERT OR IGNORE INTO Snapshot (State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
 								VALUES (:state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
-								''', initial_snapshots)
+								''', initial_snapshot_list)
 
 				db.execute('UPDATE Word SET Points = 0, IsSensitive = FALSE;')
 
@@ -184,10 +217,10 @@ if __name__ == '__main__':
 										WHERE S.State = :queued_state
 											AND NOT S.IsStandaloneMedia
 											AND NOT S.IsExcluded
-											AND NOT IS_URL_DOMAIN_EXCLUDED(S.UrlKey)
 											AND (:min_year IS NULL OR OldestYear >= :min_year)
 											AND (:max_year IS NULL OR OldestYear <= :max_year)
 											AND (:max_depth IS NULL OR S.Depth <= :max_depth)
+											AND IS_URL_KEY_ALLOWED(S.UrlKey)
 										ORDER BY
 											S.Priority DESC,
 											(S.Depth = 0) DESC,
@@ -211,8 +244,17 @@ if __name__ == '__main__':
 					time.sleep(config.database_error_wait)
 					continue
 				
+				# Due to the way snapshots are labelled, it's possible that a regular page
+				# will be marked as standalone media and vice versa. Let's look at both cases:
+				# - If it's actually a regular page, then it will be skipped since we don't
+				# scout standalone media.
+				# - If it's actually standalone media, then the browser will download the file
+				# and the current URL won't change. This can be caught below since we always
+				# set the current URL to a blank page before navigating to the Wayback Machine.
+
 				try:
-					log.info(f'Scouting snapshot #{snapshot.Id} {snapshot} located at a depth of {snapshot.Depth} pages.')
+					config.wait_for_wayback_machine_rate_limit()
+					log.info(f'[{num_iterations}] Scouting snapshot #{snapshot.Id} {snapshot} located at a depth of {snapshot.Depth} pages.')
 					original_window = driver.current_window_handle
 					browser.go_to_wayback_url(snapshot.WaybackUrl)
 				except SessionNotCreatedException:
@@ -221,6 +263,71 @@ if __name__ == '__main__':
 				except WebDriverException as error:
 					log.error(f'Failed to load the snapshot with the error: {repr(error)}')
 					continue
+
+				# Skip downloads, i.e., regular pages that were labelled as standalone media.
+				# When this happens, we have to wait for the WebDriver to time out.
+				#
+				# E.g. https://web.archive.org/web/20060321063750if_/http://www.thekidfrombrooklyn.com/movies/PoundCake_02_06.wmv
+				# This video file was stored in the Wayback Machine with the text/plain media type.
+				if driver.current_url == Browser.BLANK_URL:
+					try:
+						log.warning(f'Skipping the snapshot since it was mislabeled as standalone media.')
+						db.execute(	'UPDATE Snapshot SET State = :scouted_state, IsStandaloneMedia = :is_standalone_media WHERE Id = :id;',
+									{'scouted_state': Snapshot.SCOUTED, 'is_standalone_media': True, 'id': snapshot.Id})
+						db.commit()
+					except sqlite3.Error as error:
+						log.error(f'Failed to update the mislabeled snapshot with the error: {repr(error)}')
+						db.rollback()
+						time.sleep(config.database_error_wait)
+					finally:
+						continue
+
+				# Skip redirected pages. This is done here and not at the end since switching through
+				# the page's frames changes the current URL. We could navigate to it again but that's
+				# the same as checking it here. While the parent snapshot is skipped, the page we were
+				# redirected to will be added to the queue. The one exception are pages from the Wayback
+				# Machine that aren't snapshots.
+				#
+				# E.g. https://web.archive.org/web/19981205113927if_/http://www.fortunecity.com/millenium/bigears/43/index.html
+				# Redirects to https://web.archive.org/web/19981203010807if_/http://www.fortunecity.com/millenium/bigears/43/startherest.html
+				#
+				# E.g. https://web.archive.org/web/20081203054436if_/http://www.symbolicsoft.com:80/vrml/pong3d.wrl
+				# Redirects to "https://web.archive.org/", even though it's a valid page according to the CDX API:
+				# https://web.archive.org/cdx/search/cdx?url=http://www.symbolicsoft.com:80/vrml/pong3d.wrl&fl=original,timestamp,statuscode,mimetype
+				if driver.current_url != snapshot.WaybackUrl:
+					try:
+						log.warning(f'Skipping the snapshot since it was redirected to "{driver.current_url}".')
+						db.execute('UPDATE Snapshot SET State = :invalid_state WHERE Id = :id;', {'invalid_state': Snapshot.INVALID, 'id': snapshot.Id})
+					
+						wayback_parts = parse_wayback_machine_snapshot_url(driver.current_url)
+						if not is_url_from_domain(driver.current_url, 'web.archive.org') or wayback_parts is not None:
+
+							wayback_parts = parse_wayback_machine_snapshot_url(driver.current_url)
+							if wayback_parts is not None:
+								url = wayback_parts.Url
+								timestamp = wayback_parts.Timestamp
+							else:
+								url = driver.current_url
+								timestamp = snapshot.Timestamp
+
+							child_snapshot = find_child_snapshot(snapshot, url, timestamp)
+
+							if child_snapshot is not None:
+								db.execute(	'''
+											INSERT OR IGNORE INTO Snapshot (ParentId, State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+											VALUES (:parent_id, :state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
+											''', child_snapshot)
+							else:
+								log.warning(f'Could not find the redirected snapshot at "{url}" near {timestamp}.')
+
+						db.commit()
+
+					except sqlite3.Error as error:
+						log.error(f'Failed to update the redirected snapshot with the error: {repr(error)}')
+						db.rollback()
+						time.sleep(config.database_error_wait)
+					finally:
+						continue
 
 				url_list: List[Tuple[str, Optional[str]]] = []
 
@@ -245,6 +352,8 @@ if __name__ == '__main__':
 
 								wayback_timestamp = None
 
+								# Links to Wayback Machine snapshots are allowed, but instead of storing that URL,
+								# we'll extract the archived snapshot's URL.
 								# E.g. https://web.archive.org/web/20110519051847if_/http://www.bloggerheads.com/archives/2005/01/the_evolution_o/
 								# Which links to https://web.archive.org/web/20110519051847if_/http://web.archive.org/web/20031105100709/http://www.turboforce3d.com/annoying/index.htm
 								wayback_parts = parse_wayback_machine_snapshot_url(url)
@@ -258,17 +367,20 @@ if __name__ == '__main__':
 								url = unquote(url)
 								parts = urlparse(url)
 								is_valid = parts.scheme in ['http', 'https'] and parts.netloc != ''
-								is_archive_org = parts.hostname is not None and (parts.hostname == 'archive.org' or parts.hostname.endswith('.archive.org'))
+								is_archive_org = is_url_from_domain(parts, 'archive.org')
 	
 								if is_valid and not is_archive_org:
 
 									url_list.append((url, wayback_timestamp))
 
-									# Retrieve any additional URLs that show up in the query string.
-									# We'll allow Internet Archive URLs here since we know they weren't
-									# autogenerated. Note that the (oversimplified) URL regex already
-									# checks if it's valid for our purposes.
+									# One advantage of using the Wayback Machine timestamp is that
+									# any extra URLs that appear in the snapshot's URL will also
+									# use the correct timestamp.
 
+									# Retrieve any additional URLs that show up in the query string.
+									# We'll allow all Internet Archive URLs here since we know they
+									# weren't autogenerated. Note that the (oversimplified) URL regex
+									# already checks if it's valid for our purposes.
 									query_dict = parse_qs(parts.query)
 									for key, value_list in query_dict.items():
 										for value in value_list:	
@@ -295,38 +407,16 @@ if __name__ == '__main__':
 				# Remove any duplicates to minimize the amount of requests to the CDX API.
 				url_list = list(dict.fromkeys(url_list))
 
-				child_snapshots = []
+				child_snapshot_list = []
 				for url, wayback_timestamp in url_list:
 
-					timestamp = wayback_timestamp or snapshot.Timestamp
-					
-					try:
-						log.debug(f'Locating the next snapshot at "{url}" near {timestamp}.')
-						best_snapshot, is_standalone_media, file_extension = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url)
-						last_modified_time = find_wayback_machine_snapshot_last_modified_time(best_snapshot.archive_url)
+					timestamp = wayback_timestamp or snapshot.Timestamp					
+					child_snapshot = find_child_snapshot(snapshot, url, timestamp)
+				
+					if child_snapshot is not None:
+						child_snapshot_list.append(child_snapshot)
 
-						state = Snapshot.SCOUTED if is_standalone_media else Snapshot.QUEUED
-
-						child_snapshots.append({'parent_id': snapshot.Id, 'state': state, 'depth': snapshot.Depth + 1, 'is_excluded': False,
-												'is_standalone_media': is_standalone_media, 'file_extension': file_extension,
-												'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
-												'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey,
-												'digest': best_snapshot.digest})
-					except NoCDXRecordFound:
-						pass
-					except BlockedSiteError:
-						log.warning(f'The next snapshot at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
-						child_snapshots.append({'parent_id': snapshot.Id, 'state': Snapshot.QUEUED, 'depth': snapshot.Depth + 1, 'is_excluded': True,
-												'is_standalone_media': None, 'file_extension': None, 'url': url, 'timestamp': timestamp,
-												'last_modified_time': None, 'url_key': None, 'digest': None})
-					except Exception as error:
-						log.error(f'Failed to find the next snapshot at "{url}" near {timestamp} with the error: {repr(error)}')
-
-						while not is_wayback_machine_available():
-							log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
-							time.sleep(config.unavailable_wayback_machine_wait)
-
-				log.info(f'Found {len(child_snapshots)} valid snapshots out of {len(url_list)} links.')
+				log.info(f'Found {len(child_snapshot_list)} valid snapshots out of {len(url_list)} links.')
 		
 				try:
 					# Find the URL to every frame so we can analyze the original pages without any changes.
@@ -361,6 +451,7 @@ if __name__ == '__main__':
 							log.warning(f'Skipping the frame "{raw_wayback_url}" since it was not archived by the Wayback Machine.')
 							continue
 
+						config.wait_for_wayback_machine_rate_limit()
 						browser.go_to_wayback_url(raw_wayback_url, allow_redirects=True)
 
 						page_text = driver.execute_script('return window.document.documentElement.innerText;')
@@ -402,9 +493,9 @@ if __name__ == '__main__':
 					db.executemany(	'''
 									INSERT OR IGNORE INTO Snapshot (ParentId, State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
 									VALUES (:parent_id, :state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
-									''', child_snapshots)
+									''', child_snapshot_list)
 
-					topology = [{'parent_id': child['parent_id'], 'url': child['url'], 'timestamp': child['timestamp']} for child in child_snapshots]
+					topology = [{'parent_id': child['parent_id'], 'url': child['url'], 'timestamp': child['timestamp']} for child in child_snapshot_list]
 					db.executemany(	'''
 									INSERT OR IGNORE INTO Topology (ParentId, ChildId)
 									VALUES (:parent_id, (SELECT Id FROM Snapshot WHERE Url = :url AND Timestamp = :timestamp))

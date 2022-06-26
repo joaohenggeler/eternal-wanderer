@@ -9,7 +9,7 @@ import os
 import sqlite3
 from argparse import ArgumentParser
 
-from common import Database, Recording, Snapshot, delete_file
+from common import Database, Recording, Snapshot
 from publish import PublishConfig
 
 ####################################################################################################
@@ -20,7 +20,6 @@ if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Approves snapshot recordings for publishing. This operation is optional and may be done if the publisher script was started with the "require_approval" option set to true.')
 	parser.add_argument('max_recordings', nargs='?', type=int, default=-1, help='How many recordings to approve. Omit or set to %(default)s to approve all recordings.')
-	parser.add_argument('-delete', action='store_true', help='Whether to delete unapproved recordings (rejected or to be recorded again) and their archived copies without asking for confirmation.')
 	args = parser.parse_args()
 
 	if not config.require_approval:
@@ -111,38 +110,6 @@ if __name__ == '__main__':
 
 			else:
 				print('Ran out of snapshots to approve.')
-
-			if unapproved_snapshots_and_recordings:
-
-				delete_unapproved = args.delete
-
-				if not delete_unapproved:
-					
-					while True:
-						option = input('Delete unapproved recordings (including the archived copy) [(y)es, (n)o]: ').lower()
-
-						if not option:
-							continue
-						elif option[0] == 'y':
-							delete_unapproved = True
-							break
-						elif option[0] == 'n':
-							break
-						else:
-							print(f'Invalid option "{option}".')
-							continue
-
-				if delete_unapproved:
-					print(f'Deleting {len(unapproved_snapshots_and_recordings) * 2} unapproved recording files.')
-					
-					for snapshot, recording in unapproved_snapshots_and_recordings:
-
-						print(f'- ({snapshot}): {recording.UploadFilePath}')
-						delete_file(recording.UploadFilePath)
-						
-						if recording.ArchiveFilePath is not None:
-							print(f'- ({snapshot}): {recording.ArchiveFilePath}')
-							delete_file(recording.ArchiveFilePath)
 
 		except sqlite3.Error as error:
 			print(f'Failed to approve the recorded snapshots with the error: {repr(error)}')

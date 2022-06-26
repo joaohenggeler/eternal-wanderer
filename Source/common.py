@@ -30,7 +30,7 @@ from glob import iglob
 from math import ceil
 from subprocess import Popen
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
-from urllib.parse import unquote, urlparse, urlunparse
+from urllib.parse import ParseResult, unquote, urlparse, urlunparse
 from winreg import CreateKeyEx, DeleteKey, DeleteValue, EnumKey, EnumValue, OpenKey, QueryValueEx, SetValueEx
 from xml.etree import ElementTree
 
@@ -38,7 +38,7 @@ import requests
 from limits import RateLimitItemPerSecond
 from limits.storage import MemoryStorage
 from limits.strategies import MovingWindowRateLimiter
-from pywinauto.application import Application as WinApplication, WindowSpecification, ProcessNotFoundError as WinProcessNotFoundError, TimeoutError as WinTimeoutError # type: ignore
+from pywinauto.application import Application as WindowsApplication, WindowSpecification, ProcessNotFoundError as WindowProcessNotFoundError, TimeoutError as WindowTimeoutError # type: ignore
 from selenium import webdriver # type: ignore
 from selenium.common.exceptions import NoSuchElementException, NoSuchWindowException, StaleElementReferenceException, TimeoutException, WebDriverException # type: ignore
 from selenium.webdriver.firefox.firefox_binary import FirefoxBinary # type: ignore
@@ -96,29 +96,38 @@ class CommonConfig():
 	show_java_console: bool
 	show_cosmo_player_console: bool
 
-	compiled_autoit_path: str
+	autoit_path: str
 	autoit_poll_frequency: int
+	compiled_autoit_scripts: Dict[str, bool]
 
 	recordings_path: str
 	max_recordings_per_directory: int
 	compilations_path: str
 
-	cdx_api_rate_limit_amount: int
-	cdx_api_rate_limit_multiple: int
 	wayback_machine_rate_limit_amount: int
 	wayback_machine_rate_limit_multiple: int
+	cdx_api_rate_limit_amount: int
+	cdx_api_rate_limit_multiple: int
+	save_api_rate_limit_amount: int
+	save_api_rate_limit_multiple: int
 	rate_limit_poll_frequency: float
 	unavailable_wayback_machine_wait: int
 
-	excluded_domains: Optional[List[List[str]]] # Different from the config data type.
+	allowed_domains: List[List[str]] # Different from the config data type.
+	disallowed_domains: List[List[str]] # Different from the config data type.
 
 	# Determined at runtime.
-	cdx_api_memory_storage: MemoryStorage
-	cdx_api_rate_limiter: MovingWindowRateLimiter
-	cdx_api_requests_per_second: RateLimitItemPerSecond
 	wayback_machine_memory_storage: MemoryStorage
 	wayback_machine_rate_limiter: MovingWindowRateLimiter
 	wayback_machine_requests_per_minute: RateLimitItemPerSecond
+
+	cdx_api_memory_storage: MemoryStorage
+	cdx_api_rate_limiter: MovingWindowRateLimiter
+	cdx_api_requests_per_second: RateLimitItemPerSecond
+
+	save_api_memory_storage: MemoryStorage
+	save_api_rate_limiter: MovingWindowRateLimiter
+	save_api_requests_per_second: RateLimitItemPerSecond
 
 	def __init__(self):
 
@@ -136,7 +145,7 @@ class CommonConfig():
 		self.profile_path = os.path.abspath(self.profile_path)
 		self.extensions_path = os.path.abspath(self.extensions_path)
 		self.plugins_path = os.path.abspath(self.plugins_path)
-		self.compiled_autoit_path = os.path.abspath(self.compiled_autoit_path)
+		self.autoit_path = os.path.abspath(self.autoit_path)
 		self.recordings_path = os.path.abspath(self.recordings_path)
 		self.compilations_path = os.path.abspath(self.compilations_path)
 
@@ -144,34 +153,45 @@ class CommonConfig():
 		self.extensions_after_running = container_to_lowercase(self.extensions_after_running)
 		self.user_scripts = container_to_lowercase(self.user_scripts)
 		self.plugins = container_to_lowercase(self.plugins)
-
-		self.cdx_api_memory_storage = MemoryStorage()
-		self.cdx_api_rate_limiter = MovingWindowRateLimiter(self.cdx_api_memory_storage)
-		self.cdx_api_requests_per_second = RateLimitItemPerSecond(self.cdx_api_rate_limit_amount, self.cdx_api_rate_limit_multiple)
+		self.compiled_autoit_scripts = container_to_lowercase(self.compiled_autoit_scripts)
 
 		self.wayback_machine_memory_storage = MemoryStorage()
 		self.wayback_machine_rate_limiter = MovingWindowRateLimiter(self.wayback_machine_memory_storage)
 		self.wayback_machine_requests_per_minute = RateLimitItemPerSecond(self.wayback_machine_rate_limit_amount, self.wayback_machine_rate_limit_multiple)
+		
+		self.cdx_api_memory_storage = MemoryStorage()
+		self.cdx_api_rate_limiter = MovingWindowRateLimiter(self.cdx_api_memory_storage)
+		self.cdx_api_requests_per_second = RateLimitItemPerSecond(self.cdx_api_rate_limit_amount, self.cdx_api_rate_limit_multiple)
 
-		if self.excluded_domains is not None:
-			
-			excluded_domains = []
-			
-			for domain in container_to_lowercase(self.excluded_domains):
-				
-				# Reversed because it makes it easier to work with a snapshot's URL key.
-				components = domain.split('.')
-				components.reverse()
-				excluded_domains.append(components)
+		self.save_api_memory_storage = MemoryStorage()
+		self.save_api_rate_limiter = MovingWindowRateLimiter(self.save_api_memory_storage)
+		self.save_api_requests_per_second = RateLimitItemPerSecond(self.save_api_rate_limit_amount, self.save_api_rate_limit_multiple)
 
-				# If the last component was a wildcard, match one or two top or second-level
-				# domains (e.g. example.com or example.co.uk).
-				if components[0] == '*':
-					extra_components = components.copy()
-					extra_components.insert(0, '*')
-					excluded_domains.append(extra_components)
+		def parse_domain_list(domain_list: List[str]) -> List[List[str]]:
+			""" Transforms a list of domain patterns into a list of each pattern's components. """
+
+			domain_patterns = []
+
+			if domain_list is not None:
 				
-			self.excluded_domains = excluded_domains
+				for domain in container_to_lowercase(domain_list):
+					
+					# Reversed because it makes it easier to work with a snapshot's URL key.
+					components = domain.split('.')
+					components.reverse()
+					domain_patterns.append(components)
+
+					# If the last component was a wildcard, match one or two top or second-level
+					# domains (e.g. example.com or example.co.uk).
+					if components[0] == '*':
+						extra_components = components.copy()
+						extra_components.insert(0, '*')
+						domain_patterns.append(extra_components)
+					
+			return domain_patterns
+
+		self.allowed_domains = parse_domain_list(self.allowed_domains)
+		self.disallowed_domains = parse_domain_list(self.disallowed_domains)
 
 	def load_subconfig(self, name: str) -> None:
 		""" Loads a specific JSON object from the configuration file. """
@@ -182,15 +202,20 @@ class CommonConfig():
 		bucket = ceil(id / self.max_recordings_per_directory) * self.max_recordings_per_directory
 		return os.path.join(self.recordings_path, str(bucket))
 
+	def wait_for_wayback_machine_rate_limit(self) -> None:
+		""" Waits for a given amount of time if the user-specified Wayback Machine rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
+		while not self.wayback_machine_rate_limiter.hit(self.wayback_machine_requests_per_minute):
+			time.sleep(self.rate_limit_poll_frequency)
+
 	def wait_for_cdx_api_rate_limit(self) -> None:
 		""" Waits for a given amount of time if the user-specified CDX API rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
 		while not self.cdx_api_rate_limiter.hit(self.cdx_api_requests_per_second):
 			time.sleep(self.rate_limit_poll_frequency)
 
-	def wait_for_wayback_machine_rate_limit(self) -> None:
-		""" Waits for a given amount of time if the user-specified Wayback Machine rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
-		while not self.wayback_machine_rate_limiter.hit(self.wayback_machine_requests_per_minute):
-			time.sleep(self.rate_limit_poll_frequency)
+	def wait_for_save_api_rate_limit(self) -> None:
+		""" Waits for a given amount of time if the user-specified Save API rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
+		while not self.save_api_rate_limiter.hit(self.save_api_requests_per_second):
+			time.sleep(self.rate_limit_poll_frequency)	
 
 config = CommonConfig()
 locale.setlocale(locale.LC_ALL, config.locale)
@@ -216,41 +241,46 @@ def setup_logger(filename: str) -> logging.Logger:
 	
 	return log
 
-checked_excluded_domains: Dict[str, bool] = {}
-
-def is_url_domain_excluded(url_key: str) -> bool:
-	""" Checks whether a URL's domain should be excluded from database queries. """
+def url_key_matches_domain_pattern(url_key: str, domain_patterns: List[List[str]], cache: Dict[str, bool]) -> bool:
+	""" Checks whether a URL's key matches a list of domain patterns. """
 
 	result = False
 
-	if config.excluded_domains:
+	if domain_patterns:
 
 		# E.g. "com,geocities)/hollywood/hills/5988"
 		domain, _ = url_key.lower().split(')')
 		
-		if domain in checked_excluded_domains:
-			return checked_excluded_domains[domain]
+		if domain in cache:
+			return cache[domain]
 
 		component_list = domain.split(',')
 
-		for excluded_component_list in config.excluded_domains:
+		for pattern_component_list in domain_patterns:
 			
 			# If the domain has fewer components then it can't match the allowed pattern.
-			if len(component_list) < len(excluded_component_list):
+			if len(component_list) < len(pattern_component_list):
 				continue
 
 			# If there are more components in the domain than in the allowed pattern, these will be ignored.
 			# Since we're looking at these domains backwards, this means we'll match any subdomains.
-			for component, excluded_component in zip(component_list, excluded_component_list):
-				if excluded_component != '*' and component != excluded_component:
+			for component, pattern_component in zip(component_list, pattern_component_list):
+				if pattern_component != '*' and component != pattern_component:
 					break
 			else:
 				result = True
 				break
 
-		checked_excluded_domains[domain] = result
+		cache[domain] = result
 
 	return result
+
+checked_allowed_domains: Dict[str, bool] = {}
+checked_disallowed_domains: Dict[str, bool] = {}
+
+def is_url_key_allowed(url_key: str) -> bool:
+	""" Checks whether a URL should be scouted or recorded given its URL key. """
+	return (not config.allowed_domains or url_key_matches_domain_pattern(url_key, config.allowed_domains, checked_allowed_domains)) and (not config.disallowed_domains or not url_key_matches_domain_pattern(url_key, config.disallowed_domains, checked_disallowed_domains))
 
 ####################################################################################################
 
@@ -272,7 +302,7 @@ class Database():
 		self.connection.execute('PRAGMA synchronous = NORMAL;')
 		self.connection.execute('PRAGMA temp_store = MEMORY;')
 	
-		self.connection.create_function('IS_URL_DOMAIN_EXCLUDED', 1, is_url_domain_excluded)
+		self.connection.create_function('IS_URL_KEY_ALLOWED', 1, is_url_key_allowed)
 
 		# E.g. https://web.archive.org/web/20010203164200if_/http://www.tripod.lycos.com:80/service/welcome/preferences
 		# And https://web.archive.org/web/20010203180900if_/http://www.tripod.lycos.com:80/bin/membership/login
@@ -377,6 +407,19 @@ class Database():
 								''')
 
 		self.connection.execute('''
+								CREATE TABLE IF NOT EXISTS SavedSnapshotUrl
+								(
+									Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+									SnapshotId INTEGER NOT NULL,
+									Url TEXT NOT NULL UNIQUE,
+									Timestamp VARCHAR(14),
+									Failed BOOLEAN NOT NULL,
+
+									FOREIGN KEY (SnapshotId) REFERENCES Snapshot (Id)
+								);
+								''')
+
+		self.connection.execute('''
 								CREATE TABLE IF NOT EXISTS Recording
 								(
 									Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -466,13 +509,14 @@ class Snapshot():
 
 	# Constants. Each of these must be greater than the last.
 	QUEUED = 0
-	SCOUTED = 1
-	ABORTED = 2
-	RECORDED = 3
-	APPROVED = 4
+	INVALID = 1
+	SCOUTED = 2
+	ABORTED = 3
+	RECORDED = 4
 	REJECTED = 5
-	PUBLISHED = 6
-	ARCHIVED = 7
+	APPROVED = 6
+	PUBLISHED = 7
+	ARCHIVED = 8
 
 	NO_PRIORITY = 0
 	SCOUT_PRIORITY = 1
@@ -576,11 +620,14 @@ class Browser():
 	java_deployment_path: str
 
 	driver: WebDriver
+	version: str
 	profile_path: str
 	pid: int
-	application: Optional[WinApplication]
+	application: Optional[WindowsApplication]
 	window: Optional[WindowSpecification]
 	
+	BLANK_URL = 'about:blank'
+
 	def __init__(self, 	headless: bool = False,
 						extra_preferences: Optional[Dict[str, Union[bool, int, str]]] = None,
 						use_extensions: bool = False,
@@ -695,16 +742,16 @@ class Browser():
 
 			log.info(f'Installing the extensions in "{config.extensions_path}".')
 
-			for extension, enabled in config.extensions_before_running.items():
+			for filename, enabled in config.extensions_before_running.items():
 				
-				filtered = self.extension_filter is not None and extension not in self.extension_filter
+				filtered = self.extension_filter is not None and filename not in self.extension_filter
 
 				if enabled and not filtered:
-					log.info(f'Installing the extension "{extension}".')
-					full_extension_path = os.path.join(config.extensions_path, extension)
-					profile.add_extension(full_extension_path)
+					log.info(f'Installing the extension "{filename}".')
+					extension_path = os.path.join(config.extensions_path, filename)
+					profile.add_extension(extension_path)
 				else:
-					log.info(f'Skipping the extension "{extension}" at the user\'s request.')
+					log.info(f'Skipping the extension "{filename}" at the user\'s request.')
 
 		options = webdriver.FirefoxOptions()
 		options.binary = FirefoxBinary(self.firefox_path)
@@ -725,8 +772,13 @@ class Browser():
 		self.driver.set_page_load_timeout(config.page_load_timeout)
 		self.driver.maximize_window()
 
+		assert self.driver.capabilities['pageLoadStrategy'] == 'normal', 'The page load strategy must be "normal".'
+
+		self.version =  self.driver.capabilities['browserVersion']
 		self.profile_path = self.driver.capabilities['moz:profile']
 		self.pid = self.driver.capabilities['moz:processID']
+
+		log.info(f'Running Firefox version {self.version}.')
 
 		self.application = None
 		self.window = None
@@ -734,43 +786,51 @@ class Browser():
 		if not self.headless:
 			try:
 				log.info(f'Connecting to the Firefox executable with the PID {self.pid}.')
-				self.application = WinApplication(backend='win32')
+				self.application = WindowsApplication(backend='win32')
 				self.application.connect(process=self.pid, timeout=30)
 				self.window = self.application.top_window()
-			except (WinProcessNotFoundError, WinTimeoutError, RuntimeError):
+			except (WindowProcessNotFoundError, WindowTimeoutError):
 				log.error('Failed to connect to the Firefox executable.')
 			
 		if self.use_extensions:
 
-			for extension, enabled in config.extensions_after_running.items():
+			for filename, enabled in config.extensions_after_running.items():
 				
-				filtered = self.extension_filter is not None and extension not in self.extension_filter
+				filtered = self.extension_filter is not None and filename not in self.extension_filter
 
 				if enabled and not filtered:
-					log.info(f'Installing the extension "{extension}".')
-					full_extension_path = os.path.join(config.extensions_path, extension)
-					self.driver.install_addon(full_extension_path)
+					log.info(f'Installing the extension "{filename}".')
+					extension_path = os.path.join(config.extensions_path, filename)
+					self.driver.install_addon(extension_path)
 				else:
-					log.info(f'Skipping the extension "{extension}" at the user\'s request.')
+					log.info(f'Skipping the extension "{filename}" at the user\'s request.')
 
-		self.driver.get('about:blank')
+		self.driver.get(Browser.BLANK_URL)
 
 		if self.use_autoit:
 			
-			log.info(f'Running the compiled AutoIt scripts in "{config.compiled_autoit_path}" with a poll frequency of {config.autoit_poll_frequency} milliseconds.')
-			
-			compiled_autoit_search_path = os.path.join(config.compiled_autoit_path, '*.exe')
-			for path in iglob(compiled_autoit_search_path):
-				try:
-					# If we enable the AutoIt scripts twice, this will kill any existing ones.
-					# This is fine in practice since we only do this for the recorder script and
-					# since we only want one of each running at the same time anyways.
-					kill_processes_by_path(path)
-					process = Popen([path, str(config.autoit_poll_frequency)])
-					self.autoit_processes.append(process)
-				except OSError as error:
-					log.error(f'Failed to run the compiled AutoIt script "{path}" with the error: {repr(error)}')
+			log.info(f'Running the compiled AutoIt scripts in "{config.autoit_path}" with a poll frequency of {config.autoit_poll_frequency} milliseconds.')
 
+			for filename, enabled in config.compiled_autoit_scripts.items():
+
+				if enabled:
+					try:
+						# If we enable the AutoIt scripts twice, this will kill any existing ones.
+						# This is fine in practice since we only do this for the recorder script and
+						# since we only want one of each running at the same time anyways.
+
+						log.info(f'Running the AutoIt script "{filename}".')
+						script_path = os.path.join(config.autoit_path, filename)
+						
+						kill_processes_by_path(script_path)
+						process = Popen([script_path, str(config.autoit_poll_frequency)])
+						self.autoit_processes.append(process)
+					
+					except OSError as error:
+						log.error(f'Failed to run the AutoIt script "{filename}" with the error: {repr(error)}')
+				else:
+					log.info(f'Skipping the AutoIt script "{filename}" at the user\'s request.')
+				
 	def configure_java_plugin(self) -> None:
 		""" Configures the Java Plugin by generating the appropriate deployment files and passing any useful parameters to the JRE. """
 
@@ -917,11 +977,9 @@ class Browser():
 		SETTINGS_REGISTRY_KEYS: Dict[str, Union[int, str]] = {
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\PANEL_MAXIMIZED': 0, # Minimize dashboard.
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\renderer': 'OPENGL', # OpenGL renderer.
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\showConsoleType': 2 if config.show_cosmo_player_console else 0, # Show or hide console on startup.
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\textureQuality': 1, # Best quality.
 		}
-
-		if config.show_cosmo_player_console:
-			SETTINGS_REGISTRY_KEYS['HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\showConsoleType'] = 2 # Show console on startup.
 
 		try:
 			for key, value in REQUIRED_REGISTRY_KEYS.items():
@@ -957,7 +1015,7 @@ class Browser():
 
 		temporary_path = tempfile.gettempdir()
 		
-		# Delete the temporary directories from previous executions. Remeber that there's a bug
+		# Delete the temporary files directories from previous executions. Remeber that there's a bug
 		# when running the Firefox WebDriver on Windows that prevents it from shutting down properly
 		# if Ctrl-C is used.
 
@@ -977,6 +1035,11 @@ class Browser():
 				delete_directory(path)
 			except PermissionError as error:
 				log.error(f'Failed to delete the temporary directory with the error: "{repr(error)}".')
+
+		temporary_search_path = os.path.join(temporary_path, 'tmpaddon-*')
+		for path in iglob(temporary_search_path):
+			log.info(f'Deleting the temporary file "{path}".')
+			delete_file(path)
 
 		if self.use_plugins:
 			self.delete_user_level_java_properties()
@@ -1004,6 +1067,8 @@ class Browser():
 		""" Navigates to a Wayback Machine URL, taking into account any rate limiting and retrying if the service is unavailable. """
 
 		try:
+			self.driver.get(Browser.BLANK_URL)
+
 			config.wait_for_wayback_machine_rate_limit()
 			self.driver.get(wayback_url)
 
@@ -1047,7 +1112,7 @@ class Browser():
 					continue
 
 				# Skip any frames that were added by the Internet Archive (e.g. https://archive.org/includes/donate.php).
-				if parts.hostname is not None and (parts.hostname == 'archive.org' or parts.hostname.endswith('.archive.org')):
+				if is_url_from_domain(parts, 'archive.org'):
 					log.debug(f'Skipping the Internet Archive frame "{frame_source}".')
 					continue
 
@@ -1450,8 +1515,7 @@ def is_url_available(url: str, allow_redirects: bool = False) -> bool:
 	
 	try:
 		response = requests.head(url, allow_redirects=allow_redirects)
-		response.raise_for_status()
-		result = True
+		result = response.status_code < 400 if allow_redirects else response.status_code == 200
 	except requests.RequestException:
 		result = False
 
@@ -1460,6 +1524,11 @@ def is_url_available(url: str, allow_redirects: bool = False) -> bool:
 def is_wayback_machine_available() -> bool:
 	""" Checks if the Wayback Machine website is available. """
 	return is_url_available('https://web.archive.org/', allow_redirects=True)
+
+def is_url_from_domain(url: Union[str, ParseResult], domain: str) -> bool:
+	""" Checks if a URL is part of a domain or any of its subdomains. """
+	parts = urlparse(url) if isinstance(url, str) else url
+	return parts.hostname is not None and (parts.hostname == domain or parts.hostname.endswith('.' + domain))
 
 def was_exit_command_entered() -> bool:
 	""" Checks if an exit command was typed. Used to stop the execution of scripts that can't use Ctrl-C to terminate. """
@@ -1482,19 +1551,23 @@ def was_exit_command_entered() -> bool:
 
 	return result
 
-def delete_file(path: str) -> None:
+def delete_file(path: str) -> bool:
 	""" Deletes a file. Does nothing if it doesn't exist. """
 	try:
 		os.remove(path)
+		success = True
 	except OSError:
-		pass
+		success = False
+	return success
 
-def delete_directory(path: str) -> None:
+def delete_directory(path: str) -> bool:
 	""" Deletes a directory and all of its subdirectories. Does nothing if it doesn't exist. """
 	try:
 		shutil.rmtree(path)
+		success = True
 	except OSError:
-		pass
+		success = False
+	return success
 
 # Ignore the PyWinAuto warning about connecting to a 32-bit executable while using a 64-bit Python environment.
 warnings.simplefilter('ignore', category=UserWarning)
@@ -1505,11 +1578,11 @@ def kill_processes_by_path(path: str, timeout: int = 5) -> None:
 	path = os.path.abspath(path)
 
 	try:
-		application = WinApplication(backend='win32')
+		application = WindowsApplication(backend='win32')
 		while True:
 			application.connect(path=path, timeout=timeout)
 			application.kill(soft=False)
-	except (WinProcessNotFoundError, WinTimeoutError):
+	except (WindowProcessNotFoundError, WindowTimeoutError):
 		pass
 	except Exception as error:
 		log.error(f'Failed to kill the processes using the path "{path}" with the error: {repr(error)}')
@@ -1518,10 +1591,10 @@ def kill_process_by_pid(pid: int, timeout: int = 5) -> None:
 	""" Kills a process given its PID. """
 
 	try:
-		application = WinApplication(backend='win32')
+		application = WindowsApplication(backend='win32')
 		application.connect(process=pid, timeout=timeout)
 		application.kill(soft=False)	
-	except (WinProcessNotFoundError, WinTimeoutError):
+	except (WindowProcessNotFoundError, WindowTimeoutError):
 		pass
 	except Exception as error:
 		log.error(f'Failed to kill the process using the PID {pid} with the error: {repr(error)}')
