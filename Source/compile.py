@@ -25,7 +25,7 @@ if __name__ == '__main__':
 	config = RecordConfig()
 
 	parser = ArgumentParser(description='Compiles multiple snapshot recordings into a single video. This can be done for published recordings that haven\'t been compiled yet, or for any recordings given their database IDs. A short transition with a user-defined background color, duration, and sound effect is inserted between each recording.')
-	parser.add_argument('-published', type=int, metavar='MAX_RECORDINGS', help='How many published recordings to compile. The selected recordings are stored in a database to prevent future compilations from showing repeated snapshots. This option cannot be used with -any.')
+	parser.add_argument('-published', nargs=2, metavar=('BEGIN_DATE', 'END_DATE'), help='Which published recordings to compile. Each date must use a format between "YYYY" and "YYYY-MM-DD HH:MM:SS" with different granularities. For example, "2022-07" and "2022-08-15" would compile all published recordings between July 1st (inclusive) and August 15th (exclusive), 2022. The selected recordings are stored in a database to prevent future compilations from showing repeated snapshots. This option cannot be used with -any.')
 	parser.add_argument('-any', nargs=2, metavar=('ID_TYPE', 'ID_LIST'), help='Which recordings to compile, regardless if they have been published or not. The ID_TYPE argument must be either "snapshot" or "recording" depending on the database IDs specified in ID_LIST. The ID_LIST argument specifies which of these IDs to include or exclude from the compilation. For example, "1,5-10,!7,!9-10" would result in the ID list [1, 5, 6, 8]. For ID ranges, if the first value is greater than the second then the range is reversed. For example, "3-1" would result in [3, 2, 1], meaning the recordings would be shown in reverse order. This option cannot be used with -published.')
 	parser.add_argument('-color', default='white', help='The background color for the transition. If omitted, this defaults to %(default)s. This may be a hexadecimal color code or a color name defined here: https://ffmpeg.org/ffmpeg-utils.html#Color')
 	parser.add_argument('-duration', type=int, default=2, help='How long the transition lasts for in seconds. If omitted, this defaults to %(default)s.')
@@ -44,7 +44,10 @@ if __name__ == '__main__':
 		else:
 			parser.error(f'Could not find the sound effect file "{args.sfx}".')
 
-	if args.any:
+	if args.published:
+		begin_date = args.published[0]
+		end_date = args.published[1]
+	elif args.any:
 		try:
 			id_type = args.any[0]
 			id_list = args.any[1]
@@ -76,7 +79,9 @@ if __name__ == '__main__':
 			id_list = [id for id in include_id_list if id not in exclude_id_list]
 
 		except ValueError:
-			parser.error(f'Could not convert the snapshot IDs "{id_list}" into a list of integers.') 
+			parser.error(f'Could not convert the snapshot IDs "{id_list}" into a list of integers.')
+	else:
+		assert False, f'Found an unhandled command line option.'
 
 	with Database() as db:
 		
@@ -97,10 +102,11 @@ if __name__ == '__main__':
 										FROM Recording LR
 										GROUP BY LR.SnapshotId
 									) LR ON S.Id = LR.SnapshotId AND R.PublishTime = LR.LastPublishTime
-									WHERE NOT EXISTS(SELECT 1 FROM RecordingCompilation RC WHERE RC.SnapshotId = S.Id)
-									ORDER BY R.PublishTime
-									LIMIT :max_recordings;
-									''', {'max_recordings': args.published})
+									WHERE 
+										R.PublishTime BETWEEN :begin_date AND :end_date
+										AND NOT EXISTS(SELECT 1 FROM RecordingCompilation RC WHERE RC.SnapshotId = S.Id)
+									ORDER BY R.PublishTime;
+									''', {'begin_date': begin_date, 'end_date': end_date})
 
 			else:
 				query_id_list = '(' + ', '.join(str(id) for id in id_list) + ')'
@@ -153,7 +159,7 @@ if __name__ == '__main__':
 			if snapshots_and_recordings:
 
 				try:
-					transition_file = NamedTemporaryFile(prefix='wanderer.', suffix='.mp4', delete=False)
+					transition_file = NamedTemporaryFile(mode='wb', prefix='wanderer.', suffix='.mp4', delete=False)
 					concat_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix='wanderer.', suffix='.txt', delete=False)
 
 					try:
@@ -165,7 +171,6 @@ if __name__ == '__main__':
 						framerate = template_stream['r_frame_rate']
 
 						# See: https://trac.ffmpeg.org/wiki/FilteringGuide#SyntheticInput
-
 						video_stream = ffmpeg.input(f'color={args.color}:size={width}x{height}:duration={args.duration}:rate={framerate}', f='lavfi')
 						audio_stream = ffmpeg.input(args.sfx, guess_layout_max=0) if args.sfx else None
 						input_streams: List[ffmpeg.Stream] = list(filter(None, [video_stream, audio_stream]))
@@ -184,8 +189,12 @@ if __name__ == '__main__':
 
 					os.makedirs(config.compilations_path, exist_ok=True)
 					
-					range_identifier = args.any[1] if args.any else f'{snapshots_and_recordings[0][0].Id}-{snapshots_and_recordings[-1][0].Id}'
-					compilation_identifiers = [str(compilation_id) if args.published else None, 'published' if args.published else 'any', id_type if args.any else None, range_identifier, 'with', str(num_valid_recordings), 'of', str(total_recordings)]
+					id_identifier = str(compilation_id) if args.published else None
+					type_identifier = 'published' if args.published else f'any_{id_type}'
+					range_identifier = args.any[1] if args.any else f'{begin_date.replace("-", "_").replace(" ", "_").replace(":", "_")}_to_{end_date.replace("-", "_").replace(" ", "_").replace(":", "_")}'
+					total_identifier = f'with_{num_valid_recordings}_of_{total_recordings}'
+					
+					compilation_identifiers = [id_identifier, type_identifier, range_identifier, total_identifier]
 					compilation_path_prefix = os.path.join(config.compilations_path, '_'.join(filter(None, compilation_identifiers)))
 					
 					compilation_path = compilation_path_prefix + '.mp4'
@@ -196,8 +205,6 @@ if __name__ == '__main__':
 
 					try:
 						with open(timestamps_path, 'w', encoding='utf-8') as timestamps_file:
-
-							timestamps_file.write(f'{range_identifier}\n\n')
 							
 							print(f'Compiling {num_valid_recordings} valid files out of {total_recordings} selected recordings.')
 							
@@ -214,13 +221,21 @@ if __name__ == '__main__':
 
 								timestamp = timedelta(seconds=round(current_duration))
 								formatted_timestamp = str(timestamp).zfill(8)
-								recording_identifiers = [formatted_timestamp, snapshot.DisplayTitle, '\N{jigsaw puzzle piece}' if snapshot.IsStandaloneMedia or snapshot.UsesPlugins else None]
+								recording_identifiers = [formatted_timestamp, f'"snapshot.DisplayTitle"', f'({snapshot.ShortDate})', '\N{jigsaw puzzle piece}' if snapshot.IsStandaloneMedia or snapshot.UsesPlugins else None]
 								timestamp_line = ' '.join(filter(None, recording_identifiers))
 								timestamps_file.write(f'{timestamp_line}\n')
 								
 								probe = ffmpeg.probe(recording.UploadFilePath)
-								recording_duration = float(probe['format']['duration'])							
+								recording_duration = float(probe['format']['duration'])
 								current_duration += recording_duration + transition_duration
+
+							snapshot_ids = ','.join(str(snapshot.Id) for snapshot, _ in snapshots_and_recordings)
+							recording_ids = ','.join(str(recording.Id) for _, recording in snapshots_and_recordings)
+							
+							timestamps_file.write('\n')
+							timestamps_file.write(f'Snapshots: {snapshot_ids}\n')
+							timestamps_file.write(f'Recordings: {recording_ids}\n')
+							timestamps_file.write(f'Total: {len(snapshots_and_recordings)}\n')
 
 					except (ffmpeg.Error, KeyError, ValueError) as error:
 						print(f'Failed to create the timestamps file with the error: {repr(error)}')

@@ -4,6 +4,12 @@
 	A module that defines any general purpose functions used by all scripts, including loading configuration files,
 	connecting to the database, and interfacing with Firefox.
 
+	@TODO: See if it's possible to choose the Japanese dictionary through a config option.
+	@TODO: Overwrite previously scraped words from a page to fix any tokenization errors/changes.
+	@TODO: Cycle through Flash Player.
+	@TODO: Remove body color from 98.css and 7.css
+	@TODO: Refactor classes in the recorder script to use the global config directly.
+
 	@TODO: Add Mastodon support
 	@TODO: Make the stats.py script to print statistics
 	
@@ -40,12 +46,11 @@ from limits.storage import MemoryStorage
 from limits.strategies import MovingWindowRateLimiter
 from pywinauto.application import Application as WindowsApplication, WindowSpecification, ProcessNotFoundError as WindowProcessNotFoundError, TimeoutError as WindowTimeoutError # type: ignore
 from selenium import webdriver # type: ignore
-from selenium.common.exceptions import NoSuchElementException, NoSuchWindowException, StaleElementReferenceException, TimeoutException, WebDriverException # type: ignore
+from selenium.common.exceptions import NoSuchElementException, NoSuchWindowException, TimeoutException, WebDriverException # type: ignore
 from selenium.webdriver.firefox.firefox_binary import FirefoxBinary # type: ignore
 from selenium.webdriver.firefox.firefox_profile import FirefoxProfile # type: ignore
 from selenium.webdriver.firefox.webdriver import WebDriver # type: ignore
-from selenium.webdriver.remote.webelement import WebElement # type: ignore
-from selenium.webdriver.support import expected_conditions # type: ignore
+from selenium.webdriver.support import expected_conditions as expected_webdriver_conditions # type: ignore
 from selenium.webdriver.support.ui import WebDriverWait # type: ignore
 from waybackpy import WaybackMachineCDXServerAPI as Cdx
 from waybackpy.cdx_snapshot import CDXSnapshot
@@ -131,7 +136,7 @@ class CommonConfig():
 
 	def __init__(self):
 
-		with open('config.json') as file:
+		with open('config.json', encoding='utf-8') as file:
 			self.json_config = json.load(file)
 		
 		self.load_subconfig('common')
@@ -324,12 +329,17 @@ class Database():
 									IsStandaloneMedia BOOLEAN,
 									FileExtension TEXT,
 									UsesPlugins BOOLEAN,
-									Title TEXT,
+									PageTitle TEXT,
+									MediaTitle TEXT,
+									MediaAuthor TEXT,
 									Url TEXT NOT NULL,
 									Timestamp VARCHAR(14) NOT NULL,
+									GuessedEncoding TEXT,
 									LastModifiedTime VARCHAR(14),
 									UrlKey TEXT,
 									Digest VARCHAR(64),
+									IsSensitiveOverride BOOLEAN,
+									Options JSON,
 
 									UNIQUE (Url, Timestamp)
 
@@ -397,7 +407,7 @@ class Database():
 									) AS Points,
 									(
 										CASE WHEN S.State = {Snapshot.QUEUED} THEN NULL
-										ELSE IFNULL(MAX(W.IsSensitive), FALSE)
+										ELSE IFNULL(S.IsSensitiveOverride, IFNULL(MAX(W.IsSensitive), FALSE))
 										END
 									) AS IsSensitive
 								FROM Snapshot S
@@ -429,8 +439,10 @@ class Database():
 									UploadFilename TEXT NOT NULL UNIQUE,
 									CreationTime TIMESTAMP NOT NULL,
 									PublishTime TIMESTAMP,
-									MediaId INTEGER,
-									TweetId INTEGER,
+									TwitterMediaId INTEGER,
+									TwitterPostId INTEGER,
+									MastodonMediaId INTEGER,
+									MastodonPostId INTEGER,
 
 									FOREIGN KEY (SnapshotId) REFERENCES Snapshot (Id)
 								);
@@ -491,12 +503,17 @@ class Snapshot():
 	IsStandaloneMedia: Optional[bool]
 	FileExtension: Optional[str]
 	UsesPlugins: Optional[bool]
-	Title: Optional[str]
+	PageTitle: Optional[str]
+	MediaTitle: Optional[str]
+	MediaAuthor: Optional[str]
 	Url: str
 	Timestamp: str
+	GuessedEncoding: Optional[str]
 	LastModifiedTime: Optional[str]
 	UrlKey: Optional[str]
 	Digest: Optional[str]
+	IsSensitiveOverride: Optional[bool]
+	Options: dict # Different from the database data type.
 
 	# Determined dynamically if joined with the SnapshotInfo view.
 	Points: Optional[int]
@@ -505,8 +522,11 @@ class Snapshot():
 	# Determined at runtime.
 	WaybackUrl: str
 	OldestTimestamp: str
+	OldestDatetime: datetime
+	ShortDate: str
 	DisplayTitle: str
-
+	DisplayMetadata: Optional[str]
+	
 	# Constants. Each of these must be greater than the last.
 	QUEUED = 0
 	INVALID = 1
@@ -538,8 +558,18 @@ class Snapshot():
 
 		self.IsExcluded = bool_or_none(self.IsExcluded)
 		self.IsStandaloneMedia = bool_or_none(self.IsStandaloneMedia)
+		self.IsSensitiveOverride = bool_or_none(self.IsSensitiveOverride)
 		self.UsesPlugins = bool_or_none(self.UsesPlugins)	
 		self.IsSensitive = bool_or_none(self.IsSensitive)
+
+		if self.Options is not None:
+			try:
+				self.Options = json.load(self.Options)
+			except json.JSONDecodeError as error:
+				log.error(f'Failed to load the options for the snapshot {self} with the error: {repr(error)}')
+				self.Options = {}
+		else:
+			self.Options = {}
 
 		modifier = Snapshot.OBJECT_EMBED_MODIFIER if self.IsStandaloneMedia else Snapshot.IFRAME_MODIFIER
 		self.WaybackUrl = compose_wayback_machine_snapshot_url(timestamp=self.Timestamp, modifier=modifier, url=self.Url)
@@ -549,7 +579,11 @@ class Snapshot():
 		else:
 			self.OldestTimestamp = self.Timestamp
 
-		self.DisplayTitle = self.Title
+		self.OldestDatetime = datetime.strptime(self.OldestTimestamp, '%Y%m%d%H%M%S')
+		# How the date is formatted depends on the current locale.
+		self.ShortDate = self.OldestDatetime.strftime('%b %Y')
+
+		self.DisplayTitle = self.PageTitle
 		if not self.DisplayTitle:
 			
 			parts = urlparse(self.Url)
@@ -558,6 +592,15 @@ class Snapshot():
 			if not self.DisplayTitle:
 				new_parts = parts._replace(netloc=parts.hostname, params='', query='', fragment='')
 				self.DisplayTitle = urlunparse(new_parts)
+
+		if self.MediaTitle and self.MediaAuthor:
+			self.DisplayMetadata = f'"{self.MediaTitle}" by "{self.MediaAuthor}"'
+		elif self.MediaTitle:
+			self.DisplayMetadata = self.MediaTitle
+		elif self.MediaAuthor:
+			self.DisplayMetadata =  f'By "{self.MediaAuthor}"'
+		else:
+			self.DisplayMetadata = None
 
 	def __str__(self):
 		return f'({self.Url}, {self.Timestamp})'
@@ -573,9 +616,10 @@ class Recording():
 	UploadFilename: str
 	CreationTime: str
 	PublishTime: Optional[str]
-	MediaId: Optional[int]
-	MediaUrl: Optional[str]
-	TweetId: Optional[int]
+	TwitterMediaId: Optional[int]
+	TwitterPostId: Optional[int]
+	MastodonMediaId: Optional[int]
+	MastodonPostId: Optional[int]
 
 	# Determined at runtime.
 	ArchiveFilePath: Optional[str]
@@ -1078,14 +1122,42 @@ class Browser():
 				self.driver.get(wayback_url)
 
 		except TimeoutException:
-			log.warning(f'Timed out while loading the page "{wayback_url}".')
+			log.warning(f'Timed out after waiting {config.page_load_timeout} seconds for the page to load: "{wayback_url}".')
 
-	def switch_through_frames(self) -> Iterator[str]:
-		""" Traverses recursively through the current web page's frames. This function yields the frame's source URL.
-		Note that, for pages archived by the Wayback Machine, only the root window's URL will be a snapshot URL."""
+	def traverse_frames(self, format_wayback_urls: bool = False, skip_missing: bool = False) -> Iterator[str]:
+		""" Traverses recursively through the current web page's frames. This function yields each frame's source URL.
+		It can optionally skip 404 pages and convert every URL into a Wayback Machine snapshot. Note that the latter
+		requires the document's URL to already be formatted correctly, otherwise the it wouldn't be possible to
+		determine each snapshot's URL. """
 
-		def traverse_frames(current_url: str) -> Iterator[str]:
+		if format_wayback_urls:
+			root_wayback_parts = parse_wayback_machine_snapshot_url(self.driver.current_url)
+
+		def recurse(current_url: str) -> Iterator[str]:
 			""" Helper function used to traverse through every frame recursively. """
+
+			if format_wayback_urls and root_wayback_parts is not None:
+				wayback_parts = parse_wayback_machine_snapshot_url(current_url)
+
+				if wayback_parts is not None:
+					wayback_parts = wayback_parts._replace(Modifier=root_wayback_parts.Modifier)
+				else:
+					wayback_parts = root_wayback_parts._replace(Url=current_url)
+				
+				current_url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
+
+			if skip_missing and format_wayback_urls:
+				config.wait_for_wayback_machine_rate_limit()
+
+			# Redirects are allowed here since the frame's timestamp is inherited from the root page's snapshot,
+			# meaning that in the vast majority of cases we're going to be redirected to the nearest archived
+			# copy (if one exists). Redirected pages keep their modifier.
+			# E.g. https://web.archive.org/web/19970702100947if_/http://www.informatik.uni-rostock.de:80/~knorr/homebomb.html
+			# Where the following frame wasn't archived:
+			# https://web.archive.org/web/19970702100947if_/http://www.informatik.uni-rostock.de/~knorr/bombtitle.html
+			if skip_missing and not is_url_available(current_url, allow_redirects=True):
+				log.warning(f'Skipping the frame "{current_url}" since the page was not found.')
+				return
 
 			log.debug(f'Traversing the frame "{current_url}".')
 			yield current_url
@@ -1112,21 +1184,23 @@ class Browser():
 					continue
 
 				# Skip any frames that were added by the Internet Archive (e.g. https://archive.org/includes/donate.php).
+				# This works with the format Wayback Machine URLs parameter since we only format them after calling the
+				# function recursively below.
 				if is_url_from_domain(parts, 'archive.org'):
 					log.debug(f'Skipping the Internet Archive frame "{frame_source}".')
 					continue
 
 				try:
-					condition = expected_conditions.frame_to_be_available_and_switch_to_it(frame)
-					WebDriverWait(self.driver, 10).until(condition)
+					condition = expected_webdriver_conditions.frame_to_be_available_and_switch_to_it(frame)
+					WebDriverWait(self.driver, 20).until(condition)
 				except TimeoutException:
 					continue
 				
-				yield from traverse_frames(frame_source)
+				yield from recurse(frame_source)
 				self.driver.switch_to.parent_frame()
 
 		try:
-			yield from traverse_frames(self.driver.current_url)
+			yield from recurse(self.driver.current_url)
 		except WebDriverException as error:
 			log.error(f'Failed to traverse the frames with the error: {repr(error)}')
 
@@ -1136,7 +1210,7 @@ class Browser():
 		""" Reloads any content embedded using the object, embed, or applet tags in the current web page and its frames. """
 
 		try:
-			for _ in self.switch_through_frames():
+			for _ in self.traverse_frames():
 				self.driver.execute_script(	'''
 											const SOURCE_ATTRIBUTES = ["data", "src", "target", "mrl", "filename", "code", "object"];
 											
@@ -1178,8 +1252,8 @@ class Browser():
 			self.driver.switch_to.window(window_handle)
 
 			try:
-				condition = expected_conditions.number_of_windows_to_be(1)
-				WebDriverWait(self.driver, 5).until(condition)
+				condition = expected_webdriver_conditions.number_of_windows_to_be(1)
+				WebDriverWait(self.driver, 10).until(condition)
 			except TimeoutException:
 				log.warning(f'Timed out while waiting for the other WebDriver windows to close.')
 
@@ -1458,24 +1532,39 @@ def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> Tuple[CDXSna
 
 	return snapshot, is_standalone_media, file_extension
 
-def find_wayback_machine_snapshot_last_modified_time(wayback_url: str) -> Optional[str]:
-	""" Finds the last modified time of a Wayback Machine snapshot. Note that not every snapshot has this information. """
+def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Tuple[Optional[str], Optional[str]]:
+	""" Finds the guessed character encoding and last modified time of a Wayback Machine snapshot. Note that not every snapshot has this information. """
 
-	result = None
+	# The iframe modifier is required for the guessed character encoding.
+	wayback_parts = parse_wayback_machine_snapshot_url(wayback_url)
+	if wayback_parts is not None:
+		wayback_parts = wayback_parts._replace(Modifier=Snapshot.IFRAME_MODIFIER)
+		wayback_url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
+
+	guessed_encoding = None
+	last_modified = None
 
 	try:
 		response = requests.head(wayback_url)
 		response.raise_for_status()
 		
+		guessed_encoding = response.headers.get('x-archive-guessed-charset')
+		if guessed_encoding is not None:
+			guessed_encoding = guessed_encoding.lower()
+
 		last_modified = response.headers.get('x-archive-orig-last-modified')
 		if last_modified is not None:
 			last_modified_datetime = parsedate_to_datetime(last_modified)
-			result = last_modified_datetime.strftime('%Y%m%d%H%M%S')
+			last_modified = last_modified_datetime.strftime('%Y%m%d%H%M%S')
 
-	except (requests.RequestException, ValueError):
-		pass
-
-	return result
+	except requests.RequestException as error:
+		log.error(f'Failed to find any extra information from the snapshot "{wayback_url}" with the error: {repr(error)}')
+	except ValueError as error:
+		# E.g. https://web.archive.org/web/20010926042147if_/http://geocities.yahoo.co.jp:80/
+		# Whose last modified time is "Mon, 24 Sep 2001 04:2146 GMT".
+		log.error(f'Failed to parse the last modified time "{last_modified}" of the snapshot "{wayback_url}" with the error: {repr(error)}')
+	
+	return guessed_encoding, last_modified
 
 WaybackParts = namedtuple('WaybackParts', ['Timestamp', 'Modifier', 'Url'])
 WAYBACK_MACHINE_SNAPSHOT_URL_REGEX = re.compile(r'https?://web\.archive\.org/web/(?P<timestamp>\d+)(?P<modifier>[a-z]+_)?/(?P<url>.+)', re.IGNORECASE)

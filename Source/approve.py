@@ -8,6 +8,7 @@
 import os
 import sqlite3
 from argparse import ArgumentParser
+from typing import Optional
 
 from common import Database, Recording, Snapshot
 from publish import PublishConfig
@@ -39,7 +40,6 @@ if __name__ == '__main__':
 
 			snapshot_updates = []
 			recording_updates = []
-			unapproved_snapshots_and_recordings = []
 
 			total_snapshots = 0
 			num_approved = 0
@@ -57,7 +57,7 @@ if __name__ == '__main__':
 				recording = Recording(**row, Id=row['RecordingId'])
 
 				try:
-					print(f'Evaluating the recording "{recording.UploadFilename}" for snapshot #{snapshot.Id} {snapshot}.')
+					print(f'Evaluating the recording "{recording.UploadFilename}" for snapshot #{snapshot.Id} {snapshot} entitled "{snapshot.DisplayTitle}" (metadata = {snapshot.DisplayMetadata}).')
 					os.startfile(recording.UploadFilePath)
 				except FileNotFoundError:
 					print('The recording file does not exist.')
@@ -82,27 +82,43 @@ if __name__ == '__main__':
 						is_processed = True
 						num_rejected += 1
 
-						unapproved_snapshots_and_recordings.append((snapshot, recording))
-
 					elif verdict[0] == 'r':
 						state = Snapshot.SCOUTED
 						priority = max(snapshot.Priority, Snapshot.RECORD_PRIORITY)
 						is_processed = True
 						num_to_record_again += 1
 
-						unapproved_snapshots_and_recordings.append((snapshot, recording))
-
 					else:
-						print(f'Invalid verdict "{verdict}".')
+						print(f'Invalid input "{verdict}".')
 						continue
 
-					snapshot_updates.append({'state': state, 'priority': priority, 'id': snapshot.Id})
+					is_sensitive_override: Optional[bool]
+
+					while True:
+						sensitive = input('Sensitive [(y)es, (n)o, (s)kip]: ').lower()
+
+						if not sensitive:
+							continue
+
+						elif sensitive[0] == 'y':
+							is_sensitive_override = True
+						elif sensitive[0] == 'n':
+							is_sensitive_override = False
+						elif sensitive[0] == 's':
+							is_sensitive_override = snapshot.IsSensitiveOverride
+						else:
+							print(f'Invalid input "{sensitive}".')
+							continue
+
+						break
+
+					snapshot_updates.append({'state': state, 'priority': priority, 'is_sensitive_override': is_sensitive_override, 'id': snapshot.Id})
 					recording_updates.append({'is_processed': is_processed, 'id': recording.Id})
 					break
 
 			if total_snapshots > 0:
 
-				db.executemany('UPDATE Snapshot SET State = :state, Priority = :priority WHERE Id = :id;', snapshot_updates)
+				db.executemany('UPDATE Snapshot SET State = :state, Priority = :priority, IsSensitiveOverride = :is_sensitive_override WHERE Id = :id;', snapshot_updates)
 				db.executemany('UPDATE Recording SET IsProcessed = :is_processed WHERE Id = :id;', recording_updates)
 				db.commit()
 				

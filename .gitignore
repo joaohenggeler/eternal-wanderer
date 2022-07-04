@@ -3,7 +3,7 @@
 Source/*
 !Source/*.py
 !Source/config.template.json
-!Source/requirements.txt
+!Source/*requirements.txt
 !Source/*.md
 
 !Source/Data

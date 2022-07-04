@@ -9,7 +9,7 @@
 
 import os
 from threading import Lock, Thread
-from urllib.parse import urljoin, urlparse
+from urllib.parse import unquote, urlparse, urlunparse
 
 import requests
 from mitmproxy import http # type: ignore
@@ -78,11 +78,61 @@ def request(flow: http.HTTPFlow) -> None:
 
 	wayback_parts = parse_wayback_machine_snapshot_url(request.url)
 
-	# Not a snapshot URL.
+	# Not a Wayback Machine snapshot.
 	if wayback_parts is None:
 		return
 	
-	original_url = wayback_parts.Url
+	extracted_realaudio_url = False
+
+	if config.convert_realaudio_metadata_proxy_snapshots:
+		
+		parts = urlparse(wayback_parts.Url)
+		_, file_extension = os.path.splitext(parts.path)
+
+		if file_extension.lower() == '.ram':
+			try:
+				# The RealAudio metadata files only contain the audio stream's URL, not the content itself.
+				# In order to play the audio correctly, we'll extract this URL, convert it to a Wayback
+				# Machine snapshot URL, and send it back to the recorder script. Note that we'll change the
+				# scheme from PNM or RTSP to HTTP since that's how it's served through the Wayback Machine
+				# and the CDX API. A previous implementation tried to only modify the stream's URL while
+				# keeping the protocol but that didn't work.
+
+				# E.g. https://web.archive.org/web/19970607012148if_/http://www.t0.or.at:80/rafiles/megamix.ram
+				# Which contains "pnm://www.t0.or.at/megamix.ra".
+				# While "http://www.t0.or.at/megamix.ra" doesn't exist in the Wayback Machine, this one does:
+				# https://web.archive.org/web/20220702123119if_/http://noisebase.t0.or.at/escape/megamix.ra
+				# By extracting the URL early in this script and later finding missing snapshots using the
+				# CDX API, we can play the audio correctly in the recorder script.
+				config.wait_for_wayback_machine_rate_limit()
+				metadata_response = requests.get(request.url, stream=True)
+				metadata_response.raise_for_status()
+
+				if metadata_response.encoding is None:
+					metadata_response.encoding = 'utf-8'
+
+				# Extracting a string from the response requires both a valid encoding and the decode_unicode argument.
+				url = next(metadata_response.iter_lines(decode_unicode=True), None)
+
+				if url is not None:
+					
+					# Checking for valid URLs using netloc only makes sense if it was properly decoded.
+					# E.g. "http%3A//www.geocities.com/Hollywood/Hills/5988/main.html" would result in
+					# an empty netloc instead of "www.geocities.com".
+					url = unquote(url)
+					parts = urlparse(url)
+					
+					if parts.netloc:
+						extracted_realaudio_url = True
+
+						parts = parts._replace(scheme='http')
+						url = urlunparse(parts)
+					
+						wayback_parts = wayback_parts._replace(Url=url)
+						request.url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
+
+			except (requests.RequestException, UnicodeError):
+				pass
 
 	if config.find_missing_proxy_snapshots_using_cdx or config.save_missing_proxy_snapshots_that_still_exist_online:
 		try:
@@ -95,16 +145,24 @@ def request(flow: http.HTTPFlow) -> None:
 			# - https://web.archive.org/web/1if_/http://www.example.com/this/doesnt/exist, allow_redirects=True -> 404
 			config.wait_for_wayback_machine_rate_limit()
 			wayback_response = requests.head(request.url, allow_redirects=True)
+			found_snapshot = wayback_response.status_code == 200
 		except requests.RequestException:
-			wayback_response = None 
+			wayback_response = None
+			found_snapshot = None
+
+	# Let's look at a concrete example: https://web.archive.org/web/20030717041359if_/http://songviolin.bravepages.com:80/
+	# This page requests http://askmiky.com/images/FSaward01.gif
+	# Which the Wayback Machine redirects to a 404 page: https://web.archive.org/web/20030101155124im_/http://askmiky.com/images/FSaward01.gif
+	# Even though there's a valid snapshot here: https://web.archive.org/web/20011016092411im_/http://www.askmiky.com:80/images/FSaward01.gif
+	# We can find this URL by asking the CDX API for a valid snapshot near 20030717041359 (the current request's timestamp).
 
 	cdx_mark = None
 
 	if config.find_missing_proxy_snapshots_using_cdx and wayback_response is not None:
 
-		if wayback_response.status_code != 200:
+		if not found_snapshot:
 			
-			parts = urlparse(original_url)
+			parts = urlparse(wayback_parts.Url)
 			
 			# E.g. "http://www.example.com/path1/path2/file.ext" -> "/path2/file.ext" (2 components).
 			if config.max_missing_proxy_snapshot_path_components is not None:
@@ -120,7 +178,7 @@ def request(flow: http.HTTPFlow) -> None:
 			# URL's path is technically case sensitive).
 			#
 			# # E.g. https://web.archive.org/cdx/search/cdx?url=shockwave.com&matchType=domain&filter=statuscode:200&filter=original:(?i).*(/sis/game.swf)($|\?.*)&fl=original,timestamp,statuscode&collapse=urlkey
-			extract = no_fetch_tld_extract(original_url)
+			extract = no_fetch_tld_extract(wayback_parts.Url)
 			subdomain_cdx = Cdx(url=extract.registered_domain, match_type='domain', filters=['statuscode:200', fr'original:(?i).*{path}($|\?.*)'])
 			
 			if parts.query or parts.fragment:
@@ -130,7 +188,9 @@ def request(flow: http.HTTPFlow) -> None:
 				# by checking if the same URL without the query or fragment was archived.
 				#
 				# E.g. https://web.archive.org/cdx/search/cdx?url=http://www.youtube.com/player2.swf&filter=statuscode:200&fl=original,timestamp,statuscode&collapse=urlkey
-				url_without_query = urljoin(original_url, parts.path)
+				# E.g. "http://www.example.com/path/file.ext?key=value#top" -> "http://www.example.com/path/file.ext".
+				new_parts = parts._replace(params='', query='', fragment='')
+				url_without_query = urlunparse(new_parts)
 				no_query_cdx = Cdx(url=url_without_query, filters=['statuscode:200'])
 			else:
 				no_query_cdx = None
@@ -144,6 +204,7 @@ def request(flow: http.HTTPFlow) -> None:
 					config.wait_for_cdx_api_rate_limit()
 					snapshot = cdx.near(wayback_machine_timestamp=timestamp)
 					wayback_parts = wayback_parts._replace(Timestamp=snapshot.timestamp, Url=snapshot.original)
+					found_snapshot = True
 					break
 				except Exception:
 					pass
@@ -151,11 +212,11 @@ def request(flow: http.HTTPFlow) -> None:
 	redirect_to_original = False
 	if config.save_missing_proxy_snapshots_that_still_exist_online and wayback_response is not None:
 
-		if wayback_response.status_code != 200 and is_url_available(original_url):
+		if not found_snapshot and is_url_available(wayback_parts.Url):
 			
 			redirect_to_original = True
 			with lock:
-				print(f'[SAVE] [{original_url}]')
+				print(f'[SAVE] [{wayback_parts.Url}]')
 
 	# Avoid showing the toolbar in frame pages that are missing their modifier.
 	if wayback_parts.Modifier is None:
@@ -163,8 +224,12 @@ def request(flow: http.HTTPFlow) -> None:
 
 	# This is used to redirect the request in the majority of cases. For VRML
 	# worlds, we'll create the response ourselves (see below).
-	request.url = original_url if redirect_to_original else compose_wayback_machine_snapshot_url(parts=wayback_parts)
+	request.url = wayback_parts.Url if redirect_to_original else compose_wayback_machine_snapshot_url(parts=wayback_parts)
 	live_mark = 'LIVE' if redirect_to_original else None
+
+	if extracted_realaudio_url:
+		with lock:
+			print(f'[RAM] [{request.url}]')
 
 	# The Cosmo Player plugin used to display VRML worlds doesn't seem to handle
 	# HTTP redirects properly. When a world requests an image or audio file from
@@ -172,7 +237,7 @@ def request(flow: http.HTTPFlow) -> None:
 	# that they share the same timestamp as the main world file. To prevent Cosmo
 	# Player from throwing an error when loading assets, we'll request them here
 	# and create the mitmproxy response ourselves.
-	vrml_mark = None
+	request_came_from_vrml = False
 	referer = request.headers.get('referer')
 	
 	if referer is not None:
@@ -184,7 +249,7 @@ def request(flow: http.HTTPFlow) -> None:
 		# Check if the request came from a VRML world.
 		if file_extension in ['.wrl', '.wrz'] or path.endswith('.wrl.gz'):
 			
-			vrml_mark = 'VRML'
+			request_came_from_vrml = True
 
 			try:
 				# From testing, it appears we have to pass the response's decoded
@@ -197,11 +262,14 @@ def request(flow: http.HTTPFlow) -> None:
 				# - https://urllib3.readthedocs.io/en/stable/reference/urllib3.response.html
 				config.wait_for_wayback_machine_rate_limit()
 				response = requests.request(request.method, request.url, headers=dict(request.headers))
-				flow.response = http.Response.make(response.status_code, response.content, dict(response.headers))	
-			except request.RequestException:
+				flow.response = http.Response.make(response.status_code, response.content, dict(response.headers))
+			except requests.RequestException:
 				pass
 
-	flow.marked = ', '.join(filter(None, [live_mark, vrml_mark, cdx_mark]))
+	realaudio_mark = 'RAM' if extracted_realaudio_url else None
+	vrml_mark = 'VRML' if request_came_from_vrml else None
+
+	flow.marked = ', '.join(filter(None, [live_mark, realaudio_mark, vrml_mark, cdx_mark]))
 
 @concurrent
 def response(flow: http.HTTPFlow) -> None:
@@ -216,4 +284,4 @@ def response(flow: http.HTTPFlow) -> None:
 		print(f'[RESPONSE] [{flow.response.status_code}] [{mark}] [{content_type}] [{flow.request.url}] [{flow.id}]')
 
 	if config.debug:
-		flow.response.headers['x-eternal-wanderer'] = 'debug'
+		flow.response.headers['x-eternal-wanderer'] = mark

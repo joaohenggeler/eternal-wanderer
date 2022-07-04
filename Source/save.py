@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-	Saves URLs from the standard input using the Wayback Machine Save API.
+	This script saves URLs from the standard input using the Wayback Machine Save API.
 """
 
 from argparse import ArgumentParser

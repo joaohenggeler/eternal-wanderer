@@ -13,19 +13,22 @@ import re
 import sqlite3
 import time
 from argparse import ArgumentParser
+from collections import Counter
 from contextlib import nullcontext
+from glob import iglob
 from math import ceil
 from queue import Queue
 from random import random
 from subprocess import PIPE, STDOUT
 from subprocess import Popen, TimeoutExpired
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from threading import Thread, Timer
-from typing import Dict, List, Optional, Pattern, Union, cast
-from urllib.parse import urlparse
+from typing import Dict, List, Optional, Tuple, Union, cast
+from urllib.parse import unquote, urljoin, urlparse, urlunparse
 
 import ffmpeg # type: ignore
 import pywinauto # type: ignore
+import requests
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
 from pywinauto.application import Application as WindowsApplication # type: ignore
@@ -45,27 +48,30 @@ class RecordConfig(CommonConfig):
 	scheduler: Dict[str, Union[int, str]]
 	num_snapshots_per_scheduled_batch: int
 
-	ranking_constant: float
+	ranking_constant: int
 	min_year: Optional[int]
 	max_year: Optional[int]
 	record_sensitive_snapshots: bool
 	min_publish_days_for_new_recording: int
 
 	allowed_standalone_media_file_extensions: Dict[str, bool] # Different from the config data type.
+	nondownloadable_standalone_media_file_extensions: Dict[str, bool] # Different from the config data type.
 
 	use_proxy: bool
 	proxy_port: Optional[int]
 	proxy_queue_timeout: int
 	proxy_total_timeout: int
-	# Used in the Wayback Proxy Addon script.
 	block_proxy_requests_outside_archive_org: bool
+	convert_realaudio_metadata_proxy_snapshots: bool
 	find_missing_proxy_snapshots_using_cdx: bool
 	max_missing_proxy_snapshot_path_components: Optional[int]
-	# Used in both scripts.
 	save_missing_proxy_snapshots_that_still_exist_online: bool 
+	max_consecutive_extra_missing_proxy_snapshot_tries: int
+	max_total_extra_missing_proxy_snapshot_tries: int
 
 	viewport_scroll_percentage: float
 	page_cache_wait: int
+	standalone_media_cache_wait: int
 
 	base_wait_after_load: int
 	extra_wait_after_load: int
@@ -75,6 +81,7 @@ class RecordConfig(CommonConfig):
 
 	max_wait_after_load_video_percentage: float
 	points_per_extra_wait: int
+	extra_standalone_media_wait_after_load: int
 
 	standalone_media_fallback_duration: int
 	standalone_media_width: str
@@ -83,6 +90,7 @@ class RecordConfig(CommonConfig):
 
 	fullscreen_browser: bool
 	reload_plugin_media_before_recording: bool
+	base_plugin_crash_timeout: int
 	cosmo_player_viewpoint_wait_per_cycle: Optional[int]
 
 	min_video_duration: int
@@ -97,7 +105,6 @@ class RecordConfig(CommonConfig):
 	ffmpeg_upload_output: Dict[str, Union[int, str]]
 
 	# Determined at runtime.
-	plugin_crash_timeout: int
 	standalone_media_template: str
 	physical_screen_width: int
 	physical_screen_height: int
@@ -107,6 +114,7 @@ class RecordConfig(CommonConfig):
 		self.load_subconfig('record')
 
 		self.allowed_standalone_media_file_extensions = {extension: True for extension in container_to_lowercase(self.allowed_standalone_media_file_extensions)}
+		self.nondownloadable_standalone_media_file_extensions = {extension: True for extension in container_to_lowercase(self.nondownloadable_standalone_media_file_extensions)}
 
 		if self.max_missing_proxy_snapshot_path_components is not None:
 			self.max_missing_proxy_snapshot_path_components = max(self.max_missing_proxy_snapshot_path_components, 1)
@@ -118,11 +126,6 @@ class RecordConfig(CommonConfig):
 		self.ffmpeg_recording_output = container_to_lowercase(self.ffmpeg_recording_output)
 		self.ffmpeg_archive_output = container_to_lowercase(self.ffmpeg_archive_output)
 		self.ffmpeg_upload_output = container_to_lowercase(self.ffmpeg_upload_output)
-
-		# This should be enough to work in both the caching and recordings phases.
-		# We'll add some extra time to make sure that the recording isn't aborted
-		# even when the video has the maximum duration.
-		self.plugin_crash_timeout = max(self.page_cache_wait, self.max_video_duration) + 20
 
 		template_path = os.path.join(self.plugins_path, 'standalone_media.html.template')
 		with open(template_path, 'r', encoding='utf-8') as file:
@@ -154,7 +157,10 @@ if __name__ == '__main__':
 		queue: Queue
 		timestamp: Optional[str]
 
-		SAVE_REGEX: Pattern = re.compile(r'\[SAVE\] \[(?P<url>.+)\]')
+		RESPONSE_REGEX = re.compile(r'\[RESPONSE\] \[(?P<status_code>.+)\] \[(?P<mark>.+)\] \[(?P<content_type>.+)\] \[(?P<url>.+)\] \[(?P<id>.+)\]')
+		SAVE_REGEX  = re.compile(r'\[SAVE\] \[(?P<url>.+)\]')
+		REALAUDIO_REGEX  = re.compile(r'\[RAM\] \[(?P<url>.+)\]')
+		FILENAME_REGEX  = re.compile(r'(?P<name>.*?)(?P<num>\d+)(?P<extension>\..*)')
 
 		def __init__(self, port: int):
 
@@ -268,7 +274,7 @@ if __name__ == '__main__':
 			self.stop()
 
 		def kill_plugin_containers(self) -> None:
-			log.info(f'Killing all plugin containers since {self.timeout:.1f} seconds have passed without the timer being reset.')
+			log.warning(f'Killing all plugin containers since {self.timeout:.1f} seconds have passed without the timer being reset.')
 			kill_processes_by_path(self.plugin_container_path)
 
 	class ScreenCapture():
@@ -412,10 +418,17 @@ if __name__ == '__main__':
 				proxy = nullcontext() # type: ignore
 
 			standalone_media_page_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix='wanderer.', suffix='.html', delete=False)
+			standalone_media_page_url = f'file:///{standalone_media_page_file.name}'
 			log.debug(f'Created the temporary standalone media page file "{standalone_media_page_file.name}".')
+
+			standalone_media_download_directory = TemporaryDirectory(prefix='wanderer.', suffix='.media')
+			standalone_media_download_search_path = os.path.join(standalone_media_download_directory.name, '*')
+			log.debug(f'Created the temporary standalone media download directory "{standalone_media_download_directory.name}".')
 
 			extra_preferences: dict = {
 				'browser.cache.check_doc_frequency': 2, # Always use cached page.
+				# Don't show prompt if a plugin stops responding. We want the PluginCrashTimer to handle these silently in the background.
+				'dom.ipc.plugins.timeoutSecs': -1, 
 			} 
 
 			if config.use_proxy:
@@ -435,12 +448,95 @@ if __name__ == '__main__':
 
 			with Database() as db, Browser(extra_preferences=extra_preferences, use_extensions=True, use_plugins=True, use_autoit=True) as (browser, driver), TemporaryRegistry() as registry:
 
+				def generate_standalone_media_page(wayback_url: str) -> Tuple[float, Optional[str], Optional[str]]:
+					""" Generates the page where a standalone media file is embedded using both the information
+					from the configuration as well as the file's metadata. """
+
+					wayback_parts = parse_wayback_machine_snapshot_url(wayback_url)
+					parts = urlparse(wayback_parts.Url if wayback_parts is not None else wayback_url)
+					filename = os.path.basename(parts.path)
+					_, file_extension = os.path.splitext(filename)
+					file_extension = file_extension.lower().strip('.')
+
+					# Two separate URLs because ffmpeg uses "file:path" instead of "file://path".
+					# See: https://superuser.com/questions/718027/ffmpeg-concat-doesnt-work-with-absolute-path/1551017#1551017
+					embed_url = wayback_url
+					probe_url = wayback_url
+
+					# If a media file points to other resources (e.g. VRML worlds or RealAudio metadata), we don't
+					# want to download it since other files from the Wayback Machine may be required to play it.
+					# If it doesn't (e.g. most audio and video formats), just download and play it from disk.
+					if file_extension not in config.nondownloadable_standalone_media_file_extensions:
+						try:
+							response = requests.get(wayback_url)
+							response.raise_for_status()
+							
+							# We need to keep the file extension so Firefox can choose the right plugin to play it.
+							downloaded_file_path = os.path.join(standalone_media_download_directory.name, filename)
+							with open(downloaded_file_path, 'wb') as file:
+								file.write(response.content)
+						
+							log.debug(f'Downloaded the standalone media "{wayback_url}" to "{downloaded_file_path}".')
+							embed_url = f'file:///{downloaded_file_path}'
+							probe_url = f'file:{downloaded_file_path}'
+
+						except requests.RequestException as error:
+							log.error(f'Failed to download the standalone media file "{wayback_url}" with the error: {repr(error)}')
+
+					try:
+						probe = ffmpeg.probe(probe_url)
+						format = probe['format']
+						tags = format.get('tags', {})
+						
+						title = tags.get('title')
+						author = tags.get('author') or tags.get('artist') or tags.get('album_artist') or tags.get('composer') or tags.get('copyright')
+						log.debug(f'The standalone media "{title}" by "{author}" has the following tags: {tags}')
+
+						duration = float(format['duration'])
+						log.debug(f'The standalone media has a duration of {duration} seconds.')
+						loop = 'false'
+					except (ffmpeg.Error, KeyError, ValueError) as error:
+						log.warning(f'Could not parse the standalone media\'s metadata with the error: {repr(error)}')
+						duration = config.standalone_media_fallback_duration
+						title = None
+						author = None
+						loop = 'true'
+
+					content = config.standalone_media_template
+					content = content.replace('{comment}', f'Generated by "{__file__}" on {get_current_timestamp()}.')
+					content = content.replace('{background_color}', config.standalone_media_background_color)
+					content = content.replace('{width}', config.standalone_media_width)
+					content = content.replace('{height}', config.standalone_media_height)
+					content = content.replace('{url}', embed_url)
+					content = content.replace('{loop}', loop)
+					
+					# Overwrite the temporary standalone media page.
+					standalone_media_page_file.seek(0)
+					standalone_media_page_file.truncate(0)
+					standalone_media_page_file.write(content)
+					standalone_media_page_file.flush()
+
+					return duration, title, author
+
+				def abort_snapshot(snapshot: Snapshot) -> None:
+					""" Aborts a snapshot that couldn't be recorded correctly due to a WebDriver error. """
+
+					try:
+						db.execute('UPDATE Snapshot SET State = :aborted_state WHERE Id = :id;', {'aborted_state': Snapshot.ABORTED, 'id': snapshot.Id})
+						db.commit()
+					except sqlite3.Error as error:
+						log.error(f'Failed to abort the snapshot {snapshot} with the error: {repr(error)}')
+						db.rollback()
+						time.sleep(config.database_error_wait)
+
 				def rank_snapshot_by_points(points: int) -> float:
 					""" Ranks a snapshot using a weighted random sampling algorithm. """
 					# See:
 					# - https://stackoverflow.com/a/56006340/18442724
 					# - http://utopia.duth.gr/~pefraimi/research/data/2007EncOfAlg.pdf
-					return random() ** (config.ranking_constant / (points + config.ranking_constant))
+					# For negative points, the ranking is inverted.
+					sign = 1 if points >= 0 else -1
+					return sign * random() ** (config.ranking_constant / (abs(points) + 1))
 
 				def is_standalone_media_file_extension_allowed(file_extension: str) -> bool:
 					""" Checks if a standalone media snapshot should be recorded. """
@@ -539,7 +635,7 @@ if __name__ == '__main__':
 
 							rank = row['Rank'] * 100
 							days_since_last_published = row['DaysSinceLastPublished']
-							
+
 							if days_since_last_published is not None:
 								days_since_last_published = round(days_since_last_published)
 
@@ -567,36 +663,19 @@ if __name__ == '__main__':
 					# recorded.
 
 					try:
+						for path in iglob(standalone_media_download_search_path):
+							delete_file(path)
+
+						media_title = None
+						media_author = None
+
 						if snapshot.IsStandaloneMedia:
-							try:
-								# For standalone media, we can potentially find out the duration of the audio or video file.
-								probe = ffmpeg.probe(snapshot.WaybackUrl)
-								standalone_media_duration = float(probe['format']['duration'])
-								loop = 'false'
-							except (ffmpeg.Error, KeyError, ValueError) as error:
-								log.warning(f'Could not determine the standalone media\'s duration with the error: {repr(error)}')
-								standalone_media_duration = config.standalone_media_fallback_duration
-								loop = 'true'
-
-							content = config.standalone_media_template
-							content = content.replace('{comment}', f'Generated by "{__file__}" on {get_current_timestamp()}.')
-							content = content.replace('{background_color}', config.standalone_media_background_color)
-							content = content.replace('{width}', config.standalone_media_width)
-							content = content.replace('{height}', config.standalone_media_height)
-							content = content.replace('{url}', snapshot.WaybackUrl)
-							content = content.replace('{loop}', loop)
-							
-							# Overwrite the temporary standalone media page.
-							standalone_media_page_file.seek(0)
-							standalone_media_page_file.truncate(0)
-							standalone_media_page_file.write(content)
-							standalone_media_page_file.flush()
-
-							content_url = f'file:///{standalone_media_page_file.name}'
+							media_duration, media_title, media_author = generate_standalone_media_page(snapshot.WaybackUrl)
+							content_url = standalone_media_page_url
 						else:
 							content_url = snapshot.WaybackUrl
 
-						log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} ranked at {rank:.2f}% with {snapshot.Points} points (last published = {days_since_last_published}).')
+						log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} ranked at {rank:.2f}% with {snapshot.Points} points (last published = {days_since_last_published} days ago).')
 						
 						original_window = driver.current_window_handle
 						browser.bring_to_front()
@@ -606,9 +685,17 @@ if __name__ == '__main__':
 
 						if config.use_proxy:
 							proxy.timestamp = snapshot.Timestamp
+						
+						cache_wait = config.standalone_media_cache_wait if snapshot.IsStandaloneMedia else config.page_cache_wait
+
+						# How much we wait before killing the plugins depends on how long we expect
+						# each phase (caching and recording) to last in the worst case scenario.
+						plugin_crash_timeout = config.page_load_timeout + cache_wait + (config.proxy_total_timeout if config.use_proxy else 0) + config.base_plugin_crash_timeout
+
+						realaudio_url = None
 
 						# Wait for the page and its resources to be cached.
-						with proxy, PluginCrashTimer(browser.firefox_directory_path, config.plugin_crash_timeout) as crash_timer:
+						with proxy, PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout) as crash_timer:
 
 							browser.go_to_wayback_url(content_url)
 
@@ -616,16 +703,13 @@ if __name__ == '__main__':
 							wait_per_scroll: float
 
 							if snapshot.IsStandaloneMedia:
-								cache_wait = standalone_media_duration
 								scroll_step = 0.0
 								num_scrolls_to_bottom = 0
-								wait_after_load = max(config.min_video_duration, min(standalone_media_duration + 2, config.max_video_duration))
+								wait_after_load = max(config.min_video_duration, min(media_duration + config.extra_standalone_media_wait_after_load, config.max_video_duration))
 								wait_per_scroll = 0.0
 							else:
-								cache_wait = config.page_cache_wait
-
 								scroll_height = 0
-								for _ in browser.switch_through_frames():
+								for _ in browser.traverse_frames():
 									
 									frame_scroll_height = driver.execute_script('return document.body.scrollHeight;')
 									if frame_scroll_height > scroll_height:
@@ -651,9 +735,13 @@ if __name__ == '__main__':
 
 							# Keep waiting if the page or its plugins are still requesting data.
 							if config.use_proxy:
-								log.info('Waiting for the proxy.')
+								
+								log.debug('Waiting for the proxy.')
 								begin_proxy_time = time.time()
 								
+								proxy_status_codes: Counter = Counter()
+								skip_proxy_save = snapshot.Options.get('skip_proxy_save', False)
+
 								try:
 									while True:
 										
@@ -665,20 +753,48 @@ if __name__ == '__main__':
 										message = proxy.get(timeout=config.proxy_queue_timeout)
 										log.debug(message)
 										
-										if config.save_missing_proxy_snapshots_that_still_exist_online:
+										response_match = Proxy.RESPONSE_REGEX.fullmatch(message)
+										save_match = Proxy.SAVE_REGEX.fullmatch(message) if config.save_missing_proxy_snapshots_that_still_exist_online else None
+										realaudio_match = Proxy.REALAUDIO_REGEX.fullmatch(message) if config.convert_realaudio_metadata_proxy_snapshots else None
+
+										if response_match is not None:
 											
-											match = Proxy.SAVE_REGEX.fullmatch(message)
-											if match is not None:				
-												url = match.group('url')
+											status_code = response_match.group('status_code')
+											mark = response_match.group('mark')
+											proxy_status_codes[(status_code, mark)] += 1
+
+										elif save_match is not None:
+											
+											if not skip_proxy_save:					
+												url = save_match.group('url')
 												missing_urls.append(url)
-														
+											else:
+												log.info(f'Skipping the missing proxy snapshot save process at the user\'s request.')
+
+										elif realaudio_match is not None:
+											
+											realaudio_url = realaudio_match.group('url')
+
 										proxy.task_done()
 
 								except queue.Empty:
 									log.debug('No more proxy messages.')
 								finally:
 									elapsed_proxy_time = time.time() - begin_proxy_time
-									log.info(f'Waited {elapsed_proxy_time:.1f} extra seconds for the proxy.')
+									proxy_status_codes = sorted(proxy_status_codes.items()) # type: ignore
+									log.info(f'Waited {elapsed_proxy_time:.1f} extra seconds for the proxy: {proxy_status_codes}')
+
+						if snapshot.IsStandaloneMedia and realaudio_url is not None:
+							log.info(f'Regenerating the standalone media page for the RealAudio file "{realaudio_url}".')
+							media_duration, media_title, media_author = generate_standalone_media_page(realaudio_url)
+							wait_after_load = max(config.min_video_duration, min(media_duration + config.extra_standalone_media_wait_after_load, config.max_video_duration))
+
+						user_wait_after_load = snapshot.Options.get('wait_after_load')
+						if user_wait_after_load is not None:
+							wait_after_load = max(config.min_video_duration, min(user_wait_after_load, config.max_video_duration))
+							log.info(f'Setting the wait after load duration to {wait_after_load:.1f} at the user\'s request.')
+
+						# Prepare the recording phase.
 
 						subdirectory_path = config.get_recording_subdirectory_path(recording_id)
 						os.makedirs(subdirectory_path, exist_ok=True)
@@ -692,6 +808,7 @@ if __name__ == '__main__':
 						pywinauto.mouse.move(coords=(0, config.physical_screen_height // 2))
 
 						cosmo_player_viewpoint_cycler = CosmoPlayerViewpointCycler(browser.application, config.cosmo_player_viewpoint_wait_per_cycle) if config.cosmo_player_viewpoint_wait_per_cycle is not None else nullcontext()
+						plugin_crash_timeout = config.max_video_duration + config.base_plugin_crash_timeout
 
 						log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls_to_bottom} scrolls of {scroll_step:.1f} pixels.')
 						browser.go_to_wayback_url(content_url)
@@ -702,32 +819,92 @@ if __name__ == '__main__':
 							browser.reload_plugin_media()
 				
 						# Record the snapshot. The page should load faster now that its resources are cached.
-						with cosmo_player_viewpoint_cycler, PluginCrashTimer(browser.firefox_directory_path, config.plugin_crash_timeout) as crash_timer, ScreenCapture(recording_path_prefix) as capture:
+						with cosmo_player_viewpoint_cycler, PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout) as crash_timer, ScreenCapture(recording_path_prefix) as capture:
 						
 							time.sleep(wait_after_load)
 
 							for i in range(num_scrolls_to_bottom):
-								for _ in browser.switch_through_frames():
+								for _ in browser.traverse_frames():
 									driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
 								time.sleep(wait_per_scroll)
 
-						was_redirected = not snapshot.IsStandaloneMedia and content_url != driver.current_url
+						# Check if the snapshot was redirected. See check_snapshot_redirection() in the
+						# scout script for more details. This is good enough for the recorder script
+						# because we're already filtering redirects in the scout, and because we're not
+						# extracting any information from the page.
+						redirected = not snapshot.IsStandaloneMedia and driver.current_url.lower() not in [content_url.lower(), unquote(content_url.lower())]
 						driver.get(Browser.BLANK_URL)
 						browser.close_all_windows_except(original_window)
 
 						capture.perform_post_processing()
 						
-						if crash_timer.crashed or capture.failed or was_redirected:
-							log.error(f'Aborted the recording (plugins crashed = {crash_timer.crashed}, capture failed = {capture.failed}, redirected = {was_redirected}).')
+						if crash_timer.crashed or capture.failed or redirected:
+							log.error(f'Aborted the recording (plugins crashed = {crash_timer.crashed}, capture failed = {capture.failed}, redirected = {redirected}).')
 							state = Snapshot.ABORTED
+						elif days_since_last_published is not None:
+							log.info(f'Saved the new recording after {days_since_last_published} days to "{capture.archive_recording_path}".')
+							state = Snapshot.APPROVED
 						else:
 							log.info(f'Saved the recording to "{capture.archive_recording_path}".')
 							state = Snapshot.RECORDED
 
 						if config.save_missing_proxy_snapshots_that_still_exist_online:
 							
-							# Remove any duplicates to minimize the amount of requests to the Save API.
-							missing_urls = list(dict.fromkeys(missing_urls))
+							# Remove any duplicates to minimize the amount of requests to the Save API
+							# and to improve look up operations when trying to find other missing URLs.
+							extra_missing_urls = {url: True for url in missing_urls}
+
+							# Find other potentially missing URLs if the filename ends in a number.
+							# If a file like "level3.dat" was missing, then we should check the
+							# other values, both above and below 3.
+							# E.g. https://web.archive.org/cdx/search/cdx?url=disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/cutplane/*&fl=original,timestamp,statuscode&collapse=urlkey
+							for url in missing_urls:
+								
+								parts = urlparse(url)
+								directory_path, filename = os.path.split(parts.path)
+
+								match = Proxy.FILENAME_REGEX.fullmatch(filename)
+								if match is None:
+									continue
+
+								log.debug(f'Filename match groups for the missing URL "{url}": {match.groups()}')
+
+								name = match.group('name')
+								padding = len(match.group('num'))
+								extension = match.group('extension')
+
+								num_consecutive_misses = 0
+								for i in range(config.max_total_extra_missing_proxy_snapshot_tries):
+
+									if num_consecutive_misses >= config.max_consecutive_extra_missing_proxy_snapshot_tries:
+										break
+
+									# Increment the value between the filename and extension.
+									new_num = str(i).zfill(padding)
+									new_filename = f'{name}{new_num}{extension}'
+									new_path = urljoin(directory_path + '/', new_filename)
+									new_parts = parts._replace(path=new_path)
+									new_url = urlunparse(new_parts)
+
+									if new_url in extra_missing_urls:
+										continue
+
+									if is_url_available(new_url):
+										log.info(f'Found the consecutive missing URL "{new_url}".')
+										extra_missing_urls[new_url] = True
+										num_consecutive_misses = 0
+									else:
+										num_consecutive_misses += 1
+
+									# Avoid making too many requests at once.
+									time.sleep(1)
+								else:
+									# Avoid getting stuck in an infinite loop because the original
+									# domain is parked, meaning there's potentially a valid response
+									# for every possible consecutive number.
+									log.warning(f'Stopping the search for more missing URLs after {config.max_total_extra_missing_proxy_snapshot_tries} tries.')
+
+							missing_urls = list(extra_missing_urls)
 							saved_urls = []
 							num_processed = 0
 
@@ -774,12 +951,13 @@ if __name__ == '__main__':
 						break
 					except WebDriverException as error:
 						log.error(f'Failed to record the snapshot with the WebDriver error: {repr(error)}')
+						abort_snapshot(snapshot)
 						continue
 
 					try:
 						db.execute('UPDATE Snapshot SET State = :state WHERE Id = :id;', {'state': state, 'id': snapshot.Id})
 
-						if state == Snapshot.RECORDED:
+						if state != Snapshot.ABORTED:
 							
 							archive_filename = os.path.basename(capture.archive_recording_path) if config.keep_archive_copy else None
 							upload_filename = os.path.basename(capture.upload_recording_path)
@@ -789,12 +967,17 @@ if __name__ == '__main__':
 										VALUES (:snapshot_id, :is_processed, :archive_filename, :upload_filename, :creation_time);
 										''', {'snapshot_id': snapshot.Id, 'is_processed': False, 'archive_filename': archive_filename,
 											  'upload_filename': upload_filename, 'creation_time': get_current_timestamp()})
+
+							if snapshot.Priority == Snapshot.RECORD_PRIORITY:
+								db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
+
 						else:
 							delete_file(capture.archive_recording_path)
 							delete_file(capture.upload_recording_path)
 
-						if snapshot.Priority == Snapshot.RECORD_PRIORITY:
-							db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
+						if snapshot.IsStandaloneMedia:
+							db.execute(	'UPDATE Snapshot SET MediaTitle = :media_title, MediaAuthor = :media_author WHERE Id = :id;',
+										{'media_title': media_title, 'media_author': media_author, 'id': snapshot.Id})
 
 						if config.save_missing_proxy_snapshots_that_still_exist_online:
 							db.executemany(	'''
@@ -819,6 +1002,11 @@ if __name__ == '__main__':
 		finally:
 			standalone_media_page_file.close()
 			delete_file(standalone_media_page_file.name)
+			
+			try:
+				standalone_media_download_directory.cleanup()
+			except Exception as error:
+				log.error(f'Failed to delete the temporary standalone media download directory with the error: {repr(error)}')
 
 			if config.use_proxy:
 				proxy.shutdown()

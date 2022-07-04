@@ -129,12 +129,12 @@ if __name__ == '__main__':
 						if config.delete_video_after_upload:
 							delete_file(recording.UploadFilePath)
 
-						snapshot_datetime = datetime.strptime(snapshot.OldestTimestamp, '%Y%m%d%H%M%S')			
-						# date = snapshot_datetime.strftime('%B %Y')
-						# api.create_media_metadata(media_id, f'The web page "{snapshot.Url}" as seen on {date} via the Wayback Machine.')
+						# How the date is formatted depends on the current locale.
+						# date = snapshot.OldestDatetime.strftime('%B %Y')
+						# alt_text = f'The web page "{snapshot.Url}" as seen on {date} via the Wayback Machine.'
+						# api.create_media_metadata(media_id, alt_text)
 						
-						date = snapshot_datetime.strftime('%b %Y')
-						required_text = f'\n{date}\n{snapshot.WaybackUrl}'
+						required_text = f'\n{snapshot.ShortDate}\n{snapshot.WaybackUrl}'
 						required_length = len(required_text)
 
 						if snapshot.IsStandaloneMedia or snapshot.UsesPlugins:
@@ -152,20 +152,9 @@ if __name__ == '__main__':
 						tweet = status.text.replace('\n', ' ')
 						log.info(f'Published the snapshot\'s tweet using {len(tweet)} characters (truncated = {status.truncated}): "{tweet}".')
 
-						if 'media' in status.extended_entities and status.extended_entities['media']:
-							
-							entity = status.extended_entities['media'][0]
-									
-							if 'video_info' in entity and 'variants' in entity['video_info']:
-								for i, info in enumerate(entity['video_info']['variants']):
-									url = info.get('url')
-									log.info(f'Uploaded video variant #{i+1}: "{url}".')
-							else:
-								log.warning('Could not find any variants for the uploaded video.')
-									
 						db.execute('UPDATE Snapshot SET State = :state WHERE Id = :id;', {'state': Snapshot.PUBLISHED, 'id': snapshot.Id})
 
-						db.execute('UPDATE Recording SET IsProcessed = :is_processed, PublishTime = :publish_time, MediaId = :media_id, TweetId = :tweet_id WHERE Id = :id;',
+						db.execute('UPDATE Recording SET IsProcessed = :is_processed, PublishTime = :publish_time, TwitterMediaId = :media_id, TwitterPostId = :tweet_id WHERE Id = :id;',
 								   {'is_processed': True, 'publish_time': get_current_timestamp(), 'media_id': media_id, 'tweet_id': status.id, 'id': recording.Id})
 
 						if snapshot.Priority == Snapshot.PUBLISH_PRIORITY:

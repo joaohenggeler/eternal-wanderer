@@ -6,20 +6,19 @@
 	contains specific words and plugin media.
 """
 
-import os
 import re
 import sqlite3
 import string
 import time
 from argparse import ArgumentParser
 from collections import Counter
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, unquote, urlparse
 
 from selenium.common.exceptions import SessionNotCreatedException, StaleElementReferenceException, WebDriverException # type: ignore
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
-from common import Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url, container_to_lowercase, find_best_wayback_machine_snapshot, find_wayback_machine_snapshot_last_modified_time, is_url_available, is_url_from_domain, is_wayback_machine_available, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
+from common import Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url, container_to_lowercase, find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info, is_url_from_domain, is_wayback_machine_available, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
 
 ####################################################################################################
 
@@ -41,6 +40,7 @@ class ScoutConfig(CommonConfig):
 	tag_points: Dict[str, int]
 	sensitive_words: Dict[str, bool] # Different from the config data type.
 	store_all_words_and_tags: bool
+	tokenize_japanese_text: bool
 
 	def __init__(self):
 		super().__init__()
@@ -59,6 +59,14 @@ if __name__ == '__main__':
 	parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to scout. Omit or set to %(default)s to run forever.')
 	parser.add_argument('-skip', action='store_true', help='Whether to skip the initial snapshots specified in the configuration file.')
 	args = parser.parse_args()
+
+	if config.tokenize_japanese_text:
+		import fugashi # type: ignore
+		log.info('Initializing the Japanese text tagger.')
+		japanese_tagger = fugashi.Tagger()
+		
+		for info in japanese_tagger.dictionary_info:
+			log.info(f'Found the following Japanese dictionary: {info}')
 
 	####################################################################################################
 
@@ -81,22 +89,22 @@ if __name__ == '__main__':
 			try:
 				log.debug(f'Locating the snapshot at "{url}" near {timestamp}.')
 				best_snapshot, is_standalone_media, file_extension = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url)
-				last_modified_time = find_wayback_machine_snapshot_last_modified_time(best_snapshot.archive_url)
+				guessed_encoding, last_modified_time = find_extra_wayback_machine_snapshot_info(best_snapshot.archive_url)
 
 				state = Snapshot.SCOUTED if is_standalone_media else Snapshot.QUEUED
 
 				result = {'parent_id': parent_id, 'state': state, 'depth': depth, 'is_excluded': False,
 						  'is_standalone_media': is_standalone_media, 'file_extension': file_extension,
 						  'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
-						  'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey,
-						  'digest': best_snapshot.digest}
+						  'guessed_encoding': guessed_encoding, 'last_modified_time': last_modified_time, 
+						  'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest}
 			except NoCDXRecordFound:
 				pass
 			except BlockedSiteError:
 				log.warning(f'The snapshot at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
 				result = {'parent_id': parent_id, 'state': Snapshot.QUEUED, 'depth': depth, 'is_excluded': True,
 						  'is_standalone_media': None, 'file_extension': None, 'url': url, 'timestamp': timestamp,
-						  'last_modified_time': None, 'url_key': None, 'digest': None}
+						  'guessed_encoding': None, 'last_modified_time': None, 'url_key': None, 'digest': None}
 			except Exception as error:
 				log.error(f'Failed to find the snapshot at "{url}" near {timestamp} with the error: {repr(error)}')
 
@@ -140,59 +148,143 @@ if __name__ == '__main__':
 						log.warning(f'Could not find the initial snapshot at "{url}" near {timestamp}.')
 
 				db.executemany(	'''
-								INSERT OR IGNORE INTO Snapshot (State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
-								VALUES (:state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
+								INSERT OR IGNORE INTO Snapshot (State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, GuessedEncoding, LastModifiedTime, UrlKey, Digest)
+								VALUES (:state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :guessed_encoding, :last_modified_time, :url_key, :digest);
 								''', initial_snapshot_list)
-
-				db.execute('UPDATE Word SET Points = 0, IsSensitive = FALSE;')
-
-				word_and_tag_points = []
-				
-				for word, points in config.word_points.items():
-					word_and_tag_points.append({'word': word, 'is_tag': False, 'points': points})
-
-				for tag, points in config.tag_points.items():
-					word_and_tag_points.append({'word': tag, 'is_tag': True, 'points': points})
-
-				# Do an upsert instead of replacing to avoid messing with the primary keys of previously inserted words.
-				db.executemany(	'''
-								INSERT INTO Word (Word, IsTag, Points)
-								VALUES (:word, :is_tag, :points)
-								ON CONFLICT (Word, IsTag)
-								DO UPDATE SET Points = :points;
-								''', word_and_tag_points)
-				
-				sensitive_words = []
-				
-				for word in config.sensitive_words:
-					sensitive_words.append({'word': word, 'is_tag': False, 'is_sensitive': True})
-
-				db.executemany(	'''
-								INSERT INTO Word (Word, IsTag, IsSensitive)
-								VALUES (:word, :is_tag, :is_sensitive)
-								ON CONFLICT (Word, IsTag)
-								DO UPDATE SET IsSensitive = :is_sensitive;
-								''', sensitive_words)
-
-				db.execute('INSERT OR REPLACE INTO Config (Name, Value) VALUES (:name, :value);', {'name': 'standalone_media_points', 'value': config.standalone_media_points})
 
 				db.commit()
 
 			except sqlite3.Error as error:
-				log.error(f'Could not insert the initial snapshots and word points with the error: {repr(error)}')
+				log.error(f'Failed to insert the initial snapshots with the error: {repr(error)}')
 				db.rollback()
 				raise
 
 		else:
 			log.info('Skipping the initial snapshots at the user\'s request.')
 
+		try:
+			log.info('Updating the word and tag attributes.')
+
+			db.execute('UPDATE Word SET Points = 0, IsSensitive = FALSE;')
+
+			word_and_tag_points = []
+			
+			for word, points in config.word_points.items():
+				word_and_tag_points.append({'word': word, 'is_tag': False, 'points': points})
+
+			for tag, points in config.tag_points.items():
+				word_and_tag_points.append({'word': tag, 'is_tag': True, 'points': points})
+
+			# Do an upsert instead of replacing to avoid messing with the primary keys of previously inserted words.
+			db.executemany(	'''
+							INSERT INTO Word (Word, IsTag, Points)
+							VALUES (:word, :is_tag, :points)
+							ON CONFLICT (Word, IsTag)
+							DO UPDATE SET Points = :points;
+							''', word_and_tag_points)
+			
+			sensitive_words = []
+			
+			for word in config.sensitive_words:
+				sensitive_words.append({'word': word, 'is_tag': False, 'is_sensitive': True})
+
+			db.executemany(	'''
+							INSERT INTO Word (Word, IsTag, IsSensitive)
+							VALUES (:word, :is_tag, :is_sensitive)
+							ON CONFLICT (Word, IsTag)
+							DO UPDATE SET IsSensitive = :is_sensitive;
+							''', sensitive_words)
+
+			db.execute('INSERT OR REPLACE INTO Config (Name, Value) VALUES (:name, :value);', {'name': 'standalone_media_points', 'value': config.standalone_media_points})
+
+			db.commit()
+
+		except sqlite3.Error as error:
+			log.error(f'Failed to update the word and tag attributes with the error: {repr(error)}')
+			db.rollback()
+			raise
+
 	####################################################################################################
+
+		def invalidate_snapshot(snapshot: Snapshot) -> None:
+			""" Invalidates a snapshot that couldn't be scouted correctly due to a WebDriver error. """
+
+			try:
+				db.execute('UPDATE Snapshot SET State = :invalid_state WHERE Id = :id;', {'invalid_state': Snapshot.INVALID, 'id': snapshot.Id})
+				db.commit()
+			except sqlite3.Error as error:
+				log.error(f'Failed to invalidate the snapshot {snapshot} with the error: {repr(error)}')
+				db.rollback()
+				time.sleep(config.database_error_wait)
+
+		def check_snapshot_redirection(snapshot: Snapshot) -> bool:
+			""" Checks if a snapshot was redirected. If so, the snapshot is invalidated and no information is extracted from its page.
+			While the snapshot is skipped, the page we were redirected to will be added to the queue. The one exception are pages from
+			the Wayback Machine that aren't snapshots. """
+
+			# E.g. https://web.archive.org/web/19981205113927if_/http://www.fortunecity.com/millenium/bigears/43/index.html
+			# Redirects to https://web.archive.org/web/19981203010807if_/http://www.fortunecity.com/millenium/bigears/43/startherest.html
+			#
+			# E.g. https://web.archive.org/web/20100823194716if_/http://www.netfx-inc.com:80/purr/
+			# Redirects to https://web.archive.org/web/20100822160707if_/http://www.netfx-inc.com/loan-tax-card/loan-tax-card.php
+			#
+			# E.g. https://web.archive.org/web/20081203054436if_/http://www.symbolicsoft.com:80/vrml/pong3d.wrl
+			# Redirects to "https://web.archive.org/", even though it's a valid page according to the CDX API:
+			# https://web.archive.org/cdx/search/cdx?url=http://www.symbolicsoft.com:80/vrml/pong3d.wrl&fl=original,timestamp,statuscode,mimetype
+			#
+			# E.g. https://web.archive.org/web/19990117005032if_/http://www.ce.washington.edu:80/%7Esoroos/java/published/pool.html
+			# Is decoded when viewed in GUI mode (i.e. not headless):
+			# https://web.archive.org/web/19990117005032if_/http://www.ce.washington.edu:80/~soroos/java/published/pool.html
+			# But this is *not* a redirect even though the URL values are different.
+
+			current_url = driver.current_url
+			redirected = current_url.lower() not in [snapshot.WaybackUrl.lower(), unquote(snapshot.WaybackUrl.lower())]
+
+			if config.debug:
+				redirect_count = driver.execute_script('return window.performance.navigation.redirectCount;')
+				log.debug(f'The redirection test was {redirected} while the redirect count is {redirect_count}.')
+
+			if redirected:
+				try:
+					log.warning(f'Skipping the snapshot since it was redirected to "{current_url}".')
+					db.execute('UPDATE Snapshot SET State = :invalid_state WHERE Id = :id;', {'invalid_state': Snapshot.INVALID, 'id': snapshot.Id})
+				
+					wayback_parts = parse_wayback_machine_snapshot_url(current_url)
+					if not is_url_from_domain(current_url, 'web.archive.org') or wayback_parts is not None:
+
+						wayback_parts = parse_wayback_machine_snapshot_url(current_url)
+						if wayback_parts is not None:
+							url = wayback_parts.Url
+							timestamp = wayback_parts.Timestamp
+						else:
+							url = current_url
+							timestamp = snapshot.Timestamp
+
+						child_snapshot = find_child_snapshot(snapshot, url, timestamp)
+
+						if child_snapshot is not None:
+							db.execute(	'''
+										INSERT OR IGNORE INTO Snapshot (ParentId, State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, GuessedEncoding, LastModifiedTime, UrlKey, Digest)
+										VALUES (:parent_id, :state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :guessed_encoding, :last_modified_time, :url_key, :digest);
+										''', child_snapshot)
+						else:
+							log.warning(f'Could not find the redirected snapshot at "{url}" near {timestamp}.')
+
+					db.commit()
+
+				except sqlite3.Error as error:
+					log.error(f'Failed to update the redirected snapshot with the error: {repr(error)}')
+					db.rollback()
+					time.sleep(config.database_error_wait)
+
+			return redirected
 
 		try:
 			# This is an oversimplified regular expression, but it works for our case since we are
 			# going to ask the CDX API what the real URLs are. The purpose of this pattern is to
 			# minimize the amount of requests to this endpoint.
 			URL_REGEX = re.compile(r'https?://.+', re.IGNORECASE)
+			PAGE_TEXT_DELIMITER_REGEX = re.compile('|'.join([re.escape(delimiter) for delimiter in string.whitespace + string.punctuation.replace('-', '')]))
 
 			num_iterations = 0
 			while True:
@@ -262,6 +354,7 @@ if __name__ == '__main__':
 					break
 				except WebDriverException as error:
 					log.error(f'Failed to load the snapshot with the error: {repr(error)}')
+					invalidate_snapshot(snapshot)
 					continue
 
 				# Skip downloads, i.e., regular pages that were labelled as standalone media.
@@ -282,57 +375,44 @@ if __name__ == '__main__':
 					finally:
 						continue
 
-				# Skip redirected pages. This is done here and not at the end since switching through
-				# the page's frames changes the current URL. We could navigate to it again but that's
-				# the same as checking it here. While the parent snapshot is skipped, the page we were
-				# redirected to will be added to the queue. The one exception are pages from the Wayback
-				# Machine that aren't snapshots.
-				#
-				# E.g. https://web.archive.org/web/19981205113927if_/http://www.fortunecity.com/millenium/bigears/43/index.html
-				# Redirects to https://web.archive.org/web/19981203010807if_/http://www.fortunecity.com/millenium/bigears/43/startherest.html
-				#
-				# E.g. https://web.archive.org/web/20081203054436if_/http://www.symbolicsoft.com:80/vrml/pong3d.wrl
-				# Redirects to "https://web.archive.org/", even though it's a valid page according to the CDX API:
-				# https://web.archive.org/cdx/search/cdx?url=http://www.symbolicsoft.com:80/vrml/pong3d.wrl&fl=original,timestamp,statuscode,mimetype
-				if driver.current_url != snapshot.WaybackUrl:
-					try:
-						log.warning(f'Skipping the snapshot since it was redirected to "{driver.current_url}".')
-						db.execute('UPDATE Snapshot SET State = :invalid_state WHERE Id = :id;', {'invalid_state': Snapshot.INVALID, 'id': snapshot.Id})
-					
-						wayback_parts = parse_wayback_machine_snapshot_url(driver.current_url)
-						if not is_url_from_domain(driver.current_url, 'web.archive.org') or wayback_parts is not None:
-
-							wayback_parts = parse_wayback_machine_snapshot_url(driver.current_url)
-							if wayback_parts is not None:
-								url = wayback_parts.Url
-								timestamp = wayback_parts.Timestamp
-							else:
-								url = driver.current_url
-								timestamp = snapshot.Timestamp
-
-							child_snapshot = find_child_snapshot(snapshot, url, timestamp)
-
-							if child_snapshot is not None:
-								db.execute(	'''
-											INSERT OR IGNORE INTO Snapshot (ParentId, State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
-											VALUES (:parent_id, :state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
-											''', child_snapshot)
-							else:
-								log.warning(f'Could not find the redirected snapshot at "{url}" near {timestamp}.')
-
-						db.commit()
-
-					except sqlite3.Error as error:
-						log.error(f'Failed to update the redirected snapshot with the error: {repr(error)}')
-						db.rollback()
-						time.sleep(config.database_error_wait)
-					finally:
-						continue
+				raw_frame_url_list = []
+				word_and_tag_counter: Counter = Counter()
 
 				url_list: List[Tuple[str, Optional[str]]] = []
-
+				
 				try:
-					for _ in browser.switch_through_frames():
+					# Checking for redirects should only be done in this block since we're going to navigate to
+					# each individual frame below when counting tags. We'll do this before and after counting
+					# words because the snapshot could have been redirected during this process. If it wasn't
+					# redirected here, we'll assume it won't happen when visiting each frame's page for the tags.
+					# For that case, we'd need to check the redirection status for each frame, meaning we'd have
+					# to decide whether we wanted to skip the entire snapshot just because one frame was redirected.
+					if check_snapshot_redirection(snapshot):
+						continue
+
+					# Analyze the page and its frames by using the Wayback Machine iframe modifier.
+					# This modifier has two main advantages:
+					# - The tags use absolute URLs instead of relative ones, making it easier to collect them.
+					# - The Wayback Machine is able to serve the page with a guessed character encoding, which
+					# is very useful for older pages that don't specify their encoding and whose text would
+					# be incorrectly decoded and inserted into the database.
+					#
+					# E.g. compare the following Japanese pages. The first one uses the guessed EUC-JP encoding,
+					# while the second has none, defaulting to ISO-8859-1.
+					# - https://web.archive.org/web/19980123230336if_/http://www.geocities.co.jp:80/join/freehp.html
+					# - https://web.archive.org/web/19980123230336id_/http://www.geocities.co.jp:80/join/freehp.html
+					#
+					# This last point has one disadvantage, which is that the tags inserted by the Wayback Machine
+					# would also be counted by our script, even though they're not part of the original page. As
+					# such, we'll count them below using the identical modifier.
+					#
+					# The same frame may show up more than once, which is fine since that's what the user sees,
+					# meaning we want to count duplicate words and tags in this case.
+					#
+					# We'll also avoid counting words (and later tags) from 404 Wayback Machine pages by skipping
+					# any missing snapshots. Keeping the Wayback Machine URL format is also necessary when counting
+					# tags below.
+					for i, frame_url in enumerate(browser.traverse_frames(format_wayback_urls=True, skip_missing=True)):
 
 						# Retrieve links from all href attributes.
 						# This is useful for snapshots that use tags other than <a> to link to other pages.
@@ -341,11 +421,9 @@ if __name__ == '__main__':
 						for element in element_list:
 
 							try:
-								# From testing, the attribute name is case insensitive
-								# and the tag name is always lowercase.
 								url = element.get_attribute('href')
 							except StaleElementReferenceException:
-								log.debug('Skipping stale element.')
+								log.warning('Skipping stale element.')
 								continue
 
 							if url:
@@ -367,9 +445,9 @@ if __name__ == '__main__':
 								url = unquote(url)
 								parts = urlparse(url)
 								is_valid = parts.scheme in ['http', 'https'] and parts.netloc != ''
-								is_archive_org = is_url_from_domain(parts, 'archive.org')
+								is_wayback_machine = is_url_from_domain(parts, 'web.archive.org')
 	
-								if is_valid and not is_archive_org:
+								if is_valid and not is_wayback_machine:
 
 									url_list.append((url, wayback_timestamp))
 
@@ -396,72 +474,75 @@ if __name__ == '__main__':
 										extra_url_list = URL_REGEX.findall(parts.query)
 										for extra_urL in extra_url_list:
 											url_list.append((extra_urL, wayback_timestamp))
+						
+						# Convert the URL to the unmodified page archive.
+						wayback_parts = parse_wayback_machine_snapshot_url(frame_url)
+						if wayback_parts is not None:
+							wayback_parts = wayback_parts._replace(Modifier=Snapshot.IDENTICAL_MODIFIER)
+							raw_frame_url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
+							raw_frame_url_list.append(raw_frame_url)
+						else:
+							assert False, f'The frame URL "{frame_url}" was not formatted properly.'
+
+						# Retrieve every word on the frame. Here, the window JavaScript variable refers to the
+						# current frame since we're switching between them.
+						page_text = driver.execute_script('return window.document.documentElement.innerText;')
+						split_text = PAGE_TEXT_DELIMITER_REGEX.split(page_text.lower())
+						
+						for text in filter(None, split_text):
+							
+							# E.g. https://web.archive.org/web/20050924203851if_/http://www.geocities.co.jp/cgi-bin/homestead/hood_addr?Colosseum2668
+							if config.tokenize_japanese_text:
+								# In order to avoid tokenizing non-Japanese text, we would need to determine
+								# if there's any Japanese text in a string. There were some solutions that
+								# used regex and Unicode blocks, but for the sake of consistency we'll use
+								# the fugashi library to do this by checking if a word is unknown.
+								word_list = [word.surface for word in japanese_tagger(text) if not word.is_unk]
+								
+								# If we weren't able to split the text into two or more words, just store the
+								# entire string. Checking for one word is probably redundant, but let's do it
+								# anyways just to be sure that nothing was removed from the text.
+								if len(word_list) <= 1:
+									word_list = [text]
+							else:
+								word_list = [text]
+
+							for word in word_list:
+								if config.store_all_words_and_tags or word in config.word_points:
+									word_and_tag_counter[(word, False)] += 1
+				
+					if check_snapshot_redirection(snapshot):
+						continue
 
 				except SessionNotCreatedException:
 					log.warning('Terminated the WebDriver session abruptly.')
 					break
 				except WebDriverException as error:
 					log.error(f'Failed to retrieve the snapshot\'s page elements with the error: {repr(error)}')
+					invalidate_snapshot(snapshot)
 					continue
-				
+		
+				log.debug(f'Found {len(raw_frame_url_list)} valid frames.')
+
 				# Remove any duplicates to minimize the amount of requests to the CDX API.
 				url_list = list(dict.fromkeys(url_list))
 
-				child_snapshot_list = []
-				for url, wayback_timestamp in url_list:
-
-					timestamp = wayback_timestamp or snapshot.Timestamp					
-					child_snapshot = find_child_snapshot(snapshot, url, timestamp)
-				
-					if child_snapshot is not None:
-						child_snapshot_list.append(child_snapshot)
-
-				log.info(f'Found {len(child_snapshot_list)} valid snapshots out of {len(url_list)} links.')
-		
 				try:
-					# Find the URL to every frame so we can analyze the original pages without any changes.
-					# Otherwise, we would be counting tags inserted by the Wayback Machine.
-					frame_url_list = [frame_url for frame_url in browser.switch_through_frames()]
+					# Analyze the page and its frames by using the Wayback Machine identical modifier.
+					# The main advantage of this modifier is that it excludes the tags inserted by the
+					# Wayback Machine.
 
-					word_and_tag_counter: Counter = Counter()
 					uses_plugins = False
-					title = driver.title
+					page_title = driver.title
+	
+					for raw_frame_url in raw_frame_url_list:
 
-					# The same frame may show up more than once, which is fine since that's what the user
-					# sees meaning we want to count duplicate words and tags in this case.
-					for frame_url in frame_url_list:
-
-						# Convert the URL to the unmodified archived page.
-						wayback_parts = parse_wayback_machine_snapshot_url(frame_url)
-						
-						if wayback_parts is not None:
-							wayback_parts = wayback_parts._replace(Modifier=Snapshot.IDENTICAL_MODIFIER)
-							raw_wayback_url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
-						else:
-							raw_wayback_url = compose_wayback_machine_snapshot_url(timestamp=snapshot.Timestamp, modifier=Snapshot.IDENTICAL_MODIFIER, url=frame_url)
-
-						# Avoid counting words and tags from 404 Wayback Machine pages.
-						# Redirects are allowed here since the frame's timestamp is
-						# inherited from the main page's snapshot, meaning that in the
-						# vast majority of cases we're going to be redirected to the
-						# nearest archived copy (if one exists). Redirected pages keep
-						# their modifier.
-						# E.g. https://web.archive.org/web/19970702100947if_/http://www.informatik.uni-rostock.de:80/~knorr/homebomb.html
-						if not is_url_available(raw_wayback_url, allow_redirects=True):
-							log.warning(f'Skipping the frame "{raw_wayback_url}" since it was not archived by the Wayback Machine.')
-							continue
-
+						# Redirects are allowed here since the frame's timestamp is inherited from the
+						# root page's snapshot. See traverse_frames() for more details.
 						config.wait_for_wayback_machine_rate_limit()
-						browser.go_to_wayback_url(raw_wayback_url, allow_redirects=True)
+						browser.go_to_wayback_url(raw_frame_url, allow_redirects=True)
 
-						page_text = driver.execute_script('return window.document.documentElement.innerText;')
-						for word in page_text.lower().split():
-							
-							word = word.strip(string.punctuation)
-							if word:
-								if config.store_all_words_and_tags or word in config.word_points:
-									word_and_tag_counter[(word, False)] += 1
-
+						# Retrieve tag word on the frame.
 						if config.store_all_words_and_tags:
 							element_list = driver.find_elements_by_xpath(r'//*')
 							for element in element_list:
@@ -480,19 +561,32 @@ if __name__ == '__main__':
 
 					browser.close_all_windows_except(original_window)
 
-					log.debug(f'Words and tags found: {word_and_tag_counter}')
-
 				except SessionNotCreatedException:
 					log.warning('Terminated the WebDriver session abruptly.')
 					break
 				except WebDriverException as error:
+					# E.g. https://web.archive.org/web/19990117002229if_/http://www.geocities.com:80/cgi-bin/homestead/mbrlookup
 					log.error(f'Failed to analyze the snapshot\'s page with the error: {repr(error)}')
+					invalidate_snapshot(snapshot)
 					continue
 
+				log.debug(f'Words and tags found: {word_and_tag_counter}')
+
+				child_snapshot_list = []
+				for url, wayback_timestamp in url_list:
+
+					timestamp = wayback_timestamp or snapshot.Timestamp
+					child_snapshot = find_child_snapshot(snapshot, url, timestamp)
+				
+					if child_snapshot is not None:
+						child_snapshot_list.append(child_snapshot)
+
+				log.info(f'Found {len(child_snapshot_list)} valid snapshots out of {len(url_list)} links.')
+		
 				try:
 					db.executemany(	'''
-									INSERT OR IGNORE INTO Snapshot (ParentId, State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
-									VALUES (:parent_id, :state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
+									INSERT OR IGNORE INTO Snapshot (ParentId, State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, GuessedEncoding, LastModifiedTime, UrlKey, Digest)
+									VALUES (:parent_id, :state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :guessed_encoding, :last_modified_time, :url_key, :digest);
 									''', child_snapshot_list)
 
 					topology = [{'parent_id': child['parent_id'], 'url': child['url'], 'timestamp': child['timestamp']} for child in child_snapshot_list]
@@ -513,9 +607,9 @@ if __name__ == '__main__':
 
 					db.execute( '''
 								UPDATE Snapshot
-								SET State = :scouted_state, UsesPlugins = :uses_plugins, Title = :title
+								SET State = :scouted_state, UsesPlugins = :uses_plugins, PageTitle = :page_title
 								WHERE Id = :id;
-								''', {'scouted_state': Snapshot.SCOUTED, 'uses_plugins': uses_plugins, 'title': title, 'id': snapshot.Id})
+								''', {'scouted_state': Snapshot.SCOUTED, 'uses_plugins': uses_plugins, 'page_title': page_title, 'id': snapshot.Id})
 
 					if snapshot.Priority == Snapshot.SCOUT_PRIORITY:
 						db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
