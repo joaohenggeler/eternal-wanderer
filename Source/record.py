@@ -7,6 +7,7 @@
 """
 
 import ctypes
+import itertools
 import os
 import queue
 import re
@@ -23,7 +24,7 @@ from subprocess import PIPE, STDOUT
 from subprocess import Popen, TimeoutExpired
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from threading import Thread, Timer
-from typing import Dict, List, Optional, Tuple, Union, cast
+from typing import Dict, Iterator, List, Optional, Tuple, Union, cast
 from urllib.parse import unquote, urljoin, urlparse, urlunparse
 
 import ffmpeg # type: ignore
@@ -31,13 +32,14 @@ import pywinauto # type: ignore
 import requests
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
-from pywinauto.application import Application as WindowsApplication # type: ignore
+from pywinauto.application import WindowSpecification # type: ignore
+from pywinauto.base_wrapper import ElementNotEnabled, ElementNotVisible # type: ignore
 from selenium.common.exceptions import SessionNotCreatedException, WebDriverException # type: ignore
 from selenium.webdriver.common.utils import free_port # type: ignore
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
-from common import Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, container_to_lowercase, delete_file, get_current_timestamp, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
+from common import Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, clamp, container_to_lowercase, delete_file, get_current_timestamp, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
 
 ####################################################################################################
 
@@ -54,8 +56,8 @@ class RecordConfig(CommonConfig):
 	record_sensitive_snapshots: bool
 	min_publish_days_for_new_recording: int
 
-	allowed_standalone_media_file_extensions: Dict[str, bool] # Different from the config data type.
-	nondownloadable_standalone_media_file_extensions: Dict[str, bool] # Different from the config data type.
+	allowed_standalone_media_extensions: Dict[str, bool] # Different from the config data type.
+	nondownloadable_standalone_media_extensions: Dict[str, bool] # Different from the config data type.
 
 	use_proxy: bool
 	proxy_port: Optional[int]
@@ -69,19 +71,15 @@ class RecordConfig(CommonConfig):
 	max_consecutive_extra_missing_proxy_snapshot_tries: int
 	max_total_extra_missing_proxy_snapshot_tries: int
 
-	viewport_scroll_percentage: float
 	page_cache_wait: int
 	standalone_media_cache_wait: int
 
+	viewport_scroll_percentage: float
 	base_wait_after_load: int
-	extra_wait_after_load: int
-
+	wait_after_load_per_plugin_instance: int
 	base_wait_per_scroll: int
-	extra_wait_per_scroll: int
-
-	max_wait_after_load_video_percentage: float
-	points_per_extra_wait: int
-	extra_standalone_media_wait_after_load: int
+	wait_after_scroll_per_plugin_instance: int
+	base_standalone_media_wait_after_load: int
 
 	standalone_media_fallback_duration: int
 	standalone_media_width: str
@@ -91,7 +89,16 @@ class RecordConfig(CommonConfig):
 	fullscreen_browser: bool
 	reload_plugin_media_before_recording: bool
 	base_plugin_crash_timeout: int
-	cosmo_player_viewpoint_wait_per_cycle: Optional[int]
+	
+	enable_plugin_input_repeater: bool
+	plugin_input_repeater_initial_wait: int
+	plugin_input_repeater_wait_per_cycle: int
+	min_plugin_input_repeater_window_size: int
+	plugin_input_repeater_keystrokes: str
+	plugin_input_repeater_debug_highlight: bool
+
+	enable_cosmo_player_viewpoint_cycler: bool
+	cosmo_player_viewpoint_wait_per_cycle: int
 
 	min_video_duration: int
 	max_video_duration: int
@@ -108,13 +115,15 @@ class RecordConfig(CommonConfig):
 	standalone_media_template: str
 	physical_screen_width: int
 	physical_screen_height: int
+	width_dpi_scaling: float
+	height_dpi_scaling: float
 
 	def __init__(self):
 		super().__init__()
 		self.load_subconfig('record')
 
-		self.allowed_standalone_media_file_extensions = {extension: True for extension in container_to_lowercase(self.allowed_standalone_media_file_extensions)}
-		self.nondownloadable_standalone_media_file_extensions = {extension: True for extension in container_to_lowercase(self.nondownloadable_standalone_media_file_extensions)}
+		self.allowed_standalone_media_extensions = {extension: True for extension in container_to_lowercase(self.allowed_standalone_media_extensions)}
+		self.nondownloadable_standalone_media_extensions = {extension: True for extension in container_to_lowercase(self.nondownloadable_standalone_media_extensions)}
 
 		if self.max_missing_proxy_snapshot_path_components is not None:
 			self.max_missing_proxy_snapshot_path_components = max(self.max_missing_proxy_snapshot_path_components, 1)
@@ -131,11 +140,41 @@ class RecordConfig(CommonConfig):
 		with open(template_path, 'r', encoding='utf-8') as file:
 			self.standalone_media_template = file.read()
 
-		# Get the correct screen resolution by taking into account DPI scaling.
+		S_OK = 0
+
 		user32 = ctypes.windll.user32
-		user32.SetProcessDPIAware()
-		self.physical_screen_width = user32.GetSystemMetrics(0)
-		self.physical_screen_height = user32.GetSystemMetrics(1)
+		SM_CXSCREEN = 0
+		SM_CYSCREEN = 1
+		MONITOR_DEFAULTTOPRIMARY = 1
+
+		shcore = ctypes.windll.shcore
+		MDT_EFFECTIVE_DPI = 0
+
+		# Get the correct screen resolution by taking into account DPI scaling.
+		# See:
+		# - https://docs.microsoft.com/en-us/windows/win32/hidpi/setting-the-default-dpi-awareness-for-a-process
+		# - https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getsystemmetrics
+		user32.SetProcessDPIAware()		
+		self.physical_screen_width = user32.GetSystemMetrics(SM_CXSCREEN)
+		self.physical_screen_height = user32.GetSystemMetrics(SM_CYSCREEN)
+
+		# Get the primary monitor's DPI scaling so we can correct the window
+		# dimensions returned by the PyWinAuto library.
+		# See:
+		# - https://devblogs.microsoft.com/oldnewthing/20141106-00/?p=43683
+		# - https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-monitorfromwindow
+		# - https://docs.microsoft.com/en-us/windows/win32/api/shellscalingapi/nf-shellscalingapi-getdpiformonitor
+		primary_monitor = user32.MonitorFromWindow(None, MONITOR_DEFAULTTOPRIMARY)
+		dpi_x = ctypes.c_uint()
+		dpi_y = ctypes.c_uint()
+		hresult = shcore.GetDpiForMonitor(primary_monitor, MDT_EFFECTIVE_DPI, ctypes.byref(dpi_x), ctypes.byref(dpi_y))
+
+		if hresult == S_OK:
+			self.width_dpi_scaling = dpi_x.value / 96
+			self.height_dpi_scaling = dpi_y.value / 96
+		else:
+			self.width_dpi_scaling = 1.0
+			self.height_dpi_scaling = 1.0
 
 if __name__ == '__main__':
 
@@ -353,35 +392,63 @@ if __name__ == '__main__':
 			
 			delete_file(self.raw_recording_path)
 
-	class CosmoPlayerViewpointCycler(Thread):
-		""" A thread that periodically tells any VRML world running in the Cosmo Player to move to the next viewpoint. """
+	class PluginInputRepeater(Thread):
+		""" A thread that periodically interacts with any plugin instance running in Firefox. """
 
-		firefox_application: Optional[WindowsApplication]
-		wait_per_cycle: int
+		firefox_window: Optional[WindowSpecification]
 		running: bool
+		debug_highlight_colors: Iterator[str]
 
-		def __init__(self, firefox_application: Optional[WindowsApplication], wait_per_cycle: int):
+		def __init__(self, firefox_window: Optional[WindowSpecification], thread_name='plugin_input_repeater'):
 
-			super().__init__(name='cosmo_player_viewpoint_cycler', daemon=True)
+			super().__init__(name=thread_name, daemon=True)
 			
-			self.firefox_application = firefox_application
-			self.wait_per_cycle = wait_per_cycle
+			self.firefox_window = firefox_window
 			self.running = False
+			self.debug_highlight_colors = itertools.cycle(['red', 'green', 'blue'])
 
 		def run(self):
-			""" Runs the viewpoint cycler on a loop, sending the "Next Viewpoint" hotkey periodically to any Cosmo Player windows. """
+			""" Runs the input repeater on a loop, sending a series of keystrokes periodically to any Firefox plugin windows. """
 
-			if self.firefox_application is None:
+			if self.firefox_window is None:
 				return
+
+			first = True
 
 			while self.running:
 				
-				time.sleep(self.wait_per_cycle)
-				
+				if first:
+					time.sleep(config.plugin_input_repeater_initial_wait)
+				else:
+					time.sleep(config.plugin_input_repeater_wait_per_cycle)
+
+				first = False
+
 				try:
-					cosmo_player_windows = self.firefox_application.MozillaWindowClass.children(class_name='CpWin32RenderWindow')
-					for window in cosmo_player_windows:
-						window.send_keystrokes('{PGDN}')
+					plugin_windows = self.firefox_window.children(class_name='GeckoPluginWindow')
+					
+					if config.debug and config.plugin_input_repeater_debug_highlight:
+						for window in plugin_windows:
+							window.draw_outline(next(self.debug_highlight_colors))
+
+					plugin_windows += self.firefox_window.children(class_name='ImlWinCls')
+					plugin_windows += self.firefox_window.children(class_name='ImlWinClsSw10')
+					plugin_windows += self.firefox_window.children(class_name='SunAwtCanvas')
+					plugin_windows += self.firefox_window.children(class_name='SunAwtFrame')
+
+					for window in plugin_windows:
+						try:
+							rect = window.rectangle()
+							width = round(rect.width() / config.width_dpi_scaling)
+							height = round(rect.height() / config.height_dpi_scaling)
+							
+							if width >= config.min_plugin_input_repeater_window_size and height >= config.min_plugin_input_repeater_window_size:
+								window.click()
+								window.send_keystrokes(config.plugin_input_repeater_keystrokes)
+
+						except (ElementNotEnabled, ElementNotVisible):
+							pass
+
 				except Exception:
 					pass
 
@@ -402,15 +469,41 @@ if __name__ == '__main__':
 		def __exit__(self, exception_type, exception_value, traceback):
 			self.shutdown()
 
+	class CosmoPlayerViewpointCycler(PluginInputRepeater):
+		""" A thread that periodically tells any VRML world running in the Cosmo Player to move to the next viewpoint. """
+
+		def __init__(self, firefox_window: Optional[WindowSpecification]):
+			super().__init__(firefox_window, thread_name='cosmo_player_viewpoint_cycler')
+
+		def run(self):
+			""" Runs the viewpoint cycler on a loop, sending the "Next Viewpoint" hotkey periodically to any Cosmo Player windows. """
+			
+			if self.firefox_window is None:
+				return
+
+			while self.running:
+				
+				time.sleep(config.cosmo_player_viewpoint_wait_per_cycle)
+
+				try:
+					cosmo_player_windows = self.firefox_window.children(class_name='CpWin32RenderWindow')
+					for window in cosmo_player_windows:
+						window.send_keystrokes('{PGDN}')
+				except Exception:
+					pass				
+
 	####################################################################################################
 
 	log.info('Initializing the recorder.')
+	log.info(f'Detected the physical screen resolution {config.physical_screen_width}x{config.physical_screen_height} with the DPI scaling ({config.width_dpi_scaling:.2f}, {config.height_dpi_scaling:.2f}).')
 
 	scheduler = BlockingScheduler()
 
 	def record_snapshots(num_snapshots: int) -> None:
 		""" Records a given number of snapshots in a single batch. """
 		
+		log.info(f'Recording {num_snapshots} snapshots.')
+
 		try:
 			if config.use_proxy:
 				proxy = Proxy.create()
@@ -448,25 +541,31 @@ if __name__ == '__main__':
 
 			with Database() as db, Browser(extra_preferences=extra_preferences, use_extensions=True, use_plugins=True, use_autoit=True) as (browser, driver), TemporaryRegistry() as registry:
 
-				def generate_standalone_media_page(wayback_url: str) -> Tuple[float, Optional[str], Optional[str]]:
+				browser.go_to_blank_page_with_text('\N{Broom} Initializing \N{Broom}')
+
+				def generate_standalone_media_page(wayback_url: str, media_extension: Optional[str] = None) -> Tuple[float, Optional[str], Optional[str]]:
 					""" Generates the page where a standalone media file is embedded using both the information
 					from the configuration as well as the file's metadata. """
 
 					wayback_parts = parse_wayback_machine_snapshot_url(wayback_url)
 					parts = urlparse(wayback_parts.Url if wayback_parts is not None else wayback_url)
 					filename = os.path.basename(parts.path)
-					_, file_extension = os.path.splitext(filename)
-					file_extension = file_extension.lower().strip('.')
+						
+					if media_extension is None:
+						_, media_extension = os.path.splitext(filename)
+						media_extension = media_extension.lower().strip('.')
 
-					# Two separate URLs because ffmpeg uses "file:path" instead of "file://path".
-					# See: https://superuser.com/questions/718027/ffmpeg-concat-doesnt-work-with-absolute-path/1551017#1551017
 					embed_url = wayback_url
-					probe_url = wayback_url
-
+					loop = 'true'
+					duration: float = config.standalone_media_fallback_duration
+					title = None
+					author = None
+					
 					# If a media file points to other resources (e.g. VRML worlds or RealAudio metadata), we don't
 					# want to download it since other files from the Wayback Machine may be required to play it.
-					# If it doesn't (e.g. most audio and video formats), just download and play it from disk.
-					if file_extension not in config.nondownloadable_standalone_media_file_extensions:
+					# If it doesn't (i.e. audio and video formats), we'll just download and play it from disk.
+					if media_extension not in config.nondownloadable_standalone_media_extensions:
+						
 						try:
 							response = requests.get(wayback_url)
 							response.raise_for_status()
@@ -477,31 +576,30 @@ if __name__ == '__main__':
 								file.write(response.content)
 						
 							log.debug(f'Downloaded the standalone media "{wayback_url}" to "{downloaded_file_path}".')
+							
+							# Two separate URLs because ffmpeg uses "file:path" instead of "file://path".
+							# See: https://superuser.com/questions/718027/ffmpeg-concat-doesnt-work-with-absolute-path/1551017#1551017
 							embed_url = f'file:///{downloaded_file_path}'
 							probe_url = f'file:{downloaded_file_path}'
+							loop = 'false'
 
+							probe = ffmpeg.probe(probe_url)
+							format = probe['format']
+							tags = format.get('tags', {})
+							
+							# See: https://wiki.multimedia.cx/index.php/FFmpeg_Metadata
+							title = tags.get('title')
+							author = tags.get('author') or tags.get('artist') or tags.get('album_artist') or tags.get('composer') or tags.get('copyright')
+							log.debug(f'The standalone media "{title}" by "{author}" has the following tags: {tags}')
+
+							duration = float(format['duration'])
+							log.debug(f'The standalone media has a duration of {duration} seconds.')
+						
 						except requests.RequestException as error:
 							log.error(f'Failed to download the standalone media file "{wayback_url}" with the error: {repr(error)}')
-
-					try:
-						probe = ffmpeg.probe(probe_url)
-						format = probe['format']
-						tags = format.get('tags', {})
-						
-						title = tags.get('title')
-						author = tags.get('author') or tags.get('artist') or tags.get('album_artist') or tags.get('composer') or tags.get('copyright')
-						log.debug(f'The standalone media "{title}" by "{author}" has the following tags: {tags}')
-
-						duration = float(format['duration'])
-						log.debug(f'The standalone media has a duration of {duration} seconds.')
-						loop = 'false'
-					except (ffmpeg.Error, KeyError, ValueError) as error:
-						log.warning(f'Could not parse the standalone media\'s metadata with the error: {repr(error)}')
-						duration = config.standalone_media_fallback_duration
-						title = None
-						author = None
-						loop = 'true'
-
+						except (ffmpeg.Error, KeyError, ValueError) as error:
+							log.warning(f'Could not parse the standalone media\'s metadata with the error: {repr(error)}')
+							
 					content = config.standalone_media_template
 					content = content.replace('{comment}', f'Generated by "{__file__}" on {get_current_timestamp()}.')
 					content = content.replace('{background_color}', config.standalone_media_background_color)
@@ -538,12 +636,12 @@ if __name__ == '__main__':
 					sign = 1 if points >= 0 else -1
 					return sign * random() ** (config.ranking_constant / (abs(points) + 1))
 
-				def is_standalone_media_file_extension_allowed(file_extension: str) -> bool:
+				def is_standalone_media_extension_allowed(media_extension: str) -> bool:
 					""" Checks if a standalone media snapshot should be recorded. """
-					return bool(config.allowed_standalone_media_file_extensions) and file_extension in config.allowed_standalone_media_file_extensions
+					return bool(config.allowed_standalone_media_extensions) and media_extension in config.allowed_standalone_media_extensions
 
 				db.create_function('RANK_SNAPSHOT_BY_POINTS', 1, rank_snapshot_by_points)
-				db.create_function('IS_STANDALONE_MEDIA_FILE_EXTENSION_ALLOWED', 1, is_standalone_media_file_extension_allowed)
+				db.create_function('IS_STANDALONE_MEDIA_EXTENSION_ALLOWED', 1, is_standalone_media_extension_allowed)
 
 				if config.fullscreen_browser:
 					browser.toggle_fullscreen()
@@ -616,7 +714,7 @@ if __name__ == '__main__':
 												AND (:min_year IS NULL OR OldestYear >= :min_year)
 												AND (:max_year IS NULL OR OldestYear <= :max_year)
 												AND (:record_sensitive_snapshots OR NOT SI.IsSensitive)
-												AND (NOT S.IsStandaloneMedia OR IS_STANDALONE_MEDIA_FILE_EXTENSION_ALLOWED(S.FileExtension))
+												AND (NOT S.IsStandaloneMedia OR IS_STANDALONE_MEDIA_EXTENSION_ALLOWED(S.MediaExtension))
 												AND IS_URL_KEY_ALLOWED(S.UrlKey)
 											ORDER BY
 												S.Priority DESC,
@@ -630,8 +728,9 @@ if __name__ == '__main__':
 						row = cursor.fetchone()
 						if row is not None:
 							snapshot = Snapshot(**dict(row))
-							
+
 							assert snapshot.Points is not None, 'The Points column is not being computed properly.'
+							config.apply_snapshot_options(snapshot)
 
 							rank = row['Rank'] * 100
 							days_since_last_published = row['DaysSinceLastPublished']
@@ -670,7 +769,7 @@ if __name__ == '__main__':
 						media_author = None
 
 						if snapshot.IsStandaloneMedia:
-							media_duration, media_title, media_author = generate_standalone_media_page(snapshot.WaybackUrl)
+							media_duration, media_title, media_author = generate_standalone_media_page(snapshot.WaybackUrl, snapshot.MediaExtension)
 							content_url = standalone_media_page_url
 						else:
 							content_url = snapshot.WaybackUrl
@@ -690,7 +789,7 @@ if __name__ == '__main__':
 
 						# How much we wait before killing the plugins depends on how long we expect
 						# each phase (caching and recording) to last in the worst case scenario.
-						plugin_crash_timeout = config.page_load_timeout + cache_wait + (config.proxy_total_timeout if config.use_proxy else 0) + config.base_plugin_crash_timeout
+						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + cache_wait + (config.proxy_total_timeout if config.use_proxy else 0)
 
 						realaudio_url = None
 
@@ -699,13 +798,17 @@ if __name__ == '__main__':
 
 							browser.go_to_wayback_url(content_url)
 
+							num_plugin_instances = browser.count_plugin_instances()
+							log.debug(f'Found {num_plugin_instances} plugin instances.')
+							
 							wait_after_load: float
 							wait_per_scroll: float
 
 							if snapshot.IsStandaloneMedia:
+								scroll_height = 0
 								scroll_step = 0.0
 								num_scrolls_to_bottom = 0
-								wait_after_load = max(config.min_video_duration, min(media_duration + config.extra_standalone_media_wait_after_load, config.max_video_duration))
+								wait_after_load = clamp(config.base_standalone_media_wait_after_load + media_duration, config.min_video_duration, config.max_video_duration)
 								wait_per_scroll = 0.0
 							else:
 								scroll_height = 0
@@ -724,23 +827,26 @@ if __name__ == '__main__':
 								scroll_step = client_height * config.viewport_scroll_percentage
 								num_scrolls_to_bottom = ceil((scroll_height - client_height) / scroll_step)
 
-								wait_after_load = config.base_wait_after_load + config.extra_wait_after_load * cast(int, snapshot.Points) / config.points_per_extra_wait
-								wait_after_load = max(config.min_video_duration, min(wait_after_load, config.max_video_duration * config.max_wait_after_load_video_percentage))
-								
-								wait_per_scroll = config.base_wait_per_scroll + config.extra_wait_per_scroll * cast(int, snapshot.Points) / config.points_per_extra_wait
-								wait_per_scroll = min(wait_per_scroll, (config.max_video_duration - wait_after_load) / max(num_scrolls_to_bottom, 1))
+								wait_after_load = config.base_wait_after_load + num_plugin_instances * config.wait_after_load_per_plugin_instance
+								wait_per_scroll = config.base_wait_per_scroll + num_plugin_instances * config.wait_after_scroll_per_plugin_instance
+
+								min_wait_after_load = max(config.min_video_duration, config.base_wait_after_load + min(num_plugin_instances, 1) * config.wait_after_load_per_plugin_instance)
+								max_wait_after_load = max(config.max_video_duration - num_scrolls_to_bottom * wait_per_scroll, 0)
+								wait_after_load = clamp(wait_after_load, min_wait_after_load, max_wait_after_load)
+						
+								max_wait_per_scroll = (max(config.max_video_duration - wait_after_load, 0) / num_scrolls_to_bottom) if num_scrolls_to_bottom > 0 else 0
+								wait_per_scroll = clamp(wait_per_scroll, 0, max_wait_per_scroll)
 
 							log.info(f'Waiting {cache_wait:.1f} seconds for the page to cache.')
 							time.sleep(cache_wait)
 
-							# Keep waiting if the page or its plugins are still requesting data.
+							# Keep waiting if the page or any plugins are still requesting data.
 							if config.use_proxy:
 								
 								log.debug('Waiting for the proxy.')
 								begin_proxy_time = time.time()
 								
 								proxy_status_codes: Counter = Counter()
-								skip_proxy_save = snapshot.Options.get('skip_proxy_save', False)
 
 								try:
 									while True:
@@ -765,11 +871,8 @@ if __name__ == '__main__':
 
 										elif save_match is not None:
 											
-											if not skip_proxy_save:					
-												url = save_match.group('url')
-												missing_urls.append(url)
-											else:
-												log.info(f'Skipping the missing proxy snapshot save process at the user\'s request.')
+											url = save_match.group('url')
+											missing_urls.append(url)
 
 										elif realaudio_match is not None:
 											
@@ -787,12 +890,18 @@ if __name__ == '__main__':
 						if snapshot.IsStandaloneMedia and realaudio_url is not None:
 							log.info(f'Regenerating the standalone media page for the RealAudio file "{realaudio_url}".')
 							media_duration, media_title, media_author = generate_standalone_media_page(realaudio_url)
-							wait_after_load = max(config.min_video_duration, min(media_duration + config.extra_standalone_media_wait_after_load, config.max_video_duration))
+							wait_after_load = clamp(config.base_standalone_media_wait_after_load + media_duration, config.min_video_duration, config.max_video_duration)
 
-						user_wait_after_load = snapshot.Options.get('wait_after_load')
-						if user_wait_after_load is not None:
-							wait_after_load = max(config.min_video_duration, min(user_wait_after_load, config.max_video_duration))
-							log.info(f'Setting the wait after load duration to {wait_after_load:.1f} at the user\'s request.')
+						if config.debug and browser.window is not None:
+							
+							plugin_windows = browser.window.children(class_name='GeckoPluginWindow')
+							for window in plugin_windows:
+								
+								rect = window.rectangle()
+								width = round(rect.width() / config.width_dpi_scaling)
+								height = round(rect.height() / config.height_dpi_scaling)
+								
+								log.debug(f'Found a plugin instance with the size: {width}x{height}.')
 
 						# Prepare the recording phase.
 
@@ -800,17 +909,19 @@ if __name__ == '__main__':
 						os.makedirs(subdirectory_path, exist_ok=True)
 						
 						parts = urlparse(snapshot.Url)
-						media_identifier = 's' if snapshot.IsStandaloneMedia else ('p' if snapshot.UsesPlugins else '')
-						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, snapshot.FileExtension, snapshot.Timestamp[:4], snapshot.Timestamp[4:6], snapshot.Timestamp[6:8], media_identifier]
+						media_identifier = snapshot.MediaExtension if snapshot.IsStandaloneMedia else ('plugins' if snapshot.UsesPlugins else '')
+						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, snapshot.Timestamp[:4], snapshot.Timestamp[4:6], snapshot.Timestamp[6:8], media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
+						browser.close_all_windows_except(original_window)
 						browser.bring_to_front()
 						pywinauto.mouse.move(coords=(0, config.physical_screen_height // 2))
 
-						cosmo_player_viewpoint_cycler = CosmoPlayerViewpointCycler(browser.application, config.cosmo_player_viewpoint_wait_per_cycle) if config.cosmo_player_viewpoint_wait_per_cycle is not None else nullcontext()
-						plugin_crash_timeout = config.max_video_duration + config.base_plugin_crash_timeout
+						plugin_input_repeater = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
+						cosmo_player_viewpoint_cycler = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
+						plugin_crash_timeout = config.base_plugin_crash_timeout + config.max_video_duration
 
-						log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls_to_bottom} scrolls of {scroll_step:.1f} pixels.')
+						log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls_to_bottom} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
 						browser.go_to_wayback_url(content_url)
 
 						# Reloading the object, embed, and applet tags can yield good results when a page
@@ -819,11 +930,11 @@ if __name__ == '__main__':
 							browser.reload_plugin_media()
 				
 						# Record the snapshot. The page should load faster now that its resources are cached.
-						with cosmo_player_viewpoint_cycler, PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout) as crash_timer, ScreenCapture(recording_path_prefix) as capture:
+						with plugin_input_repeater, cosmo_player_viewpoint_cycler, PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout) as crash_timer, ScreenCapture(recording_path_prefix) as capture:
 						
 							time.sleep(wait_after_load)
 
-							for i in range(num_scrolls_to_bottom):
+							for _ in range(num_scrolls_to_bottom):
 								for _ in browser.traverse_frames():
 									driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
 								time.sleep(wait_per_scroll)
@@ -833,9 +944,9 @@ if __name__ == '__main__':
 						# because we're already filtering redirects in the scout, and because we're not
 						# extracting any information from the page.
 						redirected = not snapshot.IsStandaloneMedia and driver.current_url.lower() not in [content_url.lower(), unquote(content_url.lower())]
-						driver.get(Browser.BLANK_URL)
+						
 						browser.close_all_windows_except(original_window)
-
+						browser.go_to_blank_page_with_text('\N{Film Projector} Post Processing \N{Film Projector}', str(snapshot))
 						capture.perform_post_processing()
 						
 						if crash_timer.crashed or capture.failed or redirected:
@@ -849,6 +960,9 @@ if __name__ == '__main__':
 							state = Snapshot.RECORDED
 
 						if config.save_missing_proxy_snapshots_that_still_exist_online:
+
+							if missing_urls:
+								log.info(f'Locating files based on {len(missing_urls)} missing URLs.')
 							
 							# Remove any duplicates to minimize the amount of requests to the Save API
 							# and to improve look up operations when trying to find other missing URLs.
@@ -858,8 +972,10 @@ if __name__ == '__main__':
 							# If a file like "level3.dat" was missing, then we should check the
 							# other values, both above and below 3.
 							# E.g. https://web.archive.org/cdx/search/cdx?url=disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/cutplane/*&fl=original,timestamp,statuscode&collapse=urlkey
-							for url in missing_urls:
+							for i, url in enumerate(missing_urls):
 								
+								browser.go_to_blank_page_with_text('\N{Left-Pointing Magnifying Glass} Locating Missing URLs \N{Left-Pointing Magnifying Glass}', f'{i+1} of {len(missing_urls)}')
+
 								parts = urlparse(url)
 								directory_path, filename = os.path.split(parts.path)
 
@@ -874,13 +990,13 @@ if __name__ == '__main__':
 								extension = match.group('extension')
 
 								num_consecutive_misses = 0
-								for i in range(config.max_total_extra_missing_proxy_snapshot_tries):
+								for num in range(config.max_total_extra_missing_proxy_snapshot_tries):
 
 									if num_consecutive_misses >= config.max_consecutive_extra_missing_proxy_snapshot_tries:
 										break
 
 									# Increment the value between the filename and extension.
-									new_num = str(i).zfill(padding)
+									new_num = str(num).zfill(padding)
 									new_filename = f'{name}{new_num}{extension}'
 									new_path = urljoin(directory_path + '/', new_filename)
 									new_parts = parts._replace(path=new_path)
@@ -908,7 +1024,12 @@ if __name__ == '__main__':
 							saved_urls = []
 							num_processed = 0
 
+							if missing_urls:
+								log.info(f'Saving {len(missing_urls)} missing URLs.')
+
 							for i, url in enumerate(missing_urls):
+
+								browser.go_to_blank_page_with_text('\N{Floppy Disk} Saving Missings URLs \N{Floppy Disk}', f'{i+1} of {len(missing_urls)}', f'{url}')
 
 								try:
 									config.wait_for_save_api_rate_limit()
@@ -975,9 +1096,15 @@ if __name__ == '__main__':
 							delete_file(capture.archive_recording_path)
 							delete_file(capture.upload_recording_path)
 
-						if snapshot.IsStandaloneMedia:
+						if snapshot.IsStandaloneMedia and all(metadata is None for metadata in [snapshot.MediaTitle, snapshot.MediaAuthor]):
 							db.execute(	'UPDATE Snapshot SET MediaTitle = :media_title, MediaAuthor = :media_author WHERE Id = :id;',
 										{'media_title': media_title, 'media_author': media_author, 'id': snapshot.Id})
+						
+						# For cases where looking at the embed tags while scouting isn't enough.
+						# E.g. https://web.archive.org/web/19961221002554if_/http://www.geocities.com:80/Hollywood/Hills/5988/
+						elif not snapshot.UsesPlugins and num_plugin_instances > 0:
+							log.info(f'Detected {num_plugin_instances} plugin instances while no embed tags were found during scouting.')
+							db.execute('UPDATE Snapshot SET UsesPlugins = :uses_plugins WHERE Id = :id;', {'uses_plugins': True, 'id': snapshot.Id})
 
 						if config.save_missing_proxy_snapshots_that_still_exist_online:
 							db.executemany(	'''
@@ -1011,11 +1138,14 @@ if __name__ == '__main__':
 			if config.use_proxy:
 				proxy.shutdown()
 
+		log.info(f'Finished recording {num_snapshots} snapshots.')
+
 	####################################################################################################
 
 	if args.max_iterations >= 0:
 		record_snapshots(args.max_iterations)
 	else:
+		log.info(f'Running the recorder with the schedule: {config.scheduler}')
 		scheduler.add_job(record_snapshots, args=[config.num_snapshots_per_scheduled_batch], trigger='cron', coalesce=True, **config.scheduler, timezone='UTC')
 		scheduler.start()
 

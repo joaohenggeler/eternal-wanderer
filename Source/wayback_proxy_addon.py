@@ -162,40 +162,59 @@ def request(flow: http.HTTPFlow) -> None:
 
 		if not found_snapshot:
 			
+			extract = no_fetch_tld_extract(wayback_parts.Url)
 			parts = urlparse(wayback_parts.Url)
-			
+			split_path = parts.path.split('/')
+
 			# E.g. "http://www.example.com/path1/path2/file.ext" -> "/path2/file.ext" (2 components).
 			if config.max_missing_proxy_snapshot_path_components is not None:
-				split_path = parts.path.split('/')
 				path = '/'.join(split_path[-config.max_missing_proxy_snapshot_path_components:])
 			else:
 				path = parts.path
 
 			# We'll match any URLs in this domain and subdomains that contain the path pattern above.
 			# The pattern is checked against the end of the URL or a query string.
-			# E.g. "http://example.com/path/file.swf" or "http://example.com/path/file.swf?1234567890".
+			# E.g. "http://example.com/path/file.swf" or "http://example.com/path/file.swf?cache=123".
 			# This match is case insensitive to maximize the amount of archived results (even if a
 			# URL's path is technically case sensitive).
 			#
-			# # E.g. https://web.archive.org/cdx/search/cdx?url=shockwave.com&matchType=domain&filter=statuscode:200&filter=original:(?i).*(/sis/game.swf)($|\?.*)&fl=original,timestamp,statuscode&collapse=urlkey
-			extract = no_fetch_tld_extract(wayback_parts.Url)
+			# E.g. https://web.archive.org/cdx/search/cdx?url=shockwave.com&matchType=domain&filter=statuscode:200&filter=original:(?i).*(/sis/game.swf)($|\?.*)&fl=original,timestamp,statuscode&collapse=urlkey
 			subdomain_cdx = Cdx(url=extract.registered_domain, match_type='domain', filters=['statuscode:200', fr'original:(?i).*{path}($|\?.*)'])
+
+			# E.g. "http://www.example.com/path1/path2/file.ext" -> "/path1/".
+			# If there is a path, the first split value is an empty string.
+			first_path_component = '/'.join(split_path[:2]) + '/' if len(split_path) >= 2 else None
 			
+			# Ideally, the previous query should work for all cases. Unfortunately, there are cases
+			# where the CDX API only returns results if the query specifies a domain and at least
+			# one path component. We'll perform this query first (if this component exists) since
+			# it should be faster than the subdomain search.
+			#
+			# E.g. Only the last query yields results.
+			# - https://web.archive.org/cdx/search/cdx?url=big.or.jp&matchType=domain&filter=statuscode:200&filter=original:(?i).*\.aif($|\?.*)&fl=original,timestamp,statuscode&collapse=urlkey
+			# - https://web.archive.org/cdx/search/cdx?url=big.or.jp&matchType=prefix&filter=statuscode:200&filter=original:(?i).*\.aif($|\?.*)&fl=original,timestamp,statuscode&collapse=urlkey
+			# - https://web.archive.org/cdx/search/cdx?url=big.or.jp/~frog/&matchType=prefix&filter=statuscode:200&filter=original:(?i).*\.aif($|\?.*)&fl=original,timestamp,statuscode&collapse=urlkey
+			if first_path_component is not None:
+				prefix_cdx = Cdx(url=extract.registered_domain + first_path_component, match_type='prefix', filters=['statuscode:200', fr'original:(?i).*{path}($|\?.*)'])
+			else:
+				prefix_cdx = None
+
 			if parts.query or parts.fragment:
-				# For websites with a lot of captures (e.g. YouTube), the CDX query above won't return
-				# any results. In some cases, a URL with a query string points to the same resource as
-				# one without it (e.g. cache busting). We'll try to address the previous annoying issue
-				# by checking if the same URL without the query or fragment was archived.
-				#
-				# E.g. https://web.archive.org/cdx/search/cdx?url=http://www.youtube.com/player2.swf&filter=statuscode:200&fl=original,timestamp,statuscode&collapse=urlkey
 				# E.g. "http://www.example.com/path/file.ext?key=value#top" -> "http://www.example.com/path/file.ext".
 				new_parts = parts._replace(params='', query='', fragment='')
 				url_without_query = urlunparse(new_parts)
+
+				# For websites with a lot of captures (e.g. YouTube), the CDX query above won't return
+				# any results. In some cases, a URL with a query string points to the same resource as
+				# one without it (e.g. cache busting). We'll try to address this annoying issue by
+				# checking if the same URL without the query or fragment was archived.
+				#
+				# E.g. https://web.archive.org/cdx/search/cdx?url=http://www.youtube.com/player2.swf&filter=statuscode:200&fl=original,timestamp,statuscode&collapse=urlkey
 				no_query_cdx = Cdx(url=url_without_query, filters=['statuscode:200'])
 			else:
 				no_query_cdx = None
 
-			cdx_list = list(filter(None, [subdomain_cdx, no_query_cdx]))
+			cdx_list = list(filter(None, [prefix_cdx, subdomain_cdx, no_query_cdx]))
 			for i, cdx in enumerate(cdx_list):
 				
 				cdx_mark = f'CDX {i+1}/{len(cdx_list)} {wayback_response.status_code}'

@@ -221,7 +221,7 @@ if __name__ == '__main__':
 
 								timestamp = timedelta(seconds=round(current_duration))
 								formatted_timestamp = str(timestamp).zfill(8)
-								recording_identifiers = [formatted_timestamp, f'"snapshot.DisplayTitle"', f'({snapshot.ShortDate})', '\N{jigsaw puzzle piece}' if snapshot.IsStandaloneMedia or snapshot.UsesPlugins else None]
+								recording_identifiers = [formatted_timestamp, f'"{snapshot.DisplayTitle}"', f'({snapshot.ShortDate})', '\N{jigsaw puzzle piece}' if snapshot.IsStandaloneMedia or snapshot.UsesPlugins else None]
 								timestamp_line = ' '.join(filter(None, recording_identifiers))
 								timestamps_file.write(f'{timestamp_line}\n')
 								
@@ -292,5 +292,3 @@ if __name__ == '__main__':
 		except sqlite3.Error as error:
 			print(f'Failed to compile the recorded snapshots with the error: {repr(error)}')
 			db.rollback()
-
-	print('Finished running.')

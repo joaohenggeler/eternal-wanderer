@@ -9,7 +9,7 @@
   --secondary-color: #000000;
 }
 
-a {
+/*a {
   color: var(--link-color);
 
   &:focus {
@@ -21,7 +21,7 @@ a {
   }
 }
 
-/*.instruction {
+.instruction {
   font: var(--font);
   color: var(--secondary-color);
   font-weight: normal;

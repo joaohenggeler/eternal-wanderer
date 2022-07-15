@@ -77,5 +77,3 @@ if __name__ == '__main__':
 
 		except sqlite3.Error as error:
 			print(f'Failed to retrieve the recordings with the error: {repr(error)}')
-
-	print('Finished running.')

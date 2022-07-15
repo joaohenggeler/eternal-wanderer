@@ -4,14 +4,13 @@
 	A module that defines any general purpose functions used by all scripts, including loading configuration files,
 	connecting to the database, and interfacing with Firefox.
 
-	@TODO: See if it's possible to choose the Japanese dictionary through a config option.
-	@TODO: Overwrite previously scraped words from a page to fix any tokenization errors/changes.
-	@TODO: Cycle through Flash Player.
-	@TODO: Remove body color from 98.css and 7.css
-	@TODO: Refactor classes in the recorder script to use the global config directly.
+	@TODO: Fix recording snapshots like: https://web.archive.org/web/20060719082015if_/http://www.miniclip.com:80/games/real-space-2/en/
+	@TODO: Fix  is_current_url_valid_wayback_machine_page() for: https://web.archive.org/web/20001018223506if_/http://www.geocities.com:80/~woodro1/jukebox.html
+	@TODO: Improve CDX marker in the mitmproxy script
 
 	@TODO: Add Mastodon support
 	@TODO: Make the stats.py script to print statistics
+	@TODO: Add text-to-speech support
 	
 	@TODO: Docs
 """
@@ -29,6 +28,7 @@ import tempfile
 import time
 import warnings
 import winreg
+from base64 import b64encode
 from collections import namedtuple
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -98,6 +98,7 @@ class CommonConfig():
 	plugins_path: str
 	use_master_plugin_registry: bool
 	plugins: Dict[str, bool]
+	java_arguments: List[str]
 	show_java_console: bool
 	show_cosmo_player_console: bool
 
@@ -133,6 +134,41 @@ class CommonConfig():
 	save_api_memory_storage: MemoryStorage
 	save_api_rate_limiter: MovingWindowRateLimiter
 	save_api_requests_per_second: RateLimitItemPerSecond
+
+	default_options: dict
+
+	# Constants.
+	MUTABLE_OPTIONS = [
+		'page_cache_wait',
+		'standalone_media_cache_wait',
+		
+		'viewport_scroll_percentage',
+		'base_wait_after_load',
+		'wait_after_load_per_plugin_instance',
+		'base_wait_per_scroll',
+		'wait_after_scroll_per_plugin_instance',
+		'base_standalone_media_wait_after_load',
+		
+		'standalone_media_fallback_duration',
+		'standalone_media_width', 
+		'standalone_media_height',
+		'standalone_media_background_color',
+		
+		'reload_plugin_media_before_recording', 
+		'base_plugin_crash_timeout', 
+		
+		'enable_plugin_input_repeater', 
+		'plugin_input_repeater_initial_wait',
+		'plugin_input_repeater_wait_per_cycle',
+		'min_plugin_input_repeater_window_size',
+		'plugin_input_repeater_keystrokes',
+		
+		'enable_cosmo_player_viewpoint_cycler',
+		'cosmo_player_viewpoint_wait_per_cycle',
+
+		'min_video_duration',
+		'max_video_duration',
+	]
 
 	def __init__(self):
 
@@ -172,6 +208,8 @@ class CommonConfig():
 		self.save_api_rate_limiter = MovingWindowRateLimiter(self.save_api_memory_storage)
 		self.save_api_requests_per_second = RateLimitItemPerSecond(self.save_api_rate_limit_amount, self.save_api_rate_limit_multiple)
 
+		self.default_options = {}
+
 		def parse_domain_list(domain_list: List[str]) -> List[List[str]]:
 			""" Transforms a list of domain patterns into a list of each pattern's components. """
 
@@ -201,6 +239,24 @@ class CommonConfig():
 	def load_subconfig(self, name: str) -> None:
 		""" Loads a specific JSON object from the configuration file. """
 		self.__dict__.update(self.json_config[name])
+
+		# For apply_snapshot_options().
+		for option in CommonConfig.MUTABLE_OPTIONS:
+			if hasattr(self, option):
+				self.default_options[option] = getattr(self, option)
+
+	def apply_snapshot_options(self, snapshot: 'Snapshot') -> None:
+		""" Applies custom options specific to a snapshot to the current configuration. This should only be used by the recorder and publisher scripts. """
+
+		for option in CommonConfig.MUTABLE_OPTIONS:
+			if hasattr(self, option):
+				if option in snapshot.Options:
+					old_value = getattr(self, option)
+					new_value = snapshot.Options[option]
+					log.info(f'Changing the option "{option}" from {old_value} to {new_value} for the current snapshot.')
+					setattr(self, option, new_value)
+				else:
+					setattr(self, option, self.default_options[option])
 
 	def get_recording_subdirectory_path(self, id: int) -> str:
 		""" Retrieves the absolute path of a snapshot recording given its ID. """
@@ -322,16 +378,16 @@ class Database():
 								(
 									Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 									ParentId INTEGER,
-									State INTEGER NOT NULL,
 									Depth INTEGER NOT NULL,
+									State INTEGER NOT NULL,
 									Priority INTEGER NOT NULL DEFAULT {Snapshot.NO_PRIORITY},
 									IsExcluded BOOLEAN NOT NULL,
 									IsStandaloneMedia BOOLEAN,
-									FileExtension TEXT,
-									UsesPlugins BOOLEAN,
-									PageTitle TEXT,
+									MediaExtension TEXT,
 									MediaTitle TEXT,
 									MediaAuthor TEXT,
+									UsesPlugins BOOLEAN,
+									PageTitle TEXT,
 									Url TEXT NOT NULL,
 									Timestamp VARCHAR(14) NOT NULL,
 									GuessedEncoding TEXT,
@@ -476,10 +532,9 @@ class Database():
 		self.connection.commit()
 
 	def disconnect(self) -> None:
-		""" Commits any unsaved changes and disconnects from the database. """
+		""" Disconnects from the database. """
 
 		try:
-			self.connection.commit()
 			self.connection.close()
 		except sqlite3.Error as error:
 			log.error(f'Failed to close the database with the error: {repr(error)}')
@@ -496,16 +551,16 @@ class Snapshot():
 	# From the database.
 	Id: int
 	ParentId: Optional[int]
-	State: int
 	Depth: int
+	State: int
 	Priority: int
 	IsExcluded: bool
 	IsStandaloneMedia: Optional[bool]
-	FileExtension: Optional[str]
-	UsesPlugins: Optional[bool]
-	PageTitle: Optional[str]
+	MediaExtension: Optional[str]
 	MediaTitle: Optional[str]
 	MediaAuthor: Optional[str]
+	UsesPlugins: Optional[bool]
+	PageTitle: Optional[str]
 	Url: str
 	Timestamp: str
 	GuessedEncoding: Optional[str]
@@ -564,7 +619,7 @@ class Snapshot():
 
 		if self.Options is not None:
 			try:
-				self.Options = json.load(self.Options)
+				self.Options = json.loads(self.Options)
 			except json.JSONDecodeError as error:
 				log.error(f'Failed to load the options for the snapshot {self} with the error: {repr(error)}')
 				self.Options = {}
@@ -948,8 +1003,6 @@ class Browser():
 		with open(java_security_path, 'w', encoding='utf-8') as file:
 			file.write(content)
 
-		escaped_java_security_path = java_security_path.replace('\\', '/')
-
 		# Override any security properties from other locally installed Java versions in order to allow applets
 		# to run even if they use a disabled cryptographic algorithm.
 		#
@@ -959,12 +1012,17 @@ class Browser():
 		# This would allow Japanese applets to display their content correctly. Although the code to do this still
 		# exists in the "Improve Java Applets" Greasemonkey user script, it has since been commented out. This is
 		# because, in practice, the applets wouldn't change their encoding or locale even when the "java_arguments"
-		# and "java-vm-args" parameters were set. We'll just set them globally since that seems to work out, though
-		# it means that we only support Latin and Japanese text. Note that changing this to a different language may
-		# require you to add the localized security prompt's title to the "close_java_popups" AutoIt script.
-		os.environ['deployment.expiration.check.enabled'] = 'false'
-		os.environ['JAVA_TOOL_OPTIONS'] = f'-Djava.security.properties=="file:///{escaped_java_security_path}" -Xverify:none -Dfile.encoding=UTF8 -Duser.language=ja -Duser.country=JP'
+		# and "java-vm-args" parameters were set.
+		#
+		# We'll just set them globally since that seems to work out, though it means that we only support Latin and
+		# Japanese text (see the java_arguments option in the configuration file). Note that changing this to a
+		# different language may require you to add the localized security prompt's title to the "close_java_popups"
+		# AutoIt script.
+		escaped_java_security_path = java_security_path.replace('\\', '/')
+		REQUIRED_JAVA_ARGUMENTS = [f'-Djava.security.properties=="file:///{escaped_java_security_path}"', '-Xverify:none']
+		os.environ['JAVA_TOOL_OPTIONS'] = ' '.join(REQUIRED_JAVA_ARGUMENTS + config.java_arguments)
 		os.environ['_JAVA_OPTIONS'] = ''
+		os.environ['deployment.expiration.check.enabled'] = 'false'
 
 		self.delete_user_level_java_properties()
 		self.delete_java_plugin_cache()
@@ -1085,6 +1143,11 @@ class Browser():
 			log.info(f'Deleting the temporary file "{path}".')
 			delete_file(path)
 
+		temporary_search_path = os.path.join(config.recordings_path, '**', '*.raw.mkv')
+		for path in iglob(temporary_search_path, recursive=True):
+			log.info(f'Deleting the temporary raw recording file "{path}".')
+			delete_file(path)
+
 		if self.use_plugins:
 			self.delete_user_level_java_properties()
 			self.delete_java_plugin_cache()
@@ -1123,6 +1186,51 @@ class Browser():
 
 		except TimeoutException:
 			log.warning(f'Timed out after waiting {config.page_load_timeout} seconds for the page to load: "{wayback_url}".')
+
+	def go_to_blank_page_with_text(self, *args) -> None:
+		""" Navigates to an autogenerated page where each argument is displayed in a different line. """
+		
+		text = '<br>'.join(args)
+		html = f'''
+				<!DOCTYPE html>
+				<html lang="en-US">
+
+				<head>
+					<meta charset="utf-8">
+					<title>Eternal Wanderer</title>
+
+					<style>
+						.center {{
+							margin: 0;
+							padding: 0;
+							text-align: center;
+							position: absolute;
+							top: 50%;
+							left: 50%;
+							transform: translateX(-50%) translateY(-50%);
+						}}
+
+						.text {{
+							font-size: 30px;
+							overflow: hidden;
+							white-space: nowrap;
+						}}
+					</style>
+				</head>
+
+				<body>
+					<div class="center">
+						<div class="text">
+							{text}
+						</div>
+					</div>
+				</body>
+
+				</html>
+				'''
+
+		base64_html = b64encode(html.encode('utf-8')).decode()
+		self.driver.get(f'data:text/html;base64,{base64_html}')
 
 	def traverse_frames(self, format_wayback_urls: bool = False, skip_missing: bool = False) -> Iterator[str]:
 		""" Traverses recursively through the current web page's frames. This function yields each frame's source URL.
@@ -1239,6 +1347,12 @@ class Browser():
 		""" Focuses and brings the Firefox window to front. Does nothing if Firefox is running in headless mode. """
 		if self.window is not None:
 			self.window.set_focus()
+
+	def count_plugin_instances(self) -> Optional[int]:
+		""" Counts the total number of running plugin instances in every Firefox tab and window. For example,
+		if a page has two Flash movies and one Java applet, this function would count three instances (assuming
+		Firefox had the required plugins installed). Returns None if Firefox is running in headless mode. """
+		return len(self.window.children(class_name='GeckoPluginWindow')) if self.window is not None else None
 
 	def close_all_windows_except(self, window_handle) -> None:
 		""" Closes every Firefox tab or window except a specific one. """
@@ -1501,11 +1615,15 @@ class TemporaryRegistry():
 
 ####################################################################################################
 
+def clamp(value: float, min_value: float, max_value: float) -> float:
+	""" Clamps a number between a minimum and maximum value. """
+	return max(min_value, min(value, max_value))
+
 def get_current_timestamp() -> str:
 	""" Retrieves the current timestamp in UTC. """
 	return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
-def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> Tuple[CDXSnapshot, bool, str]:
+def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> Tuple[CDXSnapshot, bool, Optional[str]]:
 	""" Finds the best Wayback Machine snapshot given its timestamp and URL. By best snapshot we mean
 	locating the nearest one and then finding the oldest capture where the content is identical. """
 
@@ -1513,6 +1631,7 @@ def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> Tuple[CDXSna
 	cdx = Cdx(url=url, filters=['statuscode:200'])
 	snapshot = cdx.near(wayback_machine_timestamp=timestamp)
 
+	config.wait_for_cdx_api_rate_limit()
 	cdx.filters.append(f'digest:{snapshot.digest}')
 	snapshot = cdx.oldest()
 
@@ -1520,17 +1639,22 @@ def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> Tuple[CDXSna
 	# E.g. https://web.archive.org/web/20011201170113if_/http://www.yahoo.co.jp/bin/top3
 	is_standalone_media = snapshot.mimetype not in ['text/html', 'text/plain']
 
-	parts = urlparse(snapshot.original)
-	path = parts.path.lower()
+	media_extension: Optional[str]
 
-	# For compressed VRML worlds that would otherwise be stored as "gz".
-	if path.endswith('.wrl.gz'):
-		file_extension = 'wrz'
+	if is_standalone_media:
+		parts = urlparse(snapshot.original)
+		path = parts.path.lower()
+
+		# For compressed VRML worlds that would otherwise be stored as "gz".
+		if path.endswith('.wrl.gz'):
+			media_extension = 'wrz'
+		else:
+			_, media_extension = os.path.splitext(path)
+			media_extension = media_extension.strip('.')
 	else:
-		_, file_extension = os.path.splitext(path)
-		file_extension = file_extension.strip('.')
+		media_extension = None
 
-	return snapshot, is_standalone_media, file_extension
+	return snapshot, is_standalone_media, media_extension
 
 def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Tuple[Optional[str], Optional[str]]:
 	""" Finds the guessed character encoding and last modified time of a Wayback Machine snapshot. Note that not every snapshot has this information. """
@@ -1542,7 +1666,7 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Tuple[Optional
 		wayback_url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
 
 	guessed_encoding = None
-	last_modified = None
+	last_modified_time = None
 
 	try:
 		response = requests.head(wayback_url)
@@ -1552,19 +1676,18 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Tuple[Optional
 		if guessed_encoding is not None:
 			guessed_encoding = guessed_encoding.lower()
 
-		last_modified = response.headers.get('x-archive-orig-last-modified')
-		if last_modified is not None:
-			last_modified_datetime = parsedate_to_datetime(last_modified)
-			last_modified = last_modified_datetime.strftime('%Y%m%d%H%M%S')
+		last_modified_header = response.headers.get('x-archive-orig-last-modified')
+		if last_modified_header is not None:
+			last_modified_time = parsedate_to_datetime(last_modified_header).strftime('%Y%m%d%H%M%S')
 
 	except requests.RequestException as error:
 		log.error(f'Failed to find any extra information from the snapshot "{wayback_url}" with the error: {repr(error)}')
 	except ValueError as error:
 		# E.g. https://web.archive.org/web/20010926042147if_/http://geocities.yahoo.co.jp:80/
-		# Whose last modified time is "Mon, 24 Sep 2001 04:2146 GMT".
-		log.error(f'Failed to parse the last modified time "{last_modified}" of the snapshot "{wayback_url}" with the error: {repr(error)}')
+		# Where the last modified time is "Mon, 24 Sep 2001 04:2146 GMT".
+		log.error(f'Failed to parse the last modified time "{last_modified_header}" of the snapshot "{wayback_url}" with the error: {repr(error)}')
 	
-	return guessed_encoding, last_modified
+	return guessed_encoding, last_modified_time
 
 WaybackParts = namedtuple('WaybackParts', ['Timestamp', 'Modifier', 'Url'])
 WAYBACK_MACHINE_SNAPSHOT_URL_REGEX = re.compile(r'https?://web\.archive\.org/web/(?P<timestamp>\d+)(?P<modifier>[a-z]+_)?/(?P<url>.+)', re.IGNORECASE)
@@ -1635,7 +1758,7 @@ def was_exit_command_entered() -> bool:
 		if 'pause' in command:
 			command = input('Paused: ')
 
-		if 'exit' in command or 'quit' in command or 'stop' in command:
+		if 'exit' in command:
 			result = True
 
 	return result

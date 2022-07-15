@@ -54,6 +54,14 @@
 			"extensions.greasemonkey.showGrantsWarning": false,
 			"extensions.greasemonkey.stats.prompted": true,
 			"extensions.greasemonkey.sync.enabled": false,
+			"xpinstall.signatures.required": false,
+
+			"gfx.canvas.azure.backends": "direct2d1.1,cairo",
+			"gfx.content.azure.backends": "direct2d1.1,cairo",
+			"gfx.font_rendering.cleartype.always_use_for_content": true,
+			"gfx.font_rendering.cleartype_params.rendering_mode": 3,
+
+			"intl.charset.detector": "ja_parallel_state_machine",
 
 			"plugin.default.state": 2,
 			"plugin.expose_full_path": true,
@@ -208,6 +216,7 @@
 			"npvlc.dll": true
 		},
 		
+		"java_arguments": ["-Dfile.encoding=UTF8", "-Duser.language=ja", "-Duser.country=JP"],
 		"show_java_console": false,
 		"show_cosmo_player_console": false,
 
@@ -222,7 +231,7 @@
 		},
 		
 		"recordings_path": "Data/Recordings",
-		"max_recordings_per_directory": 1000,
+		"max_recordings_per_directory": 5000,
 		"compilations_path": "Data/Compilations",
 
 		"wayback_machine_rate_limit_amount": 25,
@@ -248,23 +257,58 @@
 
 		"initial_snapshots":
 		[
-			{"url": "http://www.geocities.com/", "timestamp": "19961022173245"},
-			{"url": "http://www.geocities.co.jp/", "timestamp": "19980123230306"},
-			{"url": "http://www.yahoo.com/", "timestamp": "19961017235908"},
-			{"url": "http://www.yahoo.co.jp/", "timestamp": "19961120065342"},
-			{"url": "http://www.angelfire.com/", "timestamp": "19961028070227"},
+			{"url": "http://andromeda.einet.net/galaxy.html", "timestamp": "19971210061038"},
+			{"url": "http://apollo.maths.tcd.ie/PA", "timestamp": "19980128193132"},
+			{"url": "http://dejanews.com/", "timestamp": "19961219174859"},
+			{"url": "http://hotbot.com/", "timestamp": "19971210171157"},
+			{"url": "http://multicrawl.com/", "timestamp": "19991008114903"},
 			{"url": "http://tripod.lycos.com/", "timestamp": "20000229091928"},
-			{"url": "http://www.fortunecity.com/", "timestamp": "19961227145545"},
-			{"url": "http://www.developer.com/", "timestamp": "19970531223941"},
-			{"url": "http://www.gamelan.com/", "timestamp": "19961220054054"},
+			{"url": "http://wagner.cs.colostate.edu:1969/", "timestamp": "19961216233159"},
+			{"url": "http://worldculture.com/", "timestamp": "19961227131245"},
+			{"url": "http://www.1001sites.com/", "timestamp": "19971210193755"},
+			{"url": "http://www.aldea.com/guides/ag/attframes2.html", "timestamp": "19980504131926"},
+			{"url": "http://www.aliweb.com/", "timestamp": "19970712010057"},
+			{"url": "http://www.altavista.com/", "timestamp": "19961022174810"},
+			{"url": "http://www.angelfire.com/", "timestamp": "19961028070227"},
 			{"url": "http://www.aol.com/", "timestamp": "19961220155557"},
-			{"url": "http://www.cnet.com/", "timestamp": "19961022174919"}
+			{"url": "http://www.best.com/~mentorms/eureka.htm", "timestamp": "19961121230835"},
+			{"url": "http://www.braintrack.com/", "timestamp": "19970401021042"},
+			{"url": "http://www.cnet.com/", "timestamp": "19961022174919"},
+			{"url": "http://www.developer.com/", "timestamp": "19970531223941"},
+			{"url": "http://www.ebig.com/", "timestamp": "19980208095715"},
+			{"url": "http://www.euroseek.net/", "timestamp": "19981203094704"},
+			{"url": "http://www.excite.com/", "timestamp": "19961022175004"},
+			{"url": "http://www.fortunecity.com/", "timestamp": "19961227145545"},
+			{"url": "http://www.gamelan.com/", "timestamp": "19961220054054"},
+			{"url": "http://www.geocities.co.jp/", "timestamp": "19980123230306"},
+			{"url": "http://www.geocities.co.jp/neighborhoods/", "timestamp": "19980123230314"},
+			{"url": "http://www.geocities.com/", "timestamp": "19961022173245"},
+			{"url": "http://www.geocities.com/neighborhoods/", "timestamp": "19980123230346"},
+			{"url": "http://www.infohiway.com/", "timestamp": "19961223174808"},
+			{"url": "http://www.infoseek.com/", "timestamp": "19960512212113"},
+			{"url": "http://www.infospace.com/", "timestamp": "19961106224011"},
+			{"url": "http://www.internationalist.com/", "timestamp": "19961107034932"},
+			{"url": "http://www.isleuth.com/", "timestamp": "19961107121104"},
+			{"url": "http://www.lycos.com/", "timestamp": "19961022175214"},
+			{"url": "http://www.mckinley.com/", "timestamp": "19961020022429"},
+			{"url": "http://www.metacrawler.com/", "timestamp": "19961111000644"},
+			{"url": "http://www.mit.edu:8001/people/cdemello/univ.html", "timestamp": "19970502205854"},
+			{"url": "http://www.opentext.com/", "timestamp": "19961113031916"},
+			{"url": "http://www.snap.com/", "timestamp": "19980523170709"},
+			{"url": "http://www.stpt.com/", "timestamp": "19961022175535"},
+			{"url": "http://www.suite101.com/", "timestamp": "19970416042634"},
+			{"url": "http://www.w3.org/pub/DataSources/bySubject/Overview.html", "timestamp": "19961024044537"},
+			{"url": "http://www.w3.org/pub/DataSources/WWW/Servers.html", "timestamp": "19961024032952"},
+			{"url": "http://www.webcrawler.com/", "timestamp": "19961023234707"},
+			{"url": "http://www.woyaa.com/", "timestamp": "19971212033952"},
+			{"url": "http://www.yahoo.co.jp/", "timestamp": "19961120065342"},
+			{"url": "http://www.yahoo.com/", "timestamp": "19961017235908"}
 		],
 
 		"min_year": null,
 		"max_year": 2010,
 		"max_depth": null,
-		"max_required_depth": 2,
+		"max_required_depth": null,
 
 		"standalone_media_points": 750,
 
@@ -309,8 +353,8 @@
 
 	"record":
 	{
-		"scheduler": {"minute": "*/10"},
-		"num_snapshots_per_scheduled_batch": 3,
+		"scheduler": {"minute": "*/30"},
+		"num_snapshots_per_scheduled_batch": 5,
 
 		"ranking_constant": 4000,
 		"min_year": null,
@@ -318,7 +362,7 @@
 		"record_sensitive_snapshots": true,
 		"min_publish_days_for_new_recording": 365,
 
-		"allowed_standalone_media_file_extensions":
+		"allowed_standalone_media_extensions":
 		[
 			"spl", "swf",
 			"dcr", "dir", "dxr",
@@ -345,7 +389,7 @@
 			"xspf"
 		],
 
-		"nondownloadable_standalone_media_file_extensions":
+		"nondownloadable_standalone_media_extensions":
 		[
 			"spl", "swf",
 			"dcr", "dir", "dxr",
@@ -355,7 +399,7 @@
 
 		"use_proxy": true,
 		"proxy_port": null,
-		"proxy_queue_timeout": 20,
+		"proxy_queue_timeout": 30,
 		"proxy_total_timeout": 600,
 		"block_proxy_requests_outside_archive_org": true,
 		"convert_realaudio_metadata_proxy_snapshots": true,
@@ -365,21 +409,17 @@
 		"max_consecutive_extra_missing_proxy_snapshot_tries": 10,
 		"max_total_extra_missing_proxy_snapshot_tries": 150,
 
-		"viewport_scroll_percentage": 0.85,
 		"page_cache_wait": 20,
 		"standalone_media_cache_wait": 40,
 		
+		"viewport_scroll_percentage": 0.85,
 		"base_wait_after_load": 10,
-		"extra_wait_after_load": 5,
-
+		"wait_after_load_per_plugin_instance": 15,
 		"base_wait_per_scroll": 10,
-		"extra_wait_per_scroll": 4,
+		"wait_after_scroll_per_plugin_instance": 10,
+		"base_standalone_media_wait_after_load": 2,
 
-		"max_wait_after_load_video_percentage": 0.20,
-		"points_per_extra_wait": 1000,
-		"extra_standalone_media_wait_after_load": 2,
-
-		"standalone_media_fallback_duration": 40,
+		"standalone_media_fallback_duration": 45,
 		"standalone_media_width": "75%",
 		"standalone_media_height": "75%",
 		"standalone_media_background_color": "#000000",
@@ -387,6 +427,15 @@
 		"fullscreen_browser": true,
 		"reload_plugin_media_before_recording": true,
 		"base_plugin_crash_timeout": 60,
+		
+		"enable_plugin_input_repeater": true,
+		"plugin_input_repeater_initial_wait": 15,
+		"plugin_input_repeater_wait_per_cycle": 6,
+		"min_plugin_input_repeater_window_size": 150,
+		"plugin_input_repeater_keystrokes": "{TAB}{SPACE}",
+		"plugin_input_repeater_debug_highlight": false,
+
+		"enable_cosmo_player_viewpoint_cycler": true,
 		"cosmo_player_viewpoint_wait_per_cycle": 8,
 
 		"min_video_duration": 2,
@@ -420,8 +469,7 @@
 			"color_range": 2,
 			"c:a": "flac",
 			"ar": "48K",
-			"ac": 2,
-			"fs": "2G"
+			"ac": 2
 		},
 
 		"ffmpeg_archive_output":
@@ -460,8 +508,8 @@
 	"publish":
 	{
 		"scheduler": {"minute": "*/3"},
-		"num_snapshots_per_scheduled_batch": 1,
-		"require_approval": false,
+		"num_recordings_per_scheduled_batch": 1,
+		"require_approval": true,
 
 		"twitter_api_key": "<API Key>",
 		"twitter_api_secret": "<API Secret>",

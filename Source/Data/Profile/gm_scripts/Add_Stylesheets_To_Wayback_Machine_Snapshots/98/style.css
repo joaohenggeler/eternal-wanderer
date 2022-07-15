@@ -89,7 +89,7 @@
 body {
   font-family: Times New Roman;
   font-size: 16px;
-  color: #222222;
+  /*color: #222222;*/
 }
 
 button,
@@ -627,7 +627,7 @@ select:active {
   background-image: svg-load("./icon/button-down-active.svg");
 }
 
-a {
+/*a {
   color: var(--link-blue);
 }
 
@@ -635,7 +635,7 @@ a:focus {
   outline: 1px dotted var(--link-blue);
 }
 
-/*ul.tree-view {
+ul.tree-view {
   display: block;
   background: var(--button-highlight);
   box-shadow: var(--border-field);

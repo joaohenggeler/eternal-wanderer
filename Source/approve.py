@@ -30,11 +30,19 @@ if __name__ == '__main__':
 		
 		try:
 			cursor = db.execute('''
-								SELECT S.*, R.*, R.Id AS RecordingId
+								SELECT 	S.*,
+										SI.*,
+										R.*,
+										R.Id AS RecordingId,
+										IFNULL((SELECT COUNT(*) FROM SavedSnapshotUrl SSU WHERE SSU.RecordingId = R.Id AND NOT SSU.Failed GROUP BY SSU.RecordingId), 0) AS SavedRecordingUrls,
+										IFNULL((SELECT COUNT(*) FROM SavedSnapshotUrl SSU WHERE SSU.RecordingId = R.Id GROUP BY SSU.RecordingId), 0) AS TotalRecordingUrls,
+										IFNULL((SELECT COUNT(*) FROM SavedSnapshotUrl SSU WHERE SSU.SnapshotId = S.Id AND NOT SSU.Failed GROUP BY SSU.SnapshotId), 0) AS SavedSnapshotUrls,
+										IFNULL((SELECT COUNT(*) FROM SavedSnapshotUrl SSU WHERE SSU.SnapshotId = S.Id GROUP BY SSU.SnapshotId), 0) AS TotalSnapshotUrls
 								FROM Snapshot S
+								INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 								INNER JOIN Recording R ON S.Id = R.SnapshotId
 								WHERE S.State = :recorded_state AND NOT R.IsProcessed
-								ORDER BY R.CreationTime
+								ORDER BY S.Priority DESC, R.CreationTime
 								LIMIT :max_recordings;
 								''', {'recorded_state': Snapshot.RECORDED, 'max_recordings': args.max_recordings})
 
@@ -57,10 +65,24 @@ if __name__ == '__main__':
 				recording = Recording(**row, Id=row['RecordingId'])
 
 				try:
-					print(f'Evaluating the recording "{recording.UploadFilename}" for snapshot #{snapshot.Id} {snapshot} entitled "{snapshot.DisplayTitle}" (metadata = {snapshot.DisplayMetadata}).')
+					print()
+					print('Approve the following recording:')
+					print(f'- Snapshot: #{snapshot.Id} {snapshot}')
+					print(f'- Title: {snapshot.DisplayTitle}')
+					print(f'- Metadata: {snapshot.DisplayMetadata}')
+					print(f'- Sensitive: {snapshot.IsSensitive} {"(overridden)" if snapshot.IsSensitiveOverride is not None else ""}')
+					print(f'- Uses Plugins: {snapshot.UsesPlugins}')
+					print(f'- Points: {snapshot.Points}')
+					print(f'- Saved URLs (Recording): {row["SavedRecordingUrls"]} of {row["TotalRecordingUrls"]}')
+					print(f'- Saved URLs (Snapshot): {row["SavedSnapshotUrls"]} of {row["TotalSnapshotUrls"]}')
+					print(f'- Filename: {recording.UploadFilename}')
+					print()
+
+					input('Press enter to watch the recording.')
 					os.startfile(recording.UploadFilePath)
+				
 				except FileNotFoundError:
-					print('The recording file does not exist.')
+					print(f'The recording file does not exist.')
 					num_missing += 1
 					continue
 
@@ -71,18 +93,21 @@ if __name__ == '__main__':
 						continue
 					
 					elif verdict[0] == 'y':
+						print('[APPROVED]')
 						state = Snapshot.APPROVED
 						priority = snapshot.Priority
 						is_processed = recording.IsProcessed
 						num_approved += 1
 
 					elif verdict[0] == 'n':
+						print('[REJECTED]')
 						state = Snapshot.REJECTED
 						priority = snapshot.NO_PRIORITY
 						is_processed = True
 						num_rejected += 1
 
 					elif verdict[0] == 'r':
+						print('[RECORD AGAIN]')
 						state = Snapshot.SCOUTED
 						priority = max(snapshot.Priority, Snapshot.RECORD_PRIORITY)
 						is_processed = True
@@ -95,16 +120,19 @@ if __name__ == '__main__':
 					is_sensitive_override: Optional[bool]
 
 					while True:
-						sensitive = input('Sensitive [(y)es, (n)o, (s)kip]: ').lower()
+						sensitive = input('Sensitive Override [(y)es, (n)o, (s)kip]: ').lower()
 
 						if not sensitive:
 							continue
 
 						elif sensitive[0] == 'y':
+							print('[YES]')
 							is_sensitive_override = True
 						elif sensitive[0] == 'n':
+							print('[NO]')
 							is_sensitive_override = False
 						elif sensitive[0] == 's':
+							print('[SKIPPED]')
 							is_sensitive_override = snapshot.IsSensitiveOverride
 						else:
 							print(f'Invalid input "{sensitive}".')
@@ -115,6 +143,8 @@ if __name__ == '__main__':
 					snapshot_updates.append({'state': state, 'priority': priority, 'is_sensitive_override': is_sensitive_override, 'id': snapshot.Id})
 					recording_updates.append({'is_processed': is_processed, 'id': recording.Id})
 					break
+
+			print()
 
 			if total_snapshots > 0:
 
@@ -130,5 +160,3 @@ if __name__ == '__main__':
 		except sqlite3.Error as error:
 			print(f'Failed to approve the recorded snapshots with the error: {repr(error)}')
 			db.rollback()
-
-	print('Finished running.')

@@ -9,7 +9,9 @@
 import re
 import sqlite3
 import string
+import sys
 import time
+import unicodedata
 from argparse import ArgumentParser
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
@@ -57,7 +59,7 @@ if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Traverses web pages archived by the Wayback Machine (snapshots) and collects metadata from their content and from the CDX API. The scout script prioritizes pages that were manually added by the user through the configuration file as well as pages whose parent snapshot contains specific words and plugin media.')
 	parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to scout. Omit or set to %(default)s to run forever.')
-	parser.add_argument('-skip', action='store_true', help='Whether to skip the initial snapshots specified in the configuration file.')
+	parser.add_argument('-initial', action='store_true', help='Whether to enqueue the initial snapshots specified in the configuration file.')
 	args = parser.parse_args()
 
 	if config.tokenize_japanese_text:
@@ -66,7 +68,7 @@ if __name__ == '__main__':
 		japanese_tagger = fugashi.Tagger()
 		
 		for info in japanese_tagger.dictionary_info:
-			log.info(f'Found the following Japanese dictionary: {info}')
+			log.info(f'Found the Japanese dictionary: {info}')
 
 	####################################################################################################
 
@@ -88,13 +90,13 @@ if __name__ == '__main__':
 
 			try:
 				log.debug(f'Locating the snapshot at "{url}" near {timestamp}.')
-				best_snapshot, is_standalone_media, file_extension = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url)
+				best_snapshot, is_standalone_media, media_extension = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url)
 				guessed_encoding, last_modified_time = find_extra_wayback_machine_snapshot_info(best_snapshot.archive_url)
 
 				state = Snapshot.SCOUTED if is_standalone_media else Snapshot.QUEUED
 
-				result = {'parent_id': parent_id, 'state': state, 'depth': depth, 'is_excluded': False,
-						  'is_standalone_media': is_standalone_media, 'file_extension': file_extension,
+				result = {'parent_id': parent_id, 'depth': depth, 'state': state, 'is_excluded': False,
+						  'is_standalone_media': is_standalone_media, 'media_extension': media_extension,
 						  'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
 						  'guessed_encoding': guessed_encoding, 'last_modified_time': last_modified_time, 
 						  'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest}
@@ -102,8 +104,8 @@ if __name__ == '__main__':
 				pass
 			except BlockedSiteError:
 				log.warning(f'The snapshot at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
-				result = {'parent_id': parent_id, 'state': Snapshot.QUEUED, 'depth': depth, 'is_excluded': True,
-						  'is_standalone_media': None, 'file_extension': None, 'url': url, 'timestamp': timestamp,
+				result = {'parent_id': parent_id, 'depth': depth, 'state': Snapshot.QUEUED, 'is_excluded': True,
+						  'is_standalone_media': None, 'media_extension': None, 'url': url, 'timestamp': timestamp,
 						  'guessed_encoding': None, 'last_modified_time': None, 'url_key': None, 'digest': None}
 			except Exception as error:
 				log.error(f'Failed to find the snapshot at "{url}" near {timestamp} with the error: {repr(error)}')
@@ -130,7 +132,7 @@ if __name__ == '__main__':
 	# E.g. https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html
 	with Database() as db, Browser(headless=True, use_extensions=True, extension_filter=config.extension_filter, user_script_filter=config.user_script_filter) as (browser, driver):
 
-		if not args.skip:
+		if args.initial:
 			try:
 				log.info('Inserting the initial Wayback Machine snapshots.')
 
@@ -148,8 +150,8 @@ if __name__ == '__main__':
 						log.warning(f'Could not find the initial snapshot at "{url}" near {timestamp}.')
 
 				db.executemany(	'''
-								INSERT OR IGNORE INTO Snapshot (State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, GuessedEncoding, LastModifiedTime, UrlKey, Digest)
-								VALUES (:state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :guessed_encoding, :last_modified_time, :url_key, :digest);
+								INSERT OR IGNORE INTO Snapshot (State, Depth, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, GuessedEncoding, LastModifiedTime, UrlKey, Digest)
+								VALUES (:state, :depth, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :guessed_encoding, :last_modified_time, :url_key, :digest);
 								''', initial_snapshot_list)
 
 				db.commit()
@@ -164,6 +166,22 @@ if __name__ == '__main__':
 
 		try:
 			log.info('Updating the word and tag attributes.')
+
+			# Removing words that are no longer associated with any snapshot is handy when we change
+			# certain options (e.g. toggling Japanese text tokenization from one execution to another).
+			# This step is skipped for any words that were added via the configuration file.
+			cursor = db.execute('''
+								DELETE FROM Word
+								WHERE Id IN
+								(
+									SELECT W.Id
+									FROM Word W
+									LEFT JOIN SnapshotWord SW ON W.Id = SW.WordId
+									WHERE SW.WordId IS NULL AND NOT (W.Points <> 0 OR W.IsSensitive)
+								);
+								''')
+
+			log.info(f'Deleted {cursor.rowcount} words that were no longer associated with a snapshot.')
 
 			db.execute('UPDATE Word SET Points = 0, IsSensitive = FALSE;')
 
@@ -237,12 +255,13 @@ if __name__ == '__main__':
 			# https://web.archive.org/web/19990117005032if_/http://www.ce.washington.edu:80/~soroos/java/published/pool.html
 			# But this is *not* a redirect even though the URL values are different.
 
+			# The redirectCount only seems be greater than zero for some redirected snapshots (e.g. out of the previous examples,
+			# it's only one for the first case), but it didn't result in any false positives during testing so we'll check it too.
 			current_url = driver.current_url
-			redirected = current_url.lower() not in [snapshot.WaybackUrl.lower(), unquote(snapshot.WaybackUrl.lower())]
+			redirect_count = driver.execute_script('return window.performance.navigation.redirectCount;')
+			redirected = redirect_count > 0 or current_url.lower() not in [snapshot.WaybackUrl.lower(), unquote(snapshot.WaybackUrl.lower())]
 
-			if config.debug:
-				redirect_count = driver.execute_script('return window.performance.navigation.redirectCount;')
-				log.debug(f'The redirection test was {redirected} while the redirect count is {redirect_count}.')
+			log.debug(f'The redirection test yielded {redirected} with the redirect count at {redirect_count}.')
 
 			if redirected:
 				try:
@@ -264,8 +283,8 @@ if __name__ == '__main__':
 
 						if child_snapshot is not None:
 							db.execute(	'''
-										INSERT OR IGNORE INTO Snapshot (ParentId, State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, GuessedEncoding, LastModifiedTime, UrlKey, Digest)
-										VALUES (:parent_id, :state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :guessed_encoding, :last_modified_time, :url_key, :digest);
+										INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, GuessedEncoding, LastModifiedTime, UrlKey, Digest)
+										VALUES (:parent_id, :depth, :state, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :guessed_encoding, :last_modified_time, :url_key, :digest);
 										''', child_snapshot)
 						else:
 							log.warning(f'Could not find the redirected snapshot at "{url}" near {timestamp}.')
@@ -284,7 +303,19 @@ if __name__ == '__main__':
 			# going to ask the CDX API what the real URLs are. The purpose of this pattern is to
 			# minimize the amount of requests to this endpoint.
 			URL_REGEX = re.compile(r'https?://.+', re.IGNORECASE)
-			PAGE_TEXT_DELIMITER_REGEX = re.compile('|'.join([re.escape(delimiter) for delimiter in string.whitespace + string.punctuation.replace('-', '')]))
+			
+			page_text_delimiters = []
+			for i in range(sys.maxunicode + 1):
+				try:
+					char = chr(i)
+					is_letter = unicodedata.category(char).startswith('L')
+					if not is_letter:
+						page_text_delimiters.append(char)
+				except ValueError:
+					pass
+			
+			log.debug(f'Found {len(page_text_delimiters)} page text delimiters out of {sys.maxunicode} Unicode code points.')
+			PAGE_TEXT_DELIMITER_REGEX = re.compile('|'.join(re.escape(delimiter) for delimiter in page_text_delimiters))
 
 			num_iterations = 0
 			while True:
@@ -306,7 +337,8 @@ if __name__ == '__main__':
 										FROM Snapshot S
 										LEFT JOIN Snapshot PS ON S.ParentId = PS.Id
 										LEFT JOIN SnapshotInfo PSI ON PS.Id = PSI.Id
-										WHERE S.State = :queued_state
+										WHERE
+											S.State = :queued_state
 											AND NOT S.IsStandaloneMedia
 											AND NOT S.IsExcluded
 											AND (:min_year IS NULL OR OldestYear >= :min_year)
@@ -315,7 +347,6 @@ if __name__ == '__main__':
 											AND IS_URL_KEY_ALLOWED(S.UrlKey)
 										ORDER BY
 											S.Priority DESC,
-											(S.Depth = 0) DESC,
 											(:max_required_depth IS NULL OR S.Depth <= :max_required_depth) DESC,
 											IFNULL(PS.UsesPlugins, FALSE) DESC,
 											IFNULL(PSI.Points, 0) DESC,
@@ -491,8 +522,22 @@ if __name__ == '__main__':
 						
 						for text in filter(None, split_text):
 							
-							# E.g. https://web.archive.org/web/20050924203851if_/http://www.geocities.co.jp/cgi-bin/homestead/hood_addr?Colosseum2668
+							# Tokenizing Japanese text works best if Firefox can autodetect the correct character
+							# encoding for legacy pages that don't specify one. We'll do this by setting the
+							# "intl.charset.detector" preference to "ja_parallel_state_machine, which tells the
+							# browser to use a heuristic for these type of pages. Otherwise, we'd be storing
+							# garbage in the database. This also applies to retrieving the page's title.
+							#
+							# See:
+							# - https://www-archive.mozilla.org/projects/intl/chardet.html
+							# - https://udn.realityripple.com/docs/Web/Guide/Localizations_and_character_encodings
+							# - https://groups.google.com/g/mozilla.dev.platform/c/TCiODi3Fea4
+							#
+							# E.g.
+							# - Requires Detector: https://web.archive.org/web/19990424053506if_/http://geochat00.geocities.co.jp/
+							# - Does Not Require Detector: https://web.archive.org/web/19980123230614if_/http://www.geocities.co.jp:80/Milkyway/
 							if config.tokenize_japanese_text:
+								
 								# In order to avoid tokenizing non-Japanese text, we would need to determine
 								# if there's any Japanese text in a string. There were some solutions that
 								# used regex and Unicode blocks, but for the sake of consistency we'll use
@@ -502,7 +547,7 @@ if __name__ == '__main__':
 								# If we weren't able to split the text into two or more words, just store the
 								# entire string. Checking for one word is probably redundant, but let's do it
 								# anyways just to be sure that nothing was removed from the text.
-								if len(word_list) <= 1:
+								if len(word_list) < 2:
 									word_list = [text]
 							else:
 								word_list = [text]
@@ -532,7 +577,9 @@ if __name__ == '__main__':
 					# The main advantage of this modifier is that it excludes the tags inserted by the
 					# Wayback Machine.
 
-					uses_plugins = False
+					# Keep the previous plugin status for cases where we were only able to determine it
+					# while recording the snapshot (see the example below).
+					uses_plugins = bool(snapshot.UsesPlugins)
 					page_title = driver.title
 	
 					for raw_frame_url in raw_frame_url_list:
@@ -557,7 +604,8 @@ if __name__ == '__main__':
 						# This method for checking if a page uses plugins is pretty good, but it can miss a few pages that embed plugin media
 						# in an awkward way. E.g. https://web.archive.org/web/19961221002554if_/http://www.geocities.com:80/Hollywood/Hills/5988/
 						# Which does this: <input value="http://www.geocities.com/Hollywood/Hills/5988/random.mid" onfocus="this.focus();this.select();">
-						uses_plugins = uses_plugins or any(driver.find_elements_by_tag_name(tag) for tag in ['object', 'embed', 'applet', 'bgsound'])
+						# We're able to catch these edge cases in the recorder script.
+						uses_plugins = uses_plugins or any(driver.find_elements_by_tag_name(tag) for tag in ['object', 'embed', 'applet', 'app', 'bgsound'])
 
 					browser.close_all_windows_except(original_window)
 
@@ -585,8 +633,8 @@ if __name__ == '__main__':
 		
 				try:
 					db.executemany(	'''
-									INSERT OR IGNORE INTO Snapshot (ParentId, State, Depth, IsExcluded, IsStandaloneMedia, FileExtension, Url, Timestamp, GuessedEncoding, LastModifiedTime, UrlKey, Digest)
-									VALUES (:parent_id, :state, :depth, :is_excluded, :is_standalone_media, :file_extension, :url, :timestamp, :guessed_encoding, :last_modified_time, :url_key, :digest);
+									INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, GuessedEncoding, LastModifiedTime, UrlKey, Digest)
+									VALUES (:parent_id, :depth, :state, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :guessed_encoding, :last_modified_time, :url_key, :digest);
 									''', child_snapshot_list)
 
 					topology = [{'parent_id': child['parent_id'], 'url': child['url'], 'timestamp': child['timestamp']} for child in child_snapshot_list]
@@ -599,9 +647,11 @@ if __name__ == '__main__':
 						word_and_tag_values = [{'word': word, 'is_tag': is_tag} for word, is_tag in word_and_tag_counter]
 						db.executemany('INSERT OR IGNORE INTO Word (Word, IsTag) VALUES (:word, :is_tag);', word_and_tag_values)
 
+					db.execute('DELETE FROM SnapshotWord WHERE SnapshotId = :snapshot_id;', {'snapshot_id': snapshot.Id})
+
 					word_and_tag_count = [{'snapshot_id': snapshot.Id, 'word': word, 'is_tag': is_tag, 'count': count} for (word, is_tag), count in word_and_tag_counter.items()]
 					db.executemany(	'''
-									INSERT OR REPLACE INTO SnapshotWord (SnapshotId, WordId, Count)
+									INSERT INTO SnapshotWord (SnapshotId, WordId, Count)
 									VALUES (:snapshot_id, (SELECT Id FROM Word WHERE Word = :word AND IsTag = :is_tag), :count)
 									''', word_and_tag_count)
 

@@ -25,7 +25,7 @@ class PublishConfig(CommonConfig):
 
 	# From the config file.
 	scheduler: Dict[str, Union[int, str]]
-	num_snapshots_per_scheduled_batch: int
+	num_recordings_per_scheduled_batch: int
 	require_approval: bool
 
 	twitter_api_key: str
@@ -70,13 +70,15 @@ if __name__ == '__main__':
 
 	scheduler = BlockingScheduler()
 
-	def publish_snapshot_recording(num_snapshots: int) -> None:
+	def publish_recordings(num_recordings: int) -> None:
 		""" Publishes the recordings of a given number of snapshots in a single batch. """
+
+		log.info(f'Publishing {num_recordings} recordings.')
 
 		try:
 			with Database() as db:
 
-				for snapshot_index in range(num_snapshots):
+				for recording_index in range(num_recordings):
 
 					if was_exit_command_entered():
 						log.info('Stopping at the user\'s request.')
@@ -94,11 +96,10 @@ if __name__ == '__main__':
 											FROM Snapshot S
 											INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 											INNER JOIN Recording R ON S.Id = R.SnapshotId
-											WHERE (S.State = :approved_state OR (S.State = :recorded_state AND NOT :require_approval))
+											WHERE
+												(S.State = :approved_state OR (S.State = :recorded_state AND NOT :require_approval))
 												AND NOT R.IsProcessed
-											ORDER BY
-												S.Priority DESC,
-												R.CreationTime
+											ORDER BY S.Priority DESC, R.CreationTime
 											LIMIT 1;
 											''', {'approved_state': Snapshot.APPROVED, 'recorded_state': Snapshot.RECORDED,
 												  'require_approval': config.require_approval})
@@ -112,6 +113,7 @@ if __name__ == '__main__':
 							recording = Recording(**row, Id=row['RecordingId'])
 
 							assert snapshot.IsSensitive is not None, 'The IsSensitive column is not being computed properly.'
+							config.apply_snapshot_options(snapshot)
 						else:
 							log.info('Ran out of snapshots to publish.')
 							break
@@ -121,7 +123,7 @@ if __name__ == '__main__':
 						continue
 
 					try:
-						log.info(f'[{snapshot_index+1} of {num_snapshots}] Uploading recording #{recording.Id} for snapshot #{snapshot.Id} {snapshot} (approved = {snapshot.State == Snapshot.APPROVED}).')
+						log.info(f'[{recording_index+1} of {num_recordings}] Uploading recording #{recording.Id} for snapshot #{snapshot.Id} {snapshot} (approved = {snapshot.State == Snapshot.APPROVED}).')
 
 						media = api.chunked_upload(filename=recording.UploadFilePath, file_type='video/mp4', media_category='TweetVideo')
 						media_id = media.media_id
@@ -139,7 +141,7 @@ if __name__ == '__main__':
 
 						if snapshot.IsStandaloneMedia or snapshot.UsesPlugins:
 							# Emojis count for two characters.
-							emoji = '\N{jigsaw puzzle piece}'
+							emoji = '\N{Jigsaw Puzzle Piece}'
 							required_text += '\n' + emoji
 							required_length += len('\n') + len(emoji) * 2
 
@@ -176,12 +178,15 @@ if __name__ == '__main__':
 		except KeyboardInterrupt:
 			pass
 
+		log.info(f'Finished publishing {num_recordings} recordings.')
+
 	####################################################################################################
 
 	if args.max_iterations >= 0:
-		publish_snapshot_recording(args.max_iterations)
+		publish_recordings(args.max_iterations)
 	else:
-		scheduler.add_job(publish_snapshot_recording, args=[config.num_snapshots_per_scheduled_batch], trigger='cron', coalesce=True, **config.scheduler, timezone='UTC')
+		log.info(f'Running the publisher with the schedule: {config.scheduler}')
+		scheduler.add_job(publish_recordings, args=[config.num_recordings_per_scheduled_batch], trigger='cron', coalesce=True, **config.scheduler, timezone='UTC')
 		scheduler.start()
 
 	log.info('Terminating the publisher.')
