@@ -6,6 +6,8 @@
 	contains specific words and plugin media.
 """
 
+import binascii
+import os
 import re
 import sqlite3
 import string
@@ -13,6 +15,7 @@ import sys
 import time
 import unicodedata
 from argparse import ArgumentParser
+from base64 import b64decode
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, unquote, urlparse
@@ -32,25 +35,47 @@ class ScoutConfig(CommonConfig):
 	user_script_filter: List[str]
 	
 	initial_snapshots: List[Dict[str, str]]
+	
 	min_year: Optional[int]
 	max_year: Optional[int]
 	max_depth: Optional[int]
 	max_required_depth: Optional[int]
 
+	excluded_url_tags: List[str]
+	
 	standalone_media_points: int
 	word_points: Dict[str, int]
 	tag_points: Dict[str, int]
+	
 	sensitive_words: Dict[str, bool] # Different from the config data type.
+	
 	store_all_words_and_tags: bool
+	detect_page_language: bool
+	language_model_path: str
 	tokenize_japanese_text: bool
 
 	def __init__(self):
 		super().__init__()
 		self.load_subconfig('scout')
 
+		self.excluded_url_tags = container_to_lowercase(self.excluded_url_tags)
 		self.word_points = container_to_lowercase(self.word_points)
 		self.tag_points = container_to_lowercase(self.tag_points)
-		self.sensitive_words = {word: True for word in container_to_lowercase(self.sensitive_words)}
+	
+		decoded_sensitive_words = {}
+		for word in self.sensitive_words:
+			try:
+				if word.startswith('b64:'):
+					word = word[len('b64:'):]
+					word = b64decode(word).decode()
+				
+				decoded_sensitive_words[word.lower()] = True
+			except binascii.Error as error:
+				log.error(f'Failed to decode the sensitive word "{word}" with the error: {repr(error)}')
+		
+		self.sensitive_words = decoded_sensitive_words
+
+		self.language_model_path = os.path.abspath(self.language_model_path)
 
 if __name__ == '__main__':
 
@@ -61,6 +86,11 @@ if __name__ == '__main__':
 	parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to scout. Omit or set to %(default)s to run forever.')
 	parser.add_argument('-initial', action='store_true', help='Whether to enqueue the initial snapshots specified in the configuration file.')
 	args = parser.parse_args()
+
+	if config.detect_page_language:
+		import fasttext # type: ignore
+		log.info(f'Loading the FastText model "{config.language_model_path}".')
+		language_model = fasttext.load_model(config.language_model_path)
 
 	if config.tokenize_japanese_text:
 		import fugashi # type: ignore
@@ -91,22 +121,22 @@ if __name__ == '__main__':
 			try:
 				log.debug(f'Locating the snapshot at "{url}" near {timestamp}.')
 				best_snapshot, is_standalone_media, media_extension = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url)
-				guessed_encoding, last_modified_time = find_extra_wayback_machine_snapshot_info(best_snapshot.archive_url)
+				last_modified_time = find_extra_wayback_machine_snapshot_info(best_snapshot.archive_url)
 
 				state = Snapshot.SCOUTED if is_standalone_media else Snapshot.QUEUED
 
 				result = {'parent_id': parent_id, 'depth': depth, 'state': state, 'is_excluded': False,
 						  'is_standalone_media': is_standalone_media, 'media_extension': media_extension,
 						  'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
-						  'guessed_encoding': guessed_encoding, 'last_modified_time': last_modified_time, 
-						  'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest}
+						  'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey,
+						  'digest': best_snapshot.digest}
 			except NoCDXRecordFound:
 				pass
 			except BlockedSiteError:
 				log.warning(f'The snapshot at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
 				result = {'parent_id': parent_id, 'depth': depth, 'state': Snapshot.QUEUED, 'is_excluded': True,
 						  'is_standalone_media': None, 'media_extension': None, 'url': url, 'timestamp': timestamp,
-						  'guessed_encoding': None, 'last_modified_time': None, 'url_key': None, 'digest': None}
+						  'last_modified_time': None, 'url_key': None, 'digest': None}
 			except Exception as error:
 				log.error(f'Failed to find the snapshot at "{url}" near {timestamp} with the error: {repr(error)}')
 
@@ -150,8 +180,8 @@ if __name__ == '__main__':
 						log.warning(f'Could not find the initial snapshot at "{url}" near {timestamp}.')
 
 				db.executemany(	'''
-								INSERT OR IGNORE INTO Snapshot (State, Depth, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, GuessedEncoding, LastModifiedTime, UrlKey, Digest)
-								VALUES (:state, :depth, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :guessed_encoding, :last_modified_time, :url_key, :digest);
+								INSERT OR IGNORE INTO Snapshot (State, Depth, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+								VALUES (:state, :depth, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
 								''', initial_snapshot_list)
 
 				db.commit()
@@ -283,8 +313,8 @@ if __name__ == '__main__':
 
 						if child_snapshot is not None:
 							db.execute(	'''
-										INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, GuessedEncoding, LastModifiedTime, UrlKey, Digest)
-										VALUES (:parent_id, :depth, :state, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :guessed_encoding, :last_modified_time, :url_key, :digest);
+										INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+										VALUES (:parent_id, :depth, :state, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
 										''', child_snapshot)
 						else:
 							log.warning(f'Could not find the redirected snapshot at "{url}" near {timestamp}.')
@@ -348,7 +378,7 @@ if __name__ == '__main__':
 										ORDER BY
 											S.Priority DESC,
 											(:max_required_depth IS NULL OR S.Depth <= :max_required_depth) DESC,
-											IFNULL(PS.UsesPlugins, FALSE) DESC,
+											IFNULL(PS.PageUsesPlugins, FALSE) DESC,
 											IFNULL(PSI.Points, 0) DESC,
 											RANDOM()
 										LIMIT 1;
@@ -443,6 +473,7 @@ if __name__ == '__main__':
 					# We'll also avoid counting words (and later tags) from 404 Wayback Machine pages by skipping
 					# any missing snapshots. Keeping the Wayback Machine URL format is also necessary when counting
 					# tags below.
+					frame_text_list = []
 					for i, frame_url in enumerate(browser.traverse_frames(format_wayback_urls=True, skip_missing=True)):
 
 						# Retrieve links from all href attributes.
@@ -452,9 +483,13 @@ if __name__ == '__main__':
 						for element in element_list:
 
 							try:
+								tag_name = element.tag_name
 								url = element.get_attribute('href')
 							except StaleElementReferenceException:
 								log.warning('Skipping stale element.')
+								continue
+
+							if tag_name in config.excluded_url_tags:
 								continue
 
 							if url:
@@ -517,8 +552,9 @@ if __name__ == '__main__':
 
 						# Retrieve every word on the frame. Here, the window JavaScript variable refers to the
 						# current frame since we're switching between them.
-						page_text = driver.execute_script('return window.document.documentElement.innerText;')
-						split_text = PAGE_TEXT_DELIMITER_REGEX.split(page_text.lower())
+						frame_text = driver.execute_script('return document.documentElement.innerText;')
+						frame_text_list.append(frame_text)
+						split_text = PAGE_TEXT_DELIMITER_REGEX.split(frame_text.lower())
 						
 						for text in filter(None, split_text):
 							
@@ -559,6 +595,17 @@ if __name__ == '__main__':
 					if check_snapshot_redirection(snapshot):
 						continue
 
+					if config.detect_page_language:
+						# The fastText library requires a single sentence.
+						page_text = '. '.join(frame_text_list).replace('\n', ' ')
+						prediction = language_model.predict(page_text)
+						# E.g. (('__label__en',), array([0.97309864])) -> "en"
+						page_language = prediction[0][0][len('__label__'):]
+						confidence = prediction[1][0] * 100
+						log.debug(f'Detected the page language "{page_language}" with {confidence:.2f}% confidence.')
+					else:
+						page_language = None
+
 				except SessionNotCreatedException:
 					log.warning('Terminated the WebDriver session abruptly.')
 					break
@@ -579,15 +626,15 @@ if __name__ == '__main__':
 
 					# Keep the previous plugin status for cases where we were only able to determine it
 					# while recording the snapshot (see the example below).
-					uses_plugins = bool(snapshot.UsesPlugins)
 					page_title = driver.title
+					page_uses_plugins = bool(snapshot.PageUsesPlugins)
 	
 					for raw_frame_url in raw_frame_url_list:
 
-						# Redirects are allowed here since the frame's timestamp is inherited from the
+						# Redirects are expected here since the frame's timestamp is inherited from the
 						# root page's snapshot. See traverse_frames() for more details.
 						config.wait_for_wayback_machine_rate_limit()
-						browser.go_to_wayback_url(raw_frame_url, allow_redirects=True)
+						browser.go_to_wayback_url(raw_frame_url)
 
 						# Retrieve tag word on the frame.
 						if config.store_all_words_and_tags:
@@ -605,7 +652,7 @@ if __name__ == '__main__':
 						# in an awkward way. E.g. https://web.archive.org/web/19961221002554if_/http://www.geocities.com:80/Hollywood/Hills/5988/
 						# Which does this: <input value="http://www.geocities.com/Hollywood/Hills/5988/random.mid" onfocus="this.focus();this.select();">
 						# We're able to catch these edge cases in the recorder script.
-						uses_plugins = uses_plugins or any(driver.find_elements_by_tag_name(tag) for tag in ['object', 'embed', 'applet', 'app', 'bgsound'])
+						page_uses_plugins = page_uses_plugins or any(driver.find_elements_by_tag_name(tag) for tag in ['object', 'embed', 'applet', 'app', 'bgsound'])
 
 					browser.close_all_windows_except(original_window)
 
@@ -633,8 +680,8 @@ if __name__ == '__main__':
 		
 				try:
 					db.executemany(	'''
-									INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, GuessedEncoding, LastModifiedTime, UrlKey, Digest)
-									VALUES (:parent_id, :depth, :state, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :guessed_encoding, :last_modified_time, :url_key, :digest);
+									INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+									VALUES (:parent_id, :depth, :state, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
 									''', child_snapshot_list)
 
 					topology = [{'parent_id': child['parent_id'], 'url': child['url'], 'timestamp': child['timestamp']} for child in child_snapshot_list]
@@ -657,9 +704,9 @@ if __name__ == '__main__':
 
 					db.execute( '''
 								UPDATE Snapshot
-								SET State = :scouted_state, UsesPlugins = :uses_plugins, PageTitle = :page_title
+								SET State = :scouted_state, PageLanguage = :page_language, PageTitle = :page_title, PageUsesPlugins = :page_uses_plugins
 								WHERE Id = :id;
-								''', {'scouted_state': Snapshot.SCOUTED, 'uses_plugins': uses_plugins, 'page_title': page_title, 'id': snapshot.Id})
+								''', {'scouted_state': Snapshot.SCOUTED, 'page_language': page_language, 'page_title': page_title, 'page_uses_plugins': page_uses_plugins,'id': snapshot.Id})
 
 					if snapshot.Priority == Snapshot.SCOUT_PRIORITY:
 						db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})

@@ -34,10 +34,10 @@ if __name__ == '__main__':
 										SI.*,
 										R.*,
 										R.Id AS RecordingId,
-										IFNULL((SELECT COUNT(*) FROM SavedSnapshotUrl SSU WHERE SSU.RecordingId = R.Id AND NOT SSU.Failed GROUP BY SSU.RecordingId), 0) AS SavedRecordingUrls,
-										IFNULL((SELECT COUNT(*) FROM SavedSnapshotUrl SSU WHERE SSU.RecordingId = R.Id GROUP BY SSU.RecordingId), 0) AS TotalRecordingUrls,
-										IFNULL((SELECT COUNT(*) FROM SavedSnapshotUrl SSU WHERE SSU.SnapshotId = S.Id AND NOT SSU.Failed GROUP BY SSU.SnapshotId), 0) AS SavedSnapshotUrls,
-										IFNULL((SELECT COUNT(*) FROM SavedSnapshotUrl SSU WHERE SSU.SnapshotId = S.Id GROUP BY SSU.SnapshotId), 0) AS TotalSnapshotUrls
+										IFNULL((SELECT COUNT(*) FROM SavedUrl SU WHERE SU.RecordingId = R.Id AND NOT SU.Failed GROUP BY SU.RecordingId), 0) AS SavedRecordingUrls,
+										IFNULL((SELECT COUNT(*) FROM SavedUrl SU WHERE SU.RecordingId = R.Id GROUP BY SU.RecordingId), 0) AS TotalRecordingUrls,
+										IFNULL((SELECT COUNT(*) FROM SavedUrl SU WHERE SU.SnapshotId = S.Id AND NOT SU.Failed GROUP BY SU.SnapshotId), 0) AS SavedSnapshotUrls,
+										IFNULL((SELECT COUNT(*) FROM SavedUrl SU WHERE SU.SnapshotId = S.Id GROUP BY SU.SnapshotId), 0) AS TotalSnapshotUrls
 								FROM Snapshot S
 								INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 								INNER JOIN Recording R ON S.Id = R.SnapshotId
@@ -71,15 +71,21 @@ if __name__ == '__main__':
 					print(f'- Title: {snapshot.DisplayTitle}')
 					print(f'- Metadata: {snapshot.DisplayMetadata}')
 					print(f'- Sensitive: {snapshot.IsSensitive} {"(overridden)" if snapshot.IsSensitiveOverride is not None else ""}')
-					print(f'- Uses Plugins: {snapshot.UsesPlugins}')
+					print(f'- Standalone Media {snapshot.IsStandaloneMedia}')
+					print(f'- Uses Plugins: {snapshot.PageUsesPlugins}')
 					print(f'- Points: {snapshot.Points}')
 					print(f'- Saved URLs (Recording): {row["SavedRecordingUrls"]} of {row["TotalRecordingUrls"]}')
 					print(f'- Saved URLs (Snapshot): {row["SavedSnapshotUrls"]} of {row["TotalSnapshotUrls"]}')
 					print(f'- Filename: {recording.UploadFilename}')
+					print(f'- Text-to-Speech: {recording.TextToSpeechFilename is not None}')
 					print()
 
 					input('Press enter to watch the recording.')
 					os.startfile(recording.UploadFilePath)
+
+					if recording.TextToSpeechFilePath is not None:
+						input('Press enter to listen to the text-to-speech file.')
+						os.startfile(recording.TextToSpeechFilePath)
 				
 				except FileNotFoundError:
 					print(f'The recording file does not exist.')
@@ -144,14 +150,13 @@ if __name__ == '__main__':
 					recording_updates.append({'is_processed': is_processed, 'id': recording.Id})
 					break
 
-			print()
-
 			if total_snapshots > 0:
 
 				db.executemany('UPDATE Snapshot SET State = :state, Priority = :priority, IsSensitiveOverride = :is_sensitive_override WHERE Id = :id;', snapshot_updates)
 				db.executemany('UPDATE Recording SET IsProcessed = :is_processed WHERE Id = :id;', recording_updates)
 				db.commit()
 				
+				print()
 				print(f'Evaluated {total_snapshots} snapshots: {num_approved} approved, {num_rejected} rejected, {num_to_record_again} to be recorded again, {num_missing} missing files.')
 
 			else:

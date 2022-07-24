@@ -35,7 +35,7 @@ if __name__ == '__main__':
 	with Database() as db:
 		try:
 			best_snapshot, is_standalone_media, media_extension = find_best_wayback_machine_snapshot(timestamp=args.timestamp, url=args.url)
-			guessed_encoding, last_modified_time = find_extra_wayback_machine_snapshot_info(best_snapshot.archive_url)
+			last_modified_time = find_extra_wayback_machine_snapshot_info(best_snapshot.archive_url)
 
 			first_state = Snapshot.SCOUTED if is_standalone_media else Snapshot.QUEUED
 
@@ -45,13 +45,12 @@ if __name__ == '__main__':
 
 			try:
 				db.execute(	'''
-							INSERT INTO Snapshot (Depth, State, Priority, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, GuessedEncoding, LastModifiedTime, UrlKey, Digest)
-							VALUES (:depth, :state, :priority, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :guessed_encoding, :last_modified_time, :url_key, :digest);
+							INSERT INTO Snapshot (Depth, State, Priority, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+							VALUES (:depth, :state, :priority, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
 							''',
 							{'depth': 0, 'state': first_state, 'priority': priority, 'is_excluded': False, 'is_standalone_media': is_standalone_media,
 							 'media_extension': media_extension, 'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
-							 'guessed_encoding': guessed_encoding, 'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey,
-							 'digest': best_snapshot.digest})
+							 'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest})
 				db.commit()
 				
 				print(f'Added the snapshot ({best_snapshot.original}, {best_snapshot.timestamp}, {best_snapshot.mimetype}) with the "{args.priority}" priority.')

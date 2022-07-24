@@ -11,11 +11,11 @@ import sqlite3
 from argparse import ArgumentParser
 from datetime import timedelta
 from tempfile import NamedTemporaryFile
-from typing import List
+from typing import List, cast
 
 import ffmpeg # type: ignore
 
-from common import Database, Recording, Snapshot, delete_file, get_current_timestamp
+from common import TEMPORARY_PATH_PREFIX, Database, Recording, Snapshot, delete_file, get_current_timestamp
 from record import RecordConfig
 
 ####################################################################################################
@@ -27,6 +27,7 @@ if __name__ == '__main__':
 	parser = ArgumentParser(description='Compiles multiple snapshot recordings into a single video. This can be done for published recordings that haven\'t been compiled yet, or for any recordings given their database IDs. A short transition with a user-defined background color, duration, and sound effect is inserted between each recording.')
 	parser.add_argument('-published', nargs=2, metavar=('BEGIN_DATE', 'END_DATE'), help='Which published recordings to compile. Each date must use a format between "YYYY" and "YYYY-MM-DD HH:MM:SS" with different granularities. For example, "2022-07" and "2022-08-15" would compile all published recordings between July 1st (inclusive) and August 15th (exclusive), 2022. The selected recordings are stored in a database to prevent future compilations from showing repeated snapshots. This option cannot be used with -any.')
 	parser.add_argument('-any', nargs=2, metavar=('ID_TYPE', 'ID_LIST'), help='Which recordings to compile, regardless if they have been published or not. The ID_TYPE argument must be either "snapshot" or "recording" depending on the database IDs specified in ID_LIST. The ID_LIST argument specifies which of these IDs to include or exclude from the compilation. For example, "1,5-10,!7,!9-10" would result in the ID list [1, 5, 6, 8]. For ID ranges, if the first value is greater than the second then the range is reversed. For example, "3-1" would result in [3, 2, 1], meaning the recordings would be shown in reverse order. This option cannot be used with -published.')
+	parser.add_argument('-tts', action='store_true', dest='text_to_speech', help='Whether to use the text-to-speech video files instead of the snapshot recordings.')
 	parser.add_argument('-color', default='white', help='The background color for the transition. If omitted, this defaults to %(default)s. This may be a hexadecimal color code or a color name defined here: https://ffmpeg.org/ffmpeg-utils.html#Color')
 	parser.add_argument('-duration', type=int, default=2, help='How long the transition lasts for in seconds. If omitted, this defaults to %(default)s.')
 	parser.add_argument('-sfx', help='The path to the transition sound effect file. If omitted, no sound is added to the transition.')
@@ -146,7 +147,9 @@ if __name__ == '__main__':
 				snapshot = Snapshot(**row, Id=row['SnapshotId'])
 				recording = Recording(**row, Id=row['RecordingId'])
 
-				if os.path.isfile(recording.UploadFilePath):
+				recording.CompilationSegmentFilePath = recording.TextToSpeechFilePath if args.text_to_speech else recording.UploadFilePath
+
+				if recording.CompilationSegmentFilePath is not None and os.path.isfile(recording.CompilationSegmentFilePath):
 					snapshots_and_recordings.append((snapshot, recording))
 					num_valid_recordings += 1
 				else:
@@ -159,12 +162,12 @@ if __name__ == '__main__':
 			if snapshots_and_recordings:
 
 				try:
-					transition_file = NamedTemporaryFile(mode='wb', prefix='wanderer.', suffix='.mp4', delete=False)
-					concat_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix='wanderer.', suffix='.txt', delete=False)
+					transition_file = NamedTemporaryFile(mode='wb', prefix=TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
+					concat_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=TEMPORARY_PATH_PREFIX, suffix='.txt', delete=False)
 
 					try:
 						template_recording = snapshots_and_recordings[0][1]
-						probe = ffmpeg.probe(template_recording.UploadFilePath)
+						probe = ffmpeg.probe(template_recording.CompilationSegmentFilePath)
 						template_stream = next(stream for stream in probe['streams'] if stream['codec_type'] == 'video')
 						width = template_stream['width']
 						height = template_stream['height']
@@ -175,8 +178,19 @@ if __name__ == '__main__':
 						audio_stream = ffmpeg.input(args.sfx, guess_layout_max=0) if args.sfx else None
 						input_streams: List[ffmpeg.Stream] = list(filter(None, [video_stream, audio_stream]))
 
-						stream = ffmpeg.output(*input_streams, transition_file.name, tune='stillimage', **config.ffmpeg_upload_output)
-						stream = stream.global_args(*config.ffmpeg_global)
+						ffmpeg_output_args = config.ffmpeg_text_to_speech_output_args if args.text_to_speech else config.ffmpeg_upload_output_args
+						ffmpeg_output_args['tune'] = 'stillimage'
+
+						# Remove the -shortest flags used when generating the
+						# text-to-speech file so they don't shorten the transition.
+						if 'shortest' in ffmpeg_output_args:
+							del ffmpeg_output_args['shortest']
+
+						if ffmpeg_output_args.get('fflags') == 'shortest':
+							del ffmpeg_output_args['fflags']
+
+						stream = ffmpeg.output(*input_streams, transition_file.name, **ffmpeg_output_args)
+						stream = stream.global_args(*config.ffmpeg_global_args)
 						stream = stream.overwrite_output()
 						stream.run()
 
@@ -193,8 +207,9 @@ if __name__ == '__main__':
 					type_identifier = 'published' if args.published else f'any_{id_type}'
 					range_identifier = args.any[1] if args.any else f'{begin_date.replace("-", "_").replace(" ", "_").replace(":", "_")}_to_{end_date.replace("-", "_").replace(" ", "_").replace(":", "_")}'
 					total_identifier = f'with_{num_valid_recordings}_of_{total_recordings}'
-					
-					compilation_identifiers = [id_identifier, type_identifier, range_identifier, total_identifier]
+					text_to_speech_identifier = 'tts' if args.text_to_speech else None
+
+					compilation_identifiers = [id_identifier, type_identifier, range_identifier, total_identifier, text_to_speech_identifier]
 					compilation_path_prefix = os.path.join(config.compilations_path, '_'.join(filter(None, compilation_identifiers)))
 					
 					compilation_path = compilation_path_prefix + '.mp4'
@@ -213,7 +228,7 @@ if __name__ == '__main__':
 								print(f'- Adding the recording #{recording.Id} for snapshot #{snapshot.Id} {snapshot}.')
 
 								# See: https://superuser.com/questions/718027/ffmpeg-concat-doesnt-work-with-absolute-path/1551017#1551017
-								recording_path = recording.UploadFilePath.replace('\\', '/')
+								recording_path = cast(str, recording.CompilationSegmentFilePath).replace('\\', '/')
 								transition_path = transition_file.name.replace('\\', '/')
 
 								concat_file.write(f"file 'file:{recording_path}'\n")
@@ -221,11 +236,11 @@ if __name__ == '__main__':
 
 								timestamp = timedelta(seconds=round(current_duration))
 								formatted_timestamp = str(timestamp).zfill(8)
-								recording_identifiers = [formatted_timestamp, f'"{snapshot.DisplayTitle}"', f'({snapshot.ShortDate})', '\N{jigsaw puzzle piece}' if snapshot.IsStandaloneMedia or snapshot.UsesPlugins else None]
+								recording_identifiers = [formatted_timestamp, f'"{snapshot.DisplayTitle}"', f'({snapshot.ShortDate})', '\N{jigsaw puzzle piece}' if snapshot.IsStandaloneMedia or snapshot.PageUsesPlugins else None]
 								timestamp_line = ' '.join(filter(None, recording_identifiers))
 								timestamps_file.write(f'{timestamp_line}\n')
 								
-								probe = ffmpeg.probe(recording.UploadFilePath)
+								probe = ffmpeg.probe(recording.CompilationSegmentFilePath)
 								recording_duration = float(probe['format']['duration'])
 								current_duration += recording_duration + transition_duration
 
@@ -249,7 +264,7 @@ if __name__ == '__main__':
 						# - https://ffmpeg.org/ffmpeg-formats.html#concat
 						stream = ffmpeg.input(concat_file.name, f='concat', safe=0)
 						stream = stream.output(compilation_path, c='copy')
-						stream = stream.global_args(*config.ffmpeg_global)
+						stream = stream.global_args(*config.ffmpeg_global_args)
 						stream = stream.overwrite_output()
 						stream.run()
 					except ffmpeg.Error as error:

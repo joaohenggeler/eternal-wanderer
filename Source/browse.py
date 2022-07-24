@@ -21,6 +21,7 @@ if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Opens a URL in a Firefox version equipped with various plugins and extensions. Avoid using this version to browse live websites.')
 	parser.add_argument('url', nargs='?', default='about:support', help='The URL of the page to open. If omitted, it defaults to "%(default)s".')
+	parser.add_argument('-disable_multiprocess', action='store_false', dest='multiprocess', help='Whether to disable multiprocess Firefox. This should only be used when running the Classic Add-ons Archive extension since disabling this mode may crash some plugins.')
 	parser.add_argument('-pluginreg', action='store_true', help='Whether to generate the pluginreg.dat file inside the profile template directory.')
 	args = parser.parse_args()
 
@@ -28,7 +29,7 @@ if __name__ == '__main__':
 		parser.error('The "use_master_plugin_registry" configuration option must be set to false in order to generate the pluginreg.dat file.')
 
 	try:
-		with Browser(use_extensions=True, use_plugins=True) as (browser, driver):
+		with Browser(multiprocess=args.multiprocess, use_extensions=True, use_plugins=True) as (browser, driver):
 			
 			if args.pluginreg:
 				

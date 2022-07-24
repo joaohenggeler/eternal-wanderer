@@ -13,7 +13,6 @@
 
 		"gui_firefox_path": "Data/Firefox/52.9.0/App/Firefox/firefox.exe",
 		"headless_firefox_path": "Data/Firefox/56.0.2/App/Firefox/firefox.exe",
-		"multiprocess_firefox": true,
 
 		"profile_path": "Data/Profile",
 		
@@ -45,6 +44,7 @@
 			"extensions.enabledScopes": 15,
 			"extensions.update.enabled": false,
 			"toolkit.legacyUserProfileCustomizations.stylesheets": true,
+			"xpinstall.signatures.required": false,
 
 			"extensions.greasemonkey.fileIsGreaseable": true,
 			"extensions.greasemonkey.haveInsertedToolbarbutton": true,
@@ -54,8 +54,7 @@
 			"extensions.greasemonkey.showGrantsWarning": false,
 			"extensions.greasemonkey.stats.prompted": true,
 			"extensions.greasemonkey.sync.enabled": false,
-			"xpinstall.signatures.required": false,
-
+			
 			"gfx.canvas.azure.backends": "direct2d1.1,cairo",
 			"gfx.content.azure.backends": "direct2d1.1,cairo",
 			"gfx.font_rendering.cleartype.always_use_for_content": true,
@@ -310,26 +309,27 @@
 		"max_depth": null,
 		"max_required_depth": null,
 
-		"standalone_media_points": 750,
+		"excluded_url_tags": ["link"],
+
+		"standalone_media_points": 500,
 
 		"word_points":
 		{
-			"flash": 200,
-			"フラッシュ": 200,
-			"shockwave": 200,
-			"java": 200,
-			"applet": 200,
-			"applets": 200,
-			"アプレット": 200,
-			"silverlight": 200,
-			"authorware": 200,
-			"virtools": 200,
-			"3dvia": 200,
-			"vrml": 200,
-			"midi": 200,
-			"quicktime": 200,
-			"plugin": 100,
-			"plug-in": 100
+			"flash": 100,
+			"フラッシュ": 100,
+			"shockwave": 100,
+			"java": 100,
+			"applet": 100,
+			"applets": 100,
+			"アプレット": 100,
+			"silverlight": 100,
+			"authorware": 100,
+			"virtools": 100,
+			"3dvia": 100,
+			"vrml": 100,
+			"midi": 100,
+			"quicktime": 100,
+			"realaudio": 100
 		},
 
 		"tag_points":
@@ -338,16 +338,18 @@
 			"embed": 1000,
 			"applet": 1000,
 			"bgsound": 1000,
-			"audio": 500,
-			"video": 500,
-			"map": 250,
-			"blink": 150,
-			"marquee": 150
+			"audio": 1000,
+			"video": 1000,
+			"map": 300,
+			"blink": 100,
+			"marquee": 100
 		},
 
-		"sensitive_words": ["nude", "naked", "xxx", "porn"],
+		"sensitive_words": ["b64:Ymxvd2pvYg==", "b64:Ymxvd2pvYnM=", "b64:Y3Vt", "b64:Y3Vtcw==", "b64:Y3Vtc2hvdA==", "b64:Y3VudA==", "b64:Y3VudHM=", "b64:ZG9nZ3lzdHlsZQ==", "b64:ZmFn", "b64:ZmFnZ290", "b64:ZmFnZ290cw==", "b64:ZmFncw==", "b64:ZnVja2Vk", "b64:ZnVja2luZw==", "b64:ZnVja3M=", "b64:aGFuZGpvYg==", "b64:aGFuZGpvYnM=", "b64:aGVudGFp", "b64:aG9tbw==", "b64:aG9tb3M=", "b64:aml6eg==", "b64:bWlsZg==", "b64:bW90aGVyZnVja2Vy", "b64:bW90aGVyZnVja2Vycw==", "b64:bmlnZ2Vy", "b64:bmlnZ2Vycw==", "b64:bnVkZQ==", "b64:cGFlZG9waGlsZQ==", "b64:cGFlZG9waGlsZXM=", "b64:cGVkbw==", "b64:cGVkb3BoaWxl", "b64:cGVkb3BoaWxlcw==", "b64:cGVkb3M=", "b64:cHVzc2llcw==", "b64:cHVzc3k=", "b64:cmFwZQ==", "b64:cmFwZWQ=", "b64:cmFwZXM=", "b64:cmFwaXN0", "b64:cmFwaXN0cw==", "b64:c2hlbWFsZQ==", "b64:c2hlbWFsZXM=", "b64:c2x1dA==", "b64:c2x1dHM=", "b64:dGl0ZnVjaw==", "b64:dGl0ZnVja3M=", "b64:dGl0am9i", "b64:dGl0am9icw==", "b64:dGl0cw==", "b64:dGl0dHlmdWNr", "b64:dGl0dHlmdWNrcw==", "b64:dHJhbm5pZXM=", "b64:dHJhbm55", "b64:d2hvcmU=", "b64:d2hvcmVz", "b64:eHh4"],
 
 		"store_all_words_and_tags": true,
+		"detect_page_language": true,
+		"language_model_path": "Data/lid.176.ftz",
 		"tokenize_japanese_text": true
 	},
 
@@ -356,7 +358,7 @@
 		"scheduler": {"minute": "*/30"},
 		"num_snapshots_per_scheduled_batch": 5,
 
-		"ranking_constant": 4000,
+		"ranking_constant": 3000,
 		"min_year": null,
 		"max_year": null,
 		"record_sensitive_snapshots": true,
@@ -397,7 +399,7 @@
 			"ram"
 		],
 
-		"use_proxy": true,
+		"enable_proxy": true,
 		"proxy_port": null,
 		"proxy_queue_timeout": 30,
 		"proxy_total_timeout": 600,
@@ -408,7 +410,9 @@
 		"save_missing_proxy_snapshots_that_still_exist_online": true,
 		"max_consecutive_extra_missing_proxy_snapshot_tries": 10,
 		"max_total_extra_missing_proxy_snapshot_tries": 150,
+		"cache_missing_proxy_responses": true,
 
+		"page_plugin_wait": 5,
 		"page_cache_wait": 20,
 		"standalone_media_cache_wait": 40,
 		
@@ -450,9 +454,10 @@
 			"capture_mouse_default_1": 0
 		},
 
-		"ffmpeg_global": ["-loglevel", "warning", "-nostats"],
+		"ffmpeg_global_args": ["-loglevel", "warning", "-nostats"],
 
-		"ffmpeg_recording_input":
+		"ffmpeg_recording_input_name": "video=screen-capture-recorder:audio=virtual-audio-capturer",
+		"ffmpeg_recording_input_args":
 		{
 			"f": "dshow",
 			"framerate": 60,
@@ -460,7 +465,7 @@
 			"guess_layout_max": 0
 		},
 
-		"ffmpeg_recording_output":
+		"ffmpeg_recording_output_args":
 		{
 			"c:v": "libx264rgb",
 			"qp": 0,
@@ -472,7 +477,7 @@
 			"ac": 2
 		},
 
-		"ffmpeg_archive_output":
+		"ffmpeg_archive_output_args":
 		{
 			"c:v": "libx264rgb",
 			"qp": 0,
@@ -481,7 +486,7 @@
 			"c:a": "copy"
 		},
 
-		"ffmpeg_upload_output":
+		"ffmpeg_upload_output_args":
 		{
 			"c:v": "libx264",
 			"profile:v": "high",
@@ -500,6 +505,82 @@
 			"b:a": "384K",
 			"ar": "48K",
 			"ac": 2,
+			"movflags": "faststart",
+			"fs": "512M"
+		},
+
+		"enable_text_to_speech": true,
+		"text_to_speech_audio_format_type": "SAFT22kHz16BitMono",
+		"text_to_speech_rate": 0,
+		"text_to_speech_default_voice": "David",
+		"text_to_speech_language_voices":
+		{
+			"ar": "Hoda",
+			"bg": "Ivan",
+			"ca": "Herena",
+			"cs": "Jakub",
+			"da": "Helle",
+			"de": "Hedda",
+			"el": "Stefanos",
+			"es": "Laura",
+			"fi": "Heidi",
+			"fr": "Julie",
+			"he": "Asaf",
+			"hi": "Hemant",
+			"hr": "Matej",
+			"hu": "Szabolcs",
+			"id": "Andika",
+			"it": "Cosimo",
+			"ja": "Ayumi",
+			"ko": "Heami",
+			"ms": "Rizwan",
+			"nl": "Frank",
+			"no": "Jon",
+			"pl": "Adam",
+			"pt": "Maria",
+			"ro": "Andrei",
+			"ru": "Pavel",
+			"sk": "Filip",
+			"sl": "Lado",
+			"sv": "Bengt",
+			"ta": "Valluvar",
+			"th": "Pattara",
+			"tr": "Tolga",
+			"vi": "An",
+			"zh": "Yaoyao"
+		},
+
+		"ffmpeg_text_to_speech_video_input_name": "color=black:size=50x50:rate=30/1",
+		"ffmpeg_text_to_speech_video_input_args":
+		{
+			"f": "lavfi"
+		},
+
+		"ffmpeg_text_to_speech_audio_input_args":
+		{
+			"guess_layout_max": 0
+		},
+
+		"ffmpeg_text_to_speech_output_args":
+		{
+			"shortest": null,
+			"fflags": "shortest",
+			"max_interleave_delta": "100M",
+			"c:v": "libx264",
+			"profile:v": "high",
+			"bf": 2,
+			"g": 15,
+			"r": 30,
+			"video_track_timescale": "90K",
+			"crf": 18,
+			"preset": "veryslow",
+			"tune": "stillimage",
+			"pix_fmt": "yuv420p",
+			"c:a": "aac",
+			"profile:a": "aac_low",
+			"b:a": "128K",
+			"ar": "22050",
+			"ac": 1,
 			"movflags": "faststart",
 			"fs": "512M"
 		}

@@ -214,19 +214,19 @@ def request(flow: http.HTTPFlow) -> None:
 			else:
 				no_query_cdx = None
 
-			cdx_list = list(filter(None, [prefix_cdx, subdomain_cdx, no_query_cdx]))
-			for i, cdx in enumerate(cdx_list):
-				
-				cdx_mark = f'CDX {i+1}/{len(cdx_list)} {wayback_response.status_code}'
-
+			cdx_list = [(prefix_cdx, 'PREFIX'), (subdomain_cdx, 'SUBDOMAIN'), (no_query_cdx, 'NO QUERY')]
+			for i, (cdx, identifier) in enumerate(filter(lambda x: x[0], cdx_list)):
 				try:
 					config.wait_for_cdx_api_rate_limit()
 					snapshot = cdx.near(wayback_machine_timestamp=timestamp)
 					wayback_parts = wayback_parts._replace(Timestamp=snapshot.timestamp, Url=snapshot.original)
 					found_snapshot = True
+					cdx_mark = f'{identifier} CDX {wayback_response.status_code} -> {snapshot.statuscode}'
 					break
 				except Exception:
 					pass
+			else:
+				cdx_mark = 'NO CDX'
 
 	redirect_to_original = False
 	if config.save_missing_proxy_snapshots_that_still_exist_online and wayback_response is not None:
@@ -244,7 +244,6 @@ def request(flow: http.HTTPFlow) -> None:
 	# This is used to redirect the request in the majority of cases. For VRML
 	# worlds, we'll create the response ourselves (see below).
 	request.url = wayback_parts.Url if redirect_to_original else compose_wayback_machine_snapshot_url(parts=wayback_parts)
-	live_mark = 'LIVE' if redirect_to_original else None
 
 	if extracted_realaudio_url:
 		with lock:
@@ -285,6 +284,7 @@ def request(flow: http.HTTPFlow) -> None:
 			except requests.RequestException:
 				pass
 
+	live_mark = 'LIVE' if redirect_to_original else None
 	realaudio_mark = 'RAM' if extracted_realaudio_url else None
 	vrml_mark = 'VRML' if request_came_from_vrml else None
 
@@ -296,11 +296,17 @@ def response(flow: http.HTTPFlow) -> None:
 	if current_timestamp is None:
 		return
 	
+	request = flow.request
+	response = flow.response
+
 	mark = flow.marked or '-'
-	content_type = flow.response.headers.get('content-type', '-')
+	content_type = response.headers.get('content-type', '-')
 	
 	with lock:
-		print(f'[RESPONSE] [{flow.response.status_code}] [{mark}] [{content_type}] [{flow.request.url}] [{flow.id}]')
+		print(f'[RESPONSE] [{response.status_code}] [{mark}] [{content_type}] [{request.url}] [{flow.id}]')
+
+	if config.cache_missing_proxy_responses and response.status_code in [404, 410]:
+		response.headers['cache-control'] = 'public; max-age=3600'
 
 	if config.debug:
-		flow.response.headers['x-eternal-wanderer'] = mark
+		response.headers['x-eternal-wanderer'] = mark

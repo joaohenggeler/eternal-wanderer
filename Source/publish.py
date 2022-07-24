@@ -131,15 +131,13 @@ if __name__ == '__main__':
 						if config.delete_video_after_upload:
 							delete_file(recording.UploadFilePath)
 
-						# How the date is formatted depends on the current locale.
-						# date = snapshot.OldestDatetime.strftime('%B %Y')
-						# alt_text = f'The web page "{snapshot.Url}" as seen on {date} via the Wayback Machine.'
+						# alt_text = f'The web page "{snapshot.Url}" as seen on {snapshot.LongDate} via the Wayback Machine.'
 						# api.create_media_metadata(media_id, alt_text)
 						
 						required_text = f'\n{snapshot.ShortDate}\n{snapshot.WaybackUrl}'
 						required_length = len(required_text)
 
-						if snapshot.IsStandaloneMedia or snapshot.UsesPlugins:
+						if snapshot.IsStandaloneMedia or snapshot.PageUsesPlugins:
 							# Emojis count for two characters.
 							emoji = '\N{Jigsaw Puzzle Piece}'
 							required_text += '\n' + emoji
@@ -186,7 +184,7 @@ if __name__ == '__main__':
 		publish_recordings(args.max_iterations)
 	else:
 		log.info(f'Running the publisher with the schedule: {config.scheduler}')
-		scheduler.add_job(publish_recordings, args=[config.num_recordings_per_scheduled_batch], trigger='cron', coalesce=True, **config.scheduler, timezone='UTC')
+		scheduler.add_job(publish_recordings, args=[config.num_recordings_per_scheduled_batch], trigger='cron', coalesce=True, misfire_grace_time=None, **config.scheduler, timezone='UTC')
 		scheduler.start()
 
 	log.info('Terminating the publisher.')

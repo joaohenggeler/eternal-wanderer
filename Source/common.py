@@ -4,13 +4,8 @@
 	A module that defines any general purpose functions used by all scripts, including loading configuration files,
 	connecting to the database, and interfacing with Firefox.
 
-	@TODO: Fix recording snapshots like: https://web.archive.org/web/20060719082015if_/http://www.miniclip.com:80/games/real-space-2/en/
-	@TODO: Fix  is_current_url_valid_wayback_machine_page() for: https://web.archive.org/web/20001018223506if_/http://www.geocities.com:80/~woodro1/jukebox.html
-	@TODO: Improve CDX marker in the mitmproxy script
-
 	@TODO: Add Mastodon support
 	@TODO: Make the stats.py script to print statistics
-	@TODO: Add text-to-speech support
 	
 	@TODO: Docs
 """
@@ -57,6 +52,8 @@ from waybackpy.cdx_snapshot import CDXSnapshot
 
 ####################################################################################################
 
+TEMPORARY_PATH_PREFIX = 'wanderer.'
+
 def container_to_lowercase(container: Union[list, dict]) -> Union[list, dict]:
 	""" Converts the elements of a list or keys of a dictionary to lowercase. """
 
@@ -85,7 +82,6 @@ class CommonConfig():
 
 	gui_firefox_path: str
 	headless_firefox_path: str
-	multiprocess_firefox: bool
 
 	profile_path: str
 	preferences: Dict[str, Union[bool, int, str]]
@@ -112,10 +108,13 @@ class CommonConfig():
 
 	wayback_machine_rate_limit_amount: int
 	wayback_machine_rate_limit_multiple: int
+	
 	cdx_api_rate_limit_amount: int
 	cdx_api_rate_limit_multiple: int
+	
 	save_api_rate_limit_amount: int
 	save_api_rate_limit_multiple: int
+	
 	rate_limit_poll_frequency: float
 	unavailable_wayback_machine_wait: int
 
@@ -139,6 +138,7 @@ class CommonConfig():
 
 	# Constants.
 	MUTABLE_OPTIONS = [
+		'page_plugin_wait',
 		'page_cache_wait',
 		'standalone_media_cache_wait',
 		
@@ -386,11 +386,11 @@ class Database():
 									MediaExtension TEXT,
 									MediaTitle TEXT,
 									MediaAuthor TEXT,
-									UsesPlugins BOOLEAN,
+									PageLanguage TEXT,
 									PageTitle TEXT,
+									PageUsesPlugins BOOLEAN,
 									Url TEXT NOT NULL,
 									Timestamp VARCHAR(14) NOT NULL,
-									GuessedEncoding TEXT,
 									LastModifiedTime VARCHAR(14),
 									UrlKey TEXT,
 									Digest VARCHAR(64),
@@ -473,15 +473,17 @@ class Database():
 								''')
 
 		self.connection.execute('''
-								CREATE TABLE IF NOT EXISTS SavedSnapshotUrl
+								CREATE TABLE IF NOT EXISTS SavedUrl
 								(
 									Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 									SnapshotId INTEGER NOT NULL,
+									RecordingId INTEGER NOT NULL,
 									Url TEXT NOT NULL UNIQUE,
 									Timestamp VARCHAR(14),
 									Failed BOOLEAN NOT NULL,
 
-									FOREIGN KEY (SnapshotId) REFERENCES Snapshot (Id)
+									FOREIGN KEY (SnapshotId) REFERENCES Snapshot (Id),
+									FOREIGN KEY (RecordingId) REFERENCES Recording (Id)
 								);
 								''')
 
@@ -491,8 +493,9 @@ class Database():
 									Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 									SnapshotId INTEGER NOT NULL,
 									IsProcessed BOOLEAN NOT NULL,
-									ArchiveFilename TEXT UNIQUE,
 									UploadFilename TEXT NOT NULL UNIQUE,
+									ArchiveFilename TEXT UNIQUE,
+									TextToSpeechFilename TEXT UNIQUE,
 									CreationTime TIMESTAMP NOT NULL,
 									PublishTime TIMESTAMP,
 									TwitterMediaId INTEGER,
@@ -559,11 +562,11 @@ class Snapshot():
 	MediaExtension: Optional[str]
 	MediaTitle: Optional[str]
 	MediaAuthor: Optional[str]
-	UsesPlugins: Optional[bool]
+	PageLanguage: Optional[str]
 	PageTitle: Optional[str]
+	PageUsesPlugins: Optional[bool]
 	Url: str
 	Timestamp: str
-	GuessedEncoding: Optional[str]
 	LastModifiedTime: Optional[str]
 	UrlKey: Optional[str]
 	Digest: Optional[str]
@@ -577,8 +580,8 @@ class Snapshot():
 	# Determined at runtime.
 	WaybackUrl: str
 	OldestTimestamp: str
-	OldestDatetime: datetime
 	ShortDate: str
+	LongDate: str
 	DisplayTitle: str
 	DisplayMetadata: Optional[str]
 	
@@ -598,6 +601,8 @@ class Snapshot():
 	RECORD_PRIORITY = 2
 	PUBLISH_PRIORITY = 3
 
+	TIMESTAMP_FORMAT = '%Y%m%d%H%M%S'
+
 	IFRAME_MODIFIER = 'if_'
 	OBJECT_EMBED_MODIFIER = 'oe_'
 	IDENTICAL_MODIFIER = 'id_'
@@ -614,7 +619,7 @@ class Snapshot():
 		self.IsExcluded = bool_or_none(self.IsExcluded)
 		self.IsStandaloneMedia = bool_or_none(self.IsStandaloneMedia)
 		self.IsSensitiveOverride = bool_or_none(self.IsSensitiveOverride)
-		self.UsesPlugins = bool_or_none(self.UsesPlugins)	
+		self.PageUsesPlugins = bool_or_none(self.PageUsesPlugins)	
 		self.IsSensitive = bool_or_none(self.IsSensitive)
 
 		if self.Options is not None:
@@ -634,9 +639,12 @@ class Snapshot():
 		else:
 			self.OldestTimestamp = self.Timestamp
 
-		self.OldestDatetime = datetime.strptime(self.OldestTimestamp, '%Y%m%d%H%M%S')
 		# How the date is formatted depends on the current locale.
-		self.ShortDate = self.OldestDatetime.strftime('%b %Y')
+		# We won't use the %d directive since we don't want padding.
+		oldest_datetime = datetime.strptime(self.OldestTimestamp, Snapshot.TIMESTAMP_FORMAT)
+		self.ShortDate = oldest_datetime.strftime('%b %Y')
+		day_suffix = 'th' if 11 <= oldest_datetime.day <= 13 else {1: 'st', 2: 'nd', 3: 'rd'}.get(oldest_datetime.day % 10, 'th')
+		self.LongDate = oldest_datetime.strftime(f'%B {oldest_datetime.day}{day_suffix} %Y')
 
 		self.DisplayTitle = self.PageTitle
 		if not self.DisplayTitle:
@@ -667,8 +675,9 @@ class Recording():
 	Id: int
 	SnapshotId: int
 	IsProcessed: bool
-	ArchiveFilename: Optional[str]
 	UploadFilename: str
+	ArchiveFilename: Optional[str]
+	TextToSpeechFilename: Optional[str]
 	CreationTime: str
 	PublishTime: Optional[str]
 	TwitterMediaId: Optional[int]
@@ -677,16 +686,20 @@ class Recording():
 	MastodonPostId: Optional[int]
 
 	# Determined at runtime.
-	ArchiveFilePath: Optional[str]
 	UploadFilePath: str
+	ArchiveFilePath: Optional[str]
+	TextToSpeechFilePath: Optional[str]
+	CompilationSegmentFilePath: Optional[str]
 
 	def __init__(self, **kwargs):
 		
 		self.__dict__.update(kwargs)
 		
 		subdirectory_path = config.get_recording_subdirectory_path(self.Id)
-		self.ArchiveFilePath = os.path.join(subdirectory_path, self.ArchiveFilename) if self.ArchiveFilename is not None else None
 		self.UploadFilePath = os.path.join(subdirectory_path, self.UploadFilename)
+		self.ArchiveFilePath = os.path.join(subdirectory_path, self.ArchiveFilename) if self.ArchiveFilename is not None else None
+		self.TextToSpeechFilePath = os.path.join(subdirectory_path, self.TextToSpeechFilename) if self.TextToSpeechFilename is not None else None
+		self.CompilationSegmentFilePath = None # Set in the compilation script.
 
 class CustomFirefoxProfile(FirefoxProfile):
 	""" A custom Firefox profile used to bypass the frozen Mozilla preferences dictionary defined by Selenium. """
@@ -704,6 +717,7 @@ class Browser():
 	""" A Firefox browser instance created by Selenium. """
 
 	headless: bool
+	multiprocess: bool
 	extra_preferences: Optional[Dict[str, Union[bool, int, str]]]
 	use_extensions: bool
 	extension_filter: Optional[List[str]]
@@ -728,6 +742,7 @@ class Browser():
 	BLANK_URL = 'about:blank'
 
 	def __init__(self, 	headless: bool = False,
+						multiprocess: bool = True,
 						extra_preferences: Optional[Dict[str, Union[bool, int, str]]] = None,
 						use_extensions: bool = False,
 						extension_filter: Optional[List[str]] = None,
@@ -736,6 +751,7 @@ class Browser():
 						use_autoit: bool = False):
 
 		self.headless = headless
+		self.multiprocess = multiprocess
 		self.extra_preferences = extra_preferences
 		self.use_extensions = use_extensions
 		self.extension_filter = container_to_lowercase(extension_filter) if extension_filter else extension_filter # type: ignore
@@ -824,7 +840,7 @@ class Browser():
 
 			os.environ['MOZ_PLUGIN_PATH'] = ';'.join(plugin_paths)
 
-			plugin_extender_source_path = os.path.join(config.plugins_path, 'BrowserPluginExtender.dll')
+			plugin_extender_source_path = os.path.join(config.plugins_path, 'BrowserPluginExtender', 'BrowserPluginExtender.dll')
 			shutil.copy(plugin_extender_source_path, self.firefox_directory_path)
 
 			# The value we're changing here is the default one that is usually displayed as "(Default)",
@@ -857,10 +873,10 @@ class Browser():
 		options.profile = profile
 		options.headless = self.headless
 
-		if config.multiprocess_firefox:
+		if self.multiprocess:
 			os.environ.pop('MOZ_FORCE_DISABLE_E10S', None)
 		else:
-			log.info('Disabling multiprocess Firefox.')
+			log.warning('Disabling multiprocess Firefox.')
 			os.environ['MOZ_FORCE_DISABLE_E10S'] = '1'
 		
 		# Disable DPI scaling to fix potential display issues in Firefox.
@@ -1087,10 +1103,11 @@ class Browser():
 			for key, value in REQUIRED_REGISTRY_KEYS.items():
 				self.registry.set(key, value)
 
-			for key, value in TemporaryRegistry.traverse('HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1'):
-				self.registry.delete(key)
-
 			# These don't require elevated privileges but there's no point in setting them if the Cosmo Player isn't set up correctly.
+			previous_settings = [key for key, value, type in TemporaryRegistry.traverse('HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1')]
+			for key in previous_settings:
+				self.registry.delete(key)
+			
 			for key, value in SETTINGS_REGISTRY_KEYS.items():
 				self.registry.set(key, value)
 
@@ -1170,7 +1187,7 @@ class Browser():
 	def __exit__(self, exception_type, exception_value, traceback):
 		self.shutdown()
 
-	def go_to_wayback_url(self, wayback_url: str, allow_redirects: bool = False) -> None:
+	def go_to_wayback_url(self, wayback_url: str) -> None:
 		""" Navigates to a Wayback Machine URL, taking into account any rate limiting and retrying if the service is unavailable. """
 
 		try:
@@ -1179,10 +1196,12 @@ class Browser():
 			config.wait_for_wayback_machine_rate_limit()
 			self.driver.get(wayback_url)
 
-			while not self.is_current_url_valid_wayback_machine_page(allow_redirects=allow_redirects):
-				log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
-				time.sleep(config.unavailable_wayback_machine_wait)
-				self.driver.get(wayback_url)
+			# Skip the availability check for auto-generated standalone media pages.
+			if not self.driver.current_url.startswith('file:'):
+				while not is_wayback_machine_available():
+					log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
+					time.sleep(config.unavailable_wayback_machine_wait)
+					self.driver.get(wayback_url)
 
 		except TimeoutException:
 			log.warning(f'Timed out after waiting {config.page_load_timeout} seconds for the page to load: "{wayback_url}".')
@@ -1229,7 +1248,7 @@ class Browser():
 				</html>
 				'''
 
-		base64_html = b64encode(html.encode('utf-8')).decode()
+		base64_html = b64encode(html.encode()).decode()
 		self.driver.get(f'data:text/html;base64,{base64_html}')
 
 	def traverse_frames(self, format_wayback_urls: bool = False, skip_missing: bool = False) -> Iterator[str]:
@@ -1374,24 +1393,6 @@ class Browser():
 		except NoSuchWindowException:
 			pass
 
-	def is_current_url_valid_wayback_machine_page(self, allow_redirects: bool = False) -> bool:
-		""" Checks if the current web page points to a Wayback Machine snapshot. """
-
-		if self.driver.current_url.lower().startswith('file:'):
-			return True
-
-		try:
-			# Check for a specific Wayback Machine script.
-			self.driver.find_element_by_xpath(r'//script[contains(@src, "/_static/js/wombat.js")]')
-			result = True
-		except NoSuchElementException:
-			# Check if the page exists by sending a request to the Wayback Machine.
-			# Used for uncommon cases where the previous script isn't embedded in the page.
-			# E.g. https://web.archive.org/web/19961220114110if_/http://store.geocities.com:80/
-			result = is_url_available(self.driver.current_url, allow_redirects=allow_redirects)
-			
-		return result
-
 class TemporaryRegistry():
 	""" A temporary registry that remembers and undos any changes (key additions and deletions) made to the Windows registry. """
 
@@ -1422,23 +1423,6 @@ class TemporaryRegistry():
 		'hkey_performance_data': winreg.HKEY_PERFORMANCE_DATA,
 		'hkey_current_config': winreg.HKEY_CURRENT_CONFIG,
 		'hkey_dyn_data': winreg.HKEY_DYN_DATA,
-	}
-
-	VALUE_TYPES = {
-		'reg_binary': winreg.REG_BINARY,
-		'reg_dword': winreg.REG_DWORD,
-		'reg_dword_little_endian': winreg.REG_DWORD_LITTLE_ENDIAN,
-		'reg_dword_big_endian': winreg.REG_DWORD_BIG_ENDIAN,
-		'reg_expand_sz': winreg.REG_EXPAND_SZ,
-		'reg_link': winreg.REG_LINK,
-		'reg_multi_sz': winreg.REG_MULTI_SZ,
-		'reg_none': winreg.REG_NONE,
-		'reg_qword': winreg.REG_QWORD,
-		'reg_qword_little_endian': winreg.REG_QWORD_LITTLE_ENDIAN,
-		'reg_resource_list': winreg.REG_RESOURCE_LIST,
-		'reg_full_resource_descriptor': winreg.REG_FULL_RESOURCE_DESCRIPTOR,
-		'reg_resource_requirements_list': winreg.REG_RESOURCE_REQUIREMENTS_LIST,
-		'reg_sz': winreg.REG_SZ,
 	}
 
 	def __init__(self):
@@ -1472,23 +1456,18 @@ class TemporaryRegistry():
 
 		return value
 
-	def set(self, key: str, value: Union[int, str], type: Optional[str] = None) -> Any:
+	def set(self, key: str, value: Union[int, str], type: Optional[int] = None) -> Any:
 		""" Sets the value of a registry key. Any missing intermediate keys are automatically created. """
 
 		hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
 		
-		value_type: Optional[int]
 		if type is None:
 			if isinstance(value, int):
-				value_type = winreg.REG_DWORD
+				type = winreg.REG_DWORD
 			elif isinstance(value, str):
-				value_type = winreg.REG_SZ
+				type = winreg.REG_SZ
 			else:
 				raise ValueError(f'The type of the value "{value}" could not be autodetected for the registry key "{key}".')	
-		else:
-			value_type = TemporaryRegistry.VALUE_TYPES.get(type.lower())
-			if value_type is None:
-				raise ValueError(f'Unknown value type "{type}" for the registry key "{key}".')
 	
 		if (hkey, key_path) not in self.key_paths_to_delete:
 
@@ -1524,7 +1503,7 @@ class TemporaryRegistry():
 				original_state_value = (None, None)
 				result = None
 
-			SetValueEx(key_handle, sub_key, 0, value_type, value)
+			SetValueEx(key_handle, sub_key, 0, type, value)
 
 		if original_state_key not in self.original_state:
 			self.original_state[original_state_key] = original_state_value
@@ -1556,7 +1535,7 @@ class TemporaryRegistry():
 		return success, result
 
 	@staticmethod
-	def traverse(key: str, recursive: bool = False) -> Iterator[Tuple[str, Any]]:
+	def traverse(key: str, recursive: bool = False) -> Iterator[Tuple[str, Any, int]]:
 		""" Iterates over the values of a registry key. """
 
 		hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
@@ -1567,7 +1546,7 @@ class TemporaryRegistry():
 				try:
 					for index in itertools.count():
 						name, data, type = EnumValue(key_handle, index)
-						yield f'{key}\\{name}', data
+						yield f'{key}\\{name}', data, type
 				except OSError:
 					pass
 
@@ -1639,7 +1618,7 @@ def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> Tuple[CDXSna
 	# E.g. https://web.archive.org/web/20011201170113if_/http://www.yahoo.co.jp/bin/top3
 	is_standalone_media = snapshot.mimetype not in ['text/html', 'text/plain']
 
-	media_extension: Optional[str]
+	media_extension = None
 
 	if is_standalone_media:
 		parts = urlparse(snapshot.original)
@@ -1651,43 +1630,50 @@ def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> Tuple[CDXSna
 		else:
 			_, media_extension = os.path.splitext(path)
 			media_extension = media_extension.strip('.')
-	else:
-		media_extension = None
 
 	return snapshot, is_standalone_media, media_extension
 
-def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Tuple[Optional[str], Optional[str]]:
-	""" Finds the guessed character encoding and last modified time of a Wayback Machine snapshot. Note that not every snapshot has this information. """
+def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
+	""" Finds the last modified time of a Wayback Machine snapshot. Note that not every snapshot has this information. """
 
-	# The iframe modifier is required for the guessed character encoding.
-	wayback_parts = parse_wayback_machine_snapshot_url(wayback_url)
-	if wayback_parts is not None:
-		wayback_parts = wayback_parts._replace(Modifier=Snapshot.IFRAME_MODIFIER)
-		wayback_url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
+	# The last modified time seems to always be returned regardless of the modifier.
+	# There's other headers that require the iframe modifier (e.g. x-archive-guessed-charset).
 
-	guessed_encoding = None
 	last_modified_time = None
 
 	try:
 		response = requests.head(wayback_url)
 		response.raise_for_status()
 		
-		guessed_encoding = response.headers.get('x-archive-guessed-charset')
-		if guessed_encoding is not None:
-			guessed_encoding = guessed_encoding.lower()
-
 		last_modified_header = response.headers.get('x-archive-orig-last-modified')
 		if last_modified_header is not None:
-			last_modified_time = parsedate_to_datetime(last_modified_header).strftime('%Y%m%d%H%M%S')
+
+			# Fix an issue where the datetime parsing fails due to the number of minutes
+			# and seconds not being delimited properly. Although this seems specific,
+			# it seems to happen with various snapshots from different domains.
+			# E.g. https://web.archive.org/web/20010926042147if_/http://geocities.yahoo.co.jp:80/
+			# Where the last modified time is "Mon, 24 Sep 2001 04:2146 GMT".
+			
+			# E.g. ["Mon, 24 Sep 2001 04", "2146 GMT"]
+			split_header = last_modified_header.rsplit(':', 1)
+			if len(split_header) == 2:
+				
+				# E.g. "2146 GMT" instead of "46 GMT"
+				seconds_and_timezone = split_header[1]
+				if len(seconds_and_timezone) > 6:
+					
+					# E.g. "2146 GMT" -> "21:46 GMT"
+					log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
+					last_modified_header = ':'.join([split_header[0], seconds_and_timezone[:2], seconds_and_timezone[2:]])
+
+			last_modified_time = parsedate_to_datetime(last_modified_header).strftime(Snapshot.TIMESTAMP_FORMAT)
 
 	except requests.RequestException as error:
 		log.error(f'Failed to find any extra information from the snapshot "{wayback_url}" with the error: {repr(error)}')
 	except ValueError as error:
-		# E.g. https://web.archive.org/web/20010926042147if_/http://geocities.yahoo.co.jp:80/
-		# Where the last modified time is "Mon, 24 Sep 2001 04:2146 GMT".
 		log.error(f'Failed to parse the last modified time "{last_modified_header}" of the snapshot "{wayback_url}" with the error: {repr(error)}')
 	
-	return guessed_encoding, last_modified_time
+	return last_modified_time
 
 WaybackParts = namedtuple('WaybackParts', ['Timestamp', 'Modifier', 'Url'])
 WAYBACK_MACHINE_SNAPSHOT_URL_REGEX = re.compile(r'https?://web\.archive\.org/web/(?P<timestamp>\d+)(?P<modifier>[a-z]+_)?/(?P<url>.+)', re.IGNORECASE)

@@ -12,10 +12,10 @@ Python 3.8 or later is required to run the scripts. You can install the required
 pip install -r requirements.txt
 ```
 
-You can also install the optional dependencies by running the following command. These are only required if the `tokenize_japanese_text` and `use_proxy` options are enabled:
+You can also install the optional dependencies by running the following command. These are only required if the `detect_page_language`, `tokenize_japanese_text`, `enable_text_to_speech`, or `use_proxy` options are enabled:
 
 ```
-pip install -r japanese_requirements.txt
+pip install -r language_requirements.txt
 pip install -r proxy_requirements.txt
 ```
 
@@ -25,21 +25,25 @@ The following Python packages are used:
 
 * [pywinauto](https://github.com/pywinauto/pywinauto): to perform automated tasks like moving the mouse or focusing on the browser window.
 
-* [Waybackpy](https://github.com/akamhy/waybackpy): to retrieve metadata from the Wayback Machine CDX API.
+* [Waybackpy](https://github.com/akamhy/waybackpy): to retrieve metadata from the Wayback Machine CDX API and archive pages using the Save API.
 
-* [requests](https://github.com/psf/requests): to check if specific Wayback Machine snapshots are available.
+* [requests](https://github.com/psf/requests): to check if specific Wayback Machine snapshots are available and to download binary snapshot files.
 
 * [brotlicffi](https://github.com/python-hyper/brotlicffi): to automatically decompress Brotli-encoded requests.
 
-* [limits](https://github.com/alisaifee/limits): to avoid making too many requests to the Wayback Machine and CDX API.
+* [limits](https://github.com/alisaifee/limits): to avoid making too many requests to the Wayback Machine, the CDX API, and the Save API.
 
-* [ffmpeg-python](https://github.com/kkroening/ffmpeg-python): to record the screen using ffmpeg.
+* [ffmpeg-python](https://github.com/kkroening/ffmpeg-python): to record the screen and manipulate the recordings using ffmpeg.
 
 * [Tweepy](https://github.com/tweepy/tweepy): to upload the recorded videos to Twitter and publish tweets.
 
 * [APScheduler](https://github.com/agronholm/apscheduler): to schedule both the video recordings and uploads.
 
-* [fugashi](https://github.com/polm/fugashi): to tokenize Japanese text. Only used if the `tokenize_japanese_text` option is true.
+* [fastText](https://github.com/facebookresearch/fastText): to detect a page's language from its text. Only used if the `detect_page_language` option is true.
+
+* [fugashi](https://github.com/polm/fugashi): to tokenize Japanese text retrieved from a page. Only used if the `tokenize_japanese_text` option is true.
+
+* [comtypes](https://github.com/enthought/comtypes): to use Windows' text-to-speech API and generate page transcripts. Only used if the `enable_text_to_speech` option is true, though it should already be installed since pywinauto depends on it.
 
 * [mitmproxy](https://github.com/mitmproxy/mitmproxy) to intercept all HTTP/HTTPS requests made by Firefox and its plugins. Used to locate missing resources in other subdomains via the CDX API while also allowing plugin media that loads slowly to finish requesting assets. Only used if the `use_proxy` option is true.
 

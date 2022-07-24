@@ -14,7 +14,7 @@ import re
 import sqlite3
 import time
 from argparse import ArgumentParser
-from collections import Counter
+from collections import Counter, defaultdict
 from contextlib import nullcontext
 from glob import iglob
 from math import ceil
@@ -24,7 +24,7 @@ from subprocess import PIPE, STDOUT
 from subprocess import Popen, TimeoutExpired
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from threading import Thread, Timer
-from typing import Dict, Iterator, List, Optional, Tuple, Union, cast
+from typing import BinaryIO, Dict, Iterator, List, Optional, Tuple, Union, cast
 from urllib.parse import unquote, urljoin, urlparse, urlunparse
 
 import ffmpeg # type: ignore
@@ -39,7 +39,7 @@ from selenium.webdriver.common.utils import free_port # type: ignore
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
-from common import Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, clamp, container_to_lowercase, delete_file, get_current_timestamp, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
+from common import TEMPORARY_PATH_PREFIX, Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, clamp, container_to_lowercase, delete_file, get_current_timestamp, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
 
 ####################################################################################################
 
@@ -59,7 +59,7 @@ class RecordConfig(CommonConfig):
 	allowed_standalone_media_extensions: Dict[str, bool] # Different from the config data type.
 	nondownloadable_standalone_media_extensions: Dict[str, bool] # Different from the config data type.
 
-	use_proxy: bool
+	enable_proxy: bool
 	proxy_port: Optional[int]
 	proxy_queue_timeout: int
 	proxy_total_timeout: int
@@ -70,7 +70,9 @@ class RecordConfig(CommonConfig):
 	save_missing_proxy_snapshots_that_still_exist_online: bool 
 	max_consecutive_extra_missing_proxy_snapshot_tries: int
 	max_total_extra_missing_proxy_snapshot_tries: int
+	cache_missing_proxy_responses: bool
 
+	page_plugin_wait: int
 	page_cache_wait: int
 	standalone_media_cache_wait: int
 
@@ -105,11 +107,24 @@ class RecordConfig(CommonConfig):
 	keep_archive_copy: bool
 	screen_capture_recorder_settings: Dict[str, Optional[int]]
 
-	ffmpeg_global: List[str]
-	ffmpeg_recording_input: Dict[str, Union[int, str]]
-	ffmpeg_recording_output: Dict[str, Union[int, str]]
-	ffmpeg_archive_output: Dict[str, Union[int, str]]
-	ffmpeg_upload_output: Dict[str, Union[int, str]]
+	ffmpeg_global_args: List[str]
+	
+	ffmpeg_recording_input_name: str
+	ffmpeg_recording_input_args: Dict[str, Union[int, str]]
+	ffmpeg_recording_output_args: Dict[str, Union[int, str]]
+	ffmpeg_archive_output_args: Dict[str, Union[int, str]]
+	ffmpeg_upload_output_args: Dict[str, Union[int, str]]
+
+	enable_text_to_speech: bool
+	text_to_speech_audio_format_type: Optional[str]
+	text_to_speech_rate: Optional[int]
+	text_to_speech_default_voice: Optional[str]
+	text_to_speech_language_voices: Dict[str, str]
+
+	ffmpeg_text_to_speech_video_input_name: str
+	ffmpeg_text_to_speech_video_input_args: Dict[str, Union[int, str]]
+	ffmpeg_text_to_speech_audio_input_args: Dict[str, Union[int, str]]
+	ffmpeg_text_to_speech_output_args: Dict[str, Union[int, str]]
 
 	# Determined at runtime.
 	standalone_media_template: str
@@ -130,11 +145,16 @@ class RecordConfig(CommonConfig):
 
 		self.screen_capture_recorder_settings = container_to_lowercase(self.screen_capture_recorder_settings)
 
-		self.ffmpeg_global = container_to_lowercase(self.ffmpeg_global)
-		self.ffmpeg_recording_input = container_to_lowercase(self.ffmpeg_recording_input)
-		self.ffmpeg_recording_output = container_to_lowercase(self.ffmpeg_recording_output)
-		self.ffmpeg_archive_output = container_to_lowercase(self.ffmpeg_archive_output)
-		self.ffmpeg_upload_output = container_to_lowercase(self.ffmpeg_upload_output)
+		self.ffmpeg_global_args = container_to_lowercase(self.ffmpeg_global_args)
+		
+		self.ffmpeg_recording_input_args = container_to_lowercase(self.ffmpeg_recording_input_args)
+		self.ffmpeg_recording_output_args = container_to_lowercase(self.ffmpeg_recording_output_args)
+		self.ffmpeg_archive_output_args = container_to_lowercase(self.ffmpeg_archive_output_args)
+		self.ffmpeg_upload_output_args = container_to_lowercase(self.ffmpeg_upload_output_args)
+
+		self.ffmpeg_text_to_speech_video_input_args = container_to_lowercase(self.ffmpeg_text_to_speech_video_input_args)
+		self.ffmpeg_text_to_speech_audio_input_args = container_to_lowercase(self.ffmpeg_text_to_speech_audio_input_args)
+		self.ffmpeg_text_to_speech_output_args = container_to_lowercase(self.ffmpeg_text_to_speech_output_args)
 
 		template_path = os.path.join(self.plugins_path, 'standalone_media.html.template')
 		with open(template_path, 'r', encoding='utf-8') as file:
@@ -294,6 +314,7 @@ if __name__ == '__main__':
 			self.timeout = timeout
 			self.timer = Timer(self.timeout, self.kill_plugin_containers)
 			self.plugin_container_path = os.path.join(self.firefox_directory_path, 'plugin-container.exe')
+			log.debug(f'Created a plugin crash timer with {self.timeout:.1f} seconds.')
 
 		def start(self) -> None:
 			""" Starts the timer. """
@@ -320,8 +341,8 @@ if __name__ == '__main__':
 		""" A process that captures the screen and stores the recording on disk using ffmpeg. """
 
 		raw_recording_path: str
-		archive_recording_path: str
 		upload_recording_path: str
+		archive_recording_path: str
 		
 		stream: ffmpeg.Stream
 		process: Popen
@@ -330,12 +351,12 @@ if __name__ == '__main__':
 		def __init__(self, output_path_prefix: str):
 			
 			self.raw_recording_path = output_path_prefix + '.raw.mkv'
-			self.archive_recording_path = output_path_prefix + '.mkv'
 			self.upload_recording_path = output_path_prefix + '.mp4'
+			self.archive_recording_path = output_path_prefix + '.mkv'
 
-			stream = ffmpeg.input('video=screen-capture-recorder:audio=virtual-audio-capturer', t=config.max_video_duration, **config.ffmpeg_recording_input)
-			stream = stream.output(self.raw_recording_path, **config.ffmpeg_recording_output)
-			stream = stream.global_args(*config.ffmpeg_global)
+			stream = ffmpeg.input(config.ffmpeg_recording_input_name, t=config.max_video_duration, **config.ffmpeg_recording_input_args)
+			stream = stream.output(self.raw_recording_path, **config.ffmpeg_recording_output_args)
+			stream = stream.global_args(*config.ffmpeg_global_args)
 			stream = stream.overwrite_output()
 			self.stream = stream
 
@@ -370,16 +391,16 @@ if __name__ == '__main__':
 
 			if not self.failed:
 
-				output_types = [(self.upload_recording_path, config.ffmpeg_upload_output)]
+				output_types = [(self.upload_recording_path, config.ffmpeg_upload_output_args)]
 				
 				if config.keep_archive_copy:
-					output_types.append((self.archive_recording_path, config.ffmpeg_archive_output))
+					output_types.append((self.archive_recording_path, config.ffmpeg_archive_output_args))
 
 				for output_path, output_arguments in output_types:
 
 					stream = ffmpeg.input(self.raw_recording_path)
 					stream = stream.output(output_path, **output_arguments)
-					stream = stream.global_args(*config.ffmpeg_global)
+					stream = stream.global_args(*config.ffmpeg_global_args)
 					stream = stream.overwrite_output()
 
 					try:
@@ -391,6 +412,116 @@ if __name__ == '__main__':
 						break
 			
 			delete_file(self.raw_recording_path)
+
+	if config.enable_text_to_speech:
+		
+		from comtypes import COMError # type: ignore
+		from comtypes.client import CreateObject # type: ignore
+		from comtypes.gen import SpeechLib # type: ignore
+
+		class TextToSpeech():
+			""" A wrapper for the Speech API and ffmpeg that generates a text-to-speech recording. """
+
+			engine: SpeechLib.ISpeechVoice
+			stream: SpeechLib.ISpeechFileStream
+			temporary_file: BinaryIO
+
+			language_to_voice: Dict[Optional[str], SpeechLib.ISpeechObjectToken]
+
+			def __init__(self):
+				
+				# See:
+				# - https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ms723602(v=vs.85)
+				# - https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ms722561(v=vs.85)
+				self.engine = CreateObject('SAPI.SpVoice')
+				self.stream = CreateObject('SAPI.SpFileStream')
+				
+				# We have to close the temporary file so SpFileStream.Open() doesn't fail.
+				self.temporary_file = NamedTemporaryFile(mode='wb', prefix=TEMPORARY_PATH_PREFIX, suffix='.wav', delete=False)
+				self.temporary_file.close()
+
+				try:
+					if config.text_to_speech_audio_format_type is not None:
+						self.engine.AllowOutputFormatChangesOnNextSet = False
+						self.stream.Format.Type = getattr(SpeechLib, config.text_to_speech_audio_format_type)
+				except AttributeError:
+					log.error(f'Could not find the audio format type "{config.text_to_speech_audio_format_type}".')
+
+				if config.text_to_speech_rate is not None:
+					self.engine.Rate = config.text_to_speech_rate
+
+				# The voices retrieved here were previously installed from voices packages, some of which
+				# can be downloaded via the Windows Speech settings. Note, however, that some voices are
+				# not detected properly and require some registry changes to make them visible to the API.
+				#
+				# The following registry key lists all installed voices:
+				# - HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech_OneCore\Voices\Tokens
+				# While the following one lists the voices that the API sees:
+				# - HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices\Tokens
+				#
+				# If a voice you want is missing, you must copy its registry structure from the first key
+				# to the second one. An easy way to do this is to open the Registry Editor, export the
+				# voices you want from the first key to a .reg file, change "Speech_OneCore" to "Speech"
+				# using a text editor, and then import them using the Registry Editor.
+				voices = {}
+				for voice in self.engine.GetVoices():
+					name = voice.GetAttribute('Name')
+					voices[name] = voice
+
+					language = voice.GetAttribute('Language')
+					gender = voice.GetAttribute('Gender')
+					age = voice.GetAttribute('Age')
+					vendor = voice.GetAttribute('Vendor')
+					description = voice.GetDescription()
+					log.info(f'Found the text-to-speech voice ({name}, {language}, {gender}, {age}, {vendor}): "{description}".')
+					
+				default_voice = self.engine.Voice
+				if config.text_to_speech_default_voice is not None:
+					default_voice = next((voice for name, voice in voices.items() if config.text_to_speech_default_voice.lower() in name.lower()), default_voice)
+					
+				self.language_to_voice = defaultdict(lambda: default_voice)
+				
+				for language, voice_name in config.text_to_speech_language_voices.items():
+					voice = next((voice for name, voice in voices.items() if voice_name.lower() in name.lower()), None)
+					if voice is not None:
+						self.language_to_voice[language] = voice
+
+			def generate_text_to_speech_file(self, text: str, language: Optional[str], output_path_prefix: str) -> Optional[str]:
+				""" Generates a video file that contains the text-to-speech in the audio track and a blank screen on the video one.
+				The voice used by the Speech API is specified in the configuration file and depends on the page's language.
+				The correct voice packages have been installed on Windows, otherwise a default voice is used instead. """
+				
+				output_path: Optional[str] = output_path_prefix + '.tts.mp4'
+
+				try:
+					# See:
+					# - https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ms720858(v=vs.85)
+					# - https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ms720892(v=vs.85)
+					self.stream.Open(self.temporary_file.name, SpeechLib.SSFMCreateForWrite)
+					self.engine.AudioOutputStream = self.stream
+					self.engine.Voice = self.language_to_voice[language]
+					self.engine.Speak(text, SpeechLib.SVSFPurgeBeforeSpeak | SpeechLib.SVSFIsNotXML)
+					self.stream.Close()
+
+					video_stream = ffmpeg.input(config.ffmpeg_text_to_speech_video_input_name, **config.ffmpeg_text_to_speech_video_input_args)
+					audio_stream = ffmpeg.input(self.temporary_file.name, **config.ffmpeg_text_to_speech_audio_input_args)
+
+					target_stream = ffmpeg.output(video_stream, audio_stream, output_path, **config.ffmpeg_text_to_speech_output_args)
+					target_stream = target_stream.global_args(*config.ffmpeg_global_args)
+					target_stream = target_stream.overwrite_output()
+					
+					log.debug(f'Generating the text-to-speech file with the ffmpeg arguments: {target_stream.get_args()}')
+					target_stream.run()
+
+				except (COMError, ffmpeg.Error) as error:
+					log.error(f'Failed to generate the text-to-speech file "{output_path}" with the error: {repr(error)}')
+					output_path = None
+
+				return output_path
+
+			def cleanup(self) -> None:
+				""" Deletes the temporary WAV file created by the Speech API. """
+				delete_file(self.temporary_file.name)
 
 	class PluginInputRepeater(Thread):
 		""" A thread that periodically interacts with any plugin instance running in Firefox. """
@@ -505,26 +636,42 @@ if __name__ == '__main__':
 		log.info(f'Recording {num_snapshots} snapshots.')
 
 		try:
-			if config.use_proxy:
+			if config.enable_proxy:
+				log.info('Initializing the proxy.')
 				proxy = Proxy.create()
 			else:
 				proxy = nullcontext() # type: ignore
 
-			standalone_media_page_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix='wanderer.', suffix='.html', delete=False)
+			if config.enable_text_to_speech:
+				log.info('Initializing text-to-speech.')
+				text_to_speech = TextToSpeech()
+
+			standalone_media_page_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=TEMPORARY_PATH_PREFIX, suffix='.html', delete=False)
 			standalone_media_page_url = f'file:///{standalone_media_page_file.name}'
 			log.debug(f'Created the temporary standalone media page file "{standalone_media_page_file.name}".')
 
-			standalone_media_download_directory = TemporaryDirectory(prefix='wanderer.', suffix='.media')
+			standalone_media_download_directory = TemporaryDirectory(prefix=TEMPORARY_PATH_PREFIX, suffix='.media')
 			standalone_media_download_search_path = os.path.join(standalone_media_download_directory.name, '*')
 			log.debug(f'Created the temporary standalone media download directory "{standalone_media_download_directory.name}".')
 
 			extra_preferences: dict = {
-				'browser.cache.check_doc_frequency': 2, # Always use cached page.
-				# Don't show prompt if a plugin stops responding. We want the PluginCrashTimer to handle these silently in the background.
-				'dom.ipc.plugins.timeoutSecs': -1, 
+				# Always use cached page.
+				'browser.cache.check_doc_frequency': 2,
+				
+				# Don't show a prompt or try to kill a plugin if it stops responding.
+				# We want the PluginCrashTimer to handle these silently in the background.
+				# See:
+				# - https://wiki.mozilla.org/Electrolysis/plugins
+				# - https://dblohm7.ca/blog/2012/11/22/plugin-hang-user-interface-for-firefox/
+				'dom.ipc.plugins.contentTimeoutSecs': -1,
+				'dom.ipc.plugins.hangUITimeoutSecs': -1,
+				'dom.ipc.plugins.parentTimeoutSecs': -1,
+				'dom.ipc.plugins.processLaunchTimeoutSecs': -1,
+				'dom.ipc.plugins.timeoutSecs': -1,
+				'dom.ipc.plugins.unloadTimeoutSecs': -1,
 			} 
 
-			if config.use_proxy:
+			if config.enable_proxy:
 				extra_preferences.update({
 					'network.proxy.type': 1, # Manual proxy configuration (see below).
 					'network.proxy.share_proxy_settings': False,
@@ -543,9 +690,11 @@ if __name__ == '__main__':
 
 				browser.go_to_blank_page_with_text('\N{Broom} Initializing \N{Broom}')
 
-				def generate_standalone_media_page(wayback_url: str, media_extension: Optional[str] = None) -> Tuple[float, Optional[str], Optional[str]]:
+				def generate_standalone_media_page(wayback_url: str, media_extension: Optional[str] = None) -> Tuple[float, Optional[str], Optional[str], bool]:
 					""" Generates the page where a standalone media file is embedded using both the information
 					from the configuration as well as the file's metadata. """
+
+					success = True
 
 					wayback_parts = parse_wayback_machine_snapshot_url(wayback_url)
 					parts = urlparse(wayback_parts.Url if wayback_parts is not None else wayback_url)
@@ -597,6 +746,7 @@ if __name__ == '__main__':
 						
 						except requests.RequestException as error:
 							log.error(f'Failed to download the standalone media file "{wayback_url}" with the error: {repr(error)}')
+							success = False
 						except (ffmpeg.Error, KeyError, ValueError) as error:
 							log.warning(f'Could not parse the standalone media\'s metadata with the error: {repr(error)}')
 							
@@ -614,7 +764,7 @@ if __name__ == '__main__':
 					standalone_media_page_file.write(content)
 					standalone_media_page_file.flush()
 
-					return duration, title, author
+					return duration, title, author, success
 
 				def abort_snapshot(snapshot: Snapshot) -> None:
 					""" Aborts a snapshot that couldn't be recorded correctly due to a WebDriver error. """
@@ -628,13 +778,12 @@ if __name__ == '__main__':
 						time.sleep(config.database_error_wait)
 
 				def rank_snapshot_by_points(points: int) -> float:
-					""" Ranks a snapshot using a weighted random sampling algorithm. """
-					# See:
+					""" Ranks a snapshot by its points so that the highest ranked one will be recorded next. """
+					# This uses a modified weighted random sampling algorithm:
 					# - https://stackoverflow.com/a/56006340/18442724
+					# - https://stackoverflow.com/a/51090191/18442724
 					# - http://utopia.duth.gr/~pefraimi/research/data/2007EncOfAlg.pdf
-					# For negative points, the ranking is inverted.
-					sign = 1 if points >= 0 else -1
-					return sign * random() ** (config.ranking_constant / (abs(points) + 1))
+					return random() ** (1 / max(points + config.ranking_constant, 1)) if points >= 0 else points
 
 				def is_standalone_media_extension_allowed(media_extension: str) -> bool:
 					""" Checks if a standalone media snapshot should be recorded. """
@@ -646,7 +795,8 @@ if __name__ == '__main__':
 				if config.fullscreen_browser:
 					browser.toggle_fullscreen()
 
-				for key, value in TemporaryRegistry.traverse('HKEY_CURRENT_USER\\SOFTWARE\\screen-capture-recorder'):
+				previous_settings = [key for key, value, type in TemporaryRegistry.traverse('HKEY_CURRENT_USER\\SOFTWARE\\screen-capture-recorder')]
+				for key in previous_settings:
 					registry.delete(key)
 
 				for key, value in config.screen_capture_recorder_settings.items():
@@ -667,7 +817,7 @@ if __name__ == '__main__':
 							registry_value = config.physical_screen_height
 							log.info(f'Using the physical height ({config.physical_screen_height}) to capture the screen.')
 						elif key == 'default_max_fps':
-							framerate = config.ffmpeg_recording_input.get('framerate', 60)
+							framerate = config.ffmpeg_recording_input_args.get('framerate', 60)
 							registry_value = cast(int, framerate)
 						else:
 							registry.delete(registry_key)
@@ -732,7 +882,6 @@ if __name__ == '__main__':
 							assert snapshot.Points is not None, 'The Points column is not being computed properly.'
 							config.apply_snapshot_options(snapshot)
 
-							rank = row['Rank'] * 100
 							days_since_last_published = row['DaysSinceLastPublished']
 
 							if days_since_last_published is not None:
@@ -769,12 +918,12 @@ if __name__ == '__main__':
 						media_author = None
 
 						if snapshot.IsStandaloneMedia:
-							media_duration, media_title, media_author = generate_standalone_media_page(snapshot.WaybackUrl, snapshot.MediaExtension)
+							media_duration, media_title, media_author, _ = generate_standalone_media_page(snapshot.WaybackUrl, snapshot.MediaExtension)
 							content_url = standalone_media_page_url
 						else:
 							content_url = snapshot.WaybackUrl
 
-						log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} ranked at {rank:.2f}% with {snapshot.Points} points (last published = {days_since_last_published} days ago).')
+						log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} with {snapshot.Points} points (last published = {days_since_last_published} days ago).')
 						
 						original_window = driver.current_window_handle
 						browser.bring_to_front()
@@ -782,22 +931,28 @@ if __name__ == '__main__':
 						
 						missing_urls: List[str] = []
 
-						if config.use_proxy:
+						if config.enable_proxy:
 							proxy.timestamp = snapshot.Timestamp
 						
 						cache_wait = config.standalone_media_cache_wait if snapshot.IsStandaloneMedia else config.page_cache_wait
+						proxy_wait = config.proxy_queue_timeout + config.proxy_total_timeout if config.enable_proxy else 0
 
 						# How much we wait before killing the plugins depends on how long we expect
 						# each phase (caching and recording) to last in the worst case scenario.
-						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + cache_wait + (config.proxy_total_timeout if config.use_proxy else 0)
+						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.page_plugin_wait + cache_wait + proxy_wait
 
+						frame_text_list = []
 						realaudio_url = None
 
 						# Wait for the page and its resources to be cached.
-						with proxy, PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout) as crash_timer:
+						with proxy, PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout):
 
 							browser.go_to_wayback_url(content_url)
 
+							# Make sure the plugin instances had time to load.
+							time.sleep(config.page_plugin_wait)
+
+							# This may be less than the real value if we had to kill any plugin instances.
 							num_plugin_instances = browser.count_plugin_instances()
 							log.debug(f'Found {num_plugin_instances} plugin instances.')
 							
@@ -820,6 +975,10 @@ if __name__ == '__main__':
 										scroll_height = frame_scroll_height
 										client_height = driver.execute_script('return document.body.clientHeight;')
 
+									if config.enable_text_to_speech:
+										frame_text = driver.execute_script('return document.documentElement.innerText;')
+										frame_text_list.append(frame_text)
+
 								# While this works for most cases, there are pages where the scroll and client
 								# height have the same value even though there's a scrollbar. This happens even
 								# in modern Mozilla and Chromium browsers.
@@ -841,7 +1000,7 @@ if __name__ == '__main__':
 							time.sleep(cache_wait)
 
 							# Keep waiting if the page or any plugins are still requesting data.
-							if config.use_proxy:
+							if config.enable_proxy:
 								
 								log.debug('Waiting for the proxy.')
 								begin_proxy_time = time.time()
@@ -889,8 +1048,13 @@ if __name__ == '__main__':
 
 						if snapshot.IsStandaloneMedia and realaudio_url is not None:
 							log.info(f'Regenerating the standalone media page for the RealAudio file "{realaudio_url}".')
-							media_duration, media_title, media_author = generate_standalone_media_page(realaudio_url)
+							media_duration, media_title, media_author, success = generate_standalone_media_page(realaudio_url)
 							wait_after_load = clamp(config.base_standalone_media_wait_after_load + media_duration, config.min_video_duration, config.max_video_duration)
+
+							if not success:
+								log.error(f'Failed to download the RealAudio file.')
+								abort_snapshot(snapshot)
+								continue
 
 						if config.debug and browser.window is not None:
 							
@@ -909,7 +1073,7 @@ if __name__ == '__main__':
 						os.makedirs(subdirectory_path, exist_ok=True)
 						
 						parts = urlparse(snapshot.Url)
-						media_identifier = snapshot.MediaExtension if snapshot.IsStandaloneMedia else ('plugins' if snapshot.UsesPlugins else '')
+						media_identifier = snapshot.MediaExtension if snapshot.IsStandaloneMedia else ('p' if snapshot.PageUsesPlugins else '')
 						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, snapshot.Timestamp[:4], snapshot.Timestamp[4:6], snapshot.Timestamp[6:8], media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
@@ -919,25 +1083,27 @@ if __name__ == '__main__':
 
 						plugin_input_repeater = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
 						cosmo_player_viewpoint_cycler = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
-						plugin_crash_timeout = config.base_plugin_crash_timeout + config.max_video_duration
 
-						log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls_to_bottom} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
-						browser.go_to_wayback_url(content_url)
+						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.max_video_duration
+						with PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout) as crash_timer:
+							
+							log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls_to_bottom} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
+							browser.go_to_wayback_url(content_url)
 
-						# Reloading the object, embed, and applet tags can yield good results when a page
-						# uses various plugins that can potentially start playing at different times.
-						if config.reload_plugin_media_before_recording:
-							browser.reload_plugin_media()
-				
-						# Record the snapshot. The page should load faster now that its resources are cached.
-						with plugin_input_repeater, cosmo_player_viewpoint_cycler, PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout) as crash_timer, ScreenCapture(recording_path_prefix) as capture:
-						
-							time.sleep(wait_after_load)
+							# Reloading the object, embed, and applet tags can yield good results when a page
+							# uses various plugins that can potentially start playing at different times.
+							if config.reload_plugin_media_before_recording:
+								browser.reload_plugin_media()
+					
+							# Record the snapshot. The page should load faster now that its resources are cached.
+							with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
+							
+								time.sleep(wait_after_load)
 
-							for _ in range(num_scrolls_to_bottom):
-								for _ in browser.traverse_frames():
-									driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
-								time.sleep(wait_per_scroll)
+								for _ in range(num_scrolls_to_bottom):
+									for _ in browser.traverse_frames():
+										driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
+									time.sleep(wait_per_scroll)
 
 						# Check if the snapshot was redirected. See check_snapshot_redirection() in the
 						# scout script for more details. This is good enough for the recorder script
@@ -953,10 +1119,10 @@ if __name__ == '__main__':
 							log.error(f'Aborted the recording (plugins crashed = {crash_timer.crashed}, capture failed = {capture.failed}, redirected = {redirected}).')
 							state = Snapshot.ABORTED
 						elif days_since_last_published is not None:
-							log.info(f'Saved the new recording after {days_since_last_published} days to "{capture.archive_recording_path}".')
+							log.info(f'Saved the new recording after {days_since_last_published} days to "{capture.upload_recording_path}".')
 							state = Snapshot.APPROVED
 						else:
-							log.info(f'Saved the recording to "{capture.archive_recording_path}".')
+							log.info(f'Saved the recording to "{capture.upload_recording_path}".')
 							state = Snapshot.RECORDED
 
 						if config.save_missing_proxy_snapshots_that_still_exist_online:
@@ -1048,14 +1214,14 @@ if __name__ == '__main__':
 										else:
 											timestamp = None
 
-										saved_urls.append({'snapshot_id': snapshot.Id, 'url': url, 'timestamp': timestamp, 'failed': False})
+										saved_urls.append({'snapshot_id': snapshot.Id, 'recording_id': recording_id, 'url': url, 'timestamp': timestamp, 'failed': False})
 
 								except TooManyRequestsError as error:
 									log.error(f'Reached the Save API limit while trying to save the missing URL "{url}": {repr(error)}')
 									break
 								except Exception as error:
 									log.error(f'Failed to save the missing URL "{url}" with the error: {repr(error)}')
-									saved_urls.append({'snapshot_id': snapshot.Id, 'url': url, 'timestamp': None, 'failed': True})
+									saved_urls.append({'snapshot_id': snapshot.Id, 'recording_id': recording_id, 'url': url, 'timestamp': None, 'failed': True})
 
 								num_processed += 1
 
@@ -1065,7 +1231,19 @@ if __name__ == '__main__':
 								log.warning(f'Skipping {len(remaining_missing_urls)} missing URLs.')
 
 								for url in remaining_missing_urls:
-									saved_urls.append({'snapshot_id': snapshot.Id, 'url': url, 'timestamp': None, 'failed': True})
+									saved_urls.append({'snapshot_id': snapshot.Id, 'recording_id': recording_id, 'url': url, 'timestamp': None, 'failed': True})
+
+						text_to_speech_file_path = None
+						if config.enable_text_to_speech and not snapshot.IsStandaloneMedia:
+							
+							browser.go_to_blank_page_with_text('\N{Speech Balloon} Generating Text-to-Speech \N{Speech Balloon}', str(snapshot))
+							title = f'Page Title: {snapshot.PageTitle} ({snapshot.LongDate})' if snapshot.PageTitle else f'Untitled Page ({snapshot.LongDate})'
+							frame_text_list.insert(0, title)
+							page_text = '.\n'.join(frame_text_list)
+							text_to_speech_file_path = text_to_speech.generate_text_to_speech_file(page_text, snapshot.PageLanguage, recording_path_prefix)
+
+							if text_to_speech_file_path is not None:
+								log.info(f'Saved the text-to-speech file to "{text_to_speech_file_path}".')
 
 					except SessionNotCreatedException:
 						log.warning('Terminated the WebDriver session abruptly.')
@@ -1080,21 +1258,25 @@ if __name__ == '__main__':
 
 						if state != Snapshot.ABORTED:
 							
-							archive_filename = os.path.basename(capture.archive_recording_path) if config.keep_archive_copy else None
 							upload_filename = os.path.basename(capture.upload_recording_path)
+							archive_filename = os.path.basename(capture.archive_recording_path) if config.keep_archive_copy else None
+							text_to_speech_filename = os.path.basename(text_to_speech_file_path) if text_to_speech_file_path is not None else None
 
 							db.execute(	'''
-										INSERT INTO Recording (SnapshotId, IsProcessed, ArchiveFilename, UploadFilename, CreationTime)
-										VALUES (:snapshot_id, :is_processed, :archive_filename, :upload_filename, :creation_time);
-										''', {'snapshot_id': snapshot.Id, 'is_processed': False, 'archive_filename': archive_filename,
-											  'upload_filename': upload_filename, 'creation_time': get_current_timestamp()})
+										INSERT INTO Recording (SnapshotId, IsProcessed, UploadFilename, ArchiveFilename, TextToSpeechFilename, CreationTime)
+										VALUES (:snapshot_id, :is_processed, :upload_filename, :archive_filename, :text_to_speech_filename, :creation_time);
+										''', {'snapshot_id': snapshot.Id, 'is_processed': False, 'upload_filename': upload_filename,
+											  'archive_filename': archive_filename, 'text_to_speech_filename': text_to_speech_filename,
+											  'creation_time': get_current_timestamp()})
 
 							if snapshot.Priority == Snapshot.RECORD_PRIORITY:
 								db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
 
 						else:
-							delete_file(capture.archive_recording_path)
 							delete_file(capture.upload_recording_path)
+							delete_file(capture.archive_recording_path)
+							if text_to_speech_file_path is not None:
+								delete_file(text_to_speech_file_path)
 
 						if snapshot.IsStandaloneMedia and all(metadata is None for metadata in [snapshot.MediaTitle, snapshot.MediaAuthor]):
 							db.execute(	'UPDATE Snapshot SET MediaTitle = :media_title, MediaAuthor = :media_author WHERE Id = :id;',
@@ -1102,14 +1284,14 @@ if __name__ == '__main__':
 						
 						# For cases where looking at the embed tags while scouting isn't enough.
 						# E.g. https://web.archive.org/web/19961221002554if_/http://www.geocities.com:80/Hollywood/Hills/5988/
-						elif not snapshot.UsesPlugins and num_plugin_instances > 0:
+						elif not snapshot.PageUsesPlugins and num_plugin_instances > 0:
 							log.info(f'Detected {num_plugin_instances} plugin instances while no embed tags were found during scouting.')
-							db.execute('UPDATE Snapshot SET UsesPlugins = :uses_plugins WHERE Id = :id;', {'uses_plugins': True, 'id': snapshot.Id})
+							db.execute('UPDATE Snapshot SET PageUsesPlugins = :page_uses_plugins WHERE Id = :id;', {'page_uses_plugins': True, 'id': snapshot.Id})
 
 						if config.save_missing_proxy_snapshots_that_still_exist_online:
 							db.executemany(	'''
-											INSERT INTO SavedSnapshotUrl (SnapshotId, Url, Timestamp, Failed)
-											VALUES (:snapshot_id, :url, :timestamp, :failed)
+											INSERT INTO SavedUrl (SnapshotId, RecordingId, Url, Timestamp, Failed)
+											VALUES (:snapshot_id, :recording_id, :url, :timestamp, :failed)
 											ON CONFLICT (Url)
 											DO UPDATE SET Timestamp = :timestamp, Failed = :failed;
 											''', saved_urls)
@@ -1135,7 +1317,10 @@ if __name__ == '__main__':
 			except Exception as error:
 				log.error(f'Failed to delete the temporary standalone media download directory with the error: {repr(error)}')
 
-			if config.use_proxy:
+			if config.enable_text_to_speech:
+				text_to_speech.cleanup()
+
+			if config.enable_proxy:
 				proxy.shutdown()
 
 		log.info(f'Finished recording {num_snapshots} snapshots.')
@@ -1146,7 +1331,7 @@ if __name__ == '__main__':
 		record_snapshots(args.max_iterations)
 	else:
 		log.info(f'Running the recorder with the schedule: {config.scheduler}')
-		scheduler.add_job(record_snapshots, args=[config.num_snapshots_per_scheduled_batch], trigger='cron', coalesce=True, **config.scheduler, timezone='UTC')
+		scheduler.add_job(record_snapshots, args=[config.num_snapshots_per_scheduled_batch], trigger='cron', coalesce=True, misfire_grace_time=None, **config.scheduler, timezone='UTC')
 		scheduler.start()
 
 	log.info('Terminating the recorder.')

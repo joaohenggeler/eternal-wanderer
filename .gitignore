@@ -1,28 +1,23 @@
 *.pyc
 
-Source/*
-!Source/*.py
-!Source/config.template.json
-!Source/*requirements.txt
-!Source/*.md
+Source/config.json
+Source/*.log
 
-!Source/Data
-Source/Data/*.db*
-Source/Data/Drivers
-Source/Data/Extensions
-Source/Data/Firefox
+Source/Data/*
 
+!Source/Data/AutoIt
+
+!Source/Data/Other
 Source/Data/Other/*
 !Source/Data/Other/Queries
 
+!Source/Data/Plugins
 Source/Data/Plugins/*
+!Source/Data/Plugins/standalone_media.html.template
+!Source/Data/Plugins/BrowserPluginExtender
 !Source/Data/Plugins/Java
 Source/Data/Plugins/Java/*
 !Source/Data/Plugins/Java/*.template
-!Source/Data/Plugins/BrowserPluginExtender.dll
-!Source/Data/Plugins/standalone_media.html.template
 
+!Source/Data/Profile
 Source/Data/Profile/pluginreg.dat
-
-Source/Data/Compilations
-Source/Data/Recordings
