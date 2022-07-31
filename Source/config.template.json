@@ -233,11 +233,11 @@
 		"max_recordings_per_directory": 5000,
 		"compilations_path": "Data/Compilations",
 
-		"wayback_machine_rate_limit_amount": 25,
+		"wayback_machine_rate_limit_amount": 20,
 		"wayback_machine_rate_limit_multiple": 60,
 		
-		"cdx_api_rate_limit_amount": 5,
-		"cdx_api_rate_limit_multiple": 1,
+		"cdx_api_rate_limit_amount": 2,
+		"cdx_api_rate_limit_multiple": 3,
 		
 		"save_api_rate_limit_amount": 3,
 		"save_api_rate_limit_multiple": 60,
@@ -246,7 +246,9 @@
 		"unavailable_wayback_machine_wait": 900,
 
 		"allowed_domains": null,
-		"disallowed_domains": null
+		"disallowed_domains": ["mil"],
+
+		"ffmpeg_global_args": ["-loglevel", "warning", "-nostats"]
 	},
 
 	"scout":
@@ -304,6 +306,7 @@
 			{"url": "http://www.yahoo.com/", "timestamp": "19961017235908"}
 		],
 
+		"ranking_offset": 0,
 		"min_year": null,
 		"max_year": 2010,
 		"max_depth": null,
@@ -311,25 +314,22 @@
 
 		"excluded_url_tags": ["link"],
 
-		"standalone_media_points": 500,
-
 		"word_points":
 		{
-			"flash": 100,
-			"フラッシュ": 100,
-			"shockwave": 100,
-			"java": 100,
-			"applet": 100,
-			"applets": 100,
-			"アプレット": 100,
-			"silverlight": 100,
-			"authorware": 100,
-			"virtools": 100,
-			"3dvia": 100,
-			"vrml": 100,
-			"midi": 100,
-			"quicktime": 100,
-			"realaudio": 100
+			"flash": 20,
+			"フラッシュ": 20,
+			"shockwave": 20,
+			"applet": 20,
+			"applets": 20,
+			"アプレット": 20,
+			"vrml": 20,
+			"silverlight": 20,
+			"authorware": 20,
+			"virtools": 20,
+			"3dvia": 20,
+			"midi": 20,
+			"realaudio": 20,
+			"quicktime": 20
 		},
 
 		"tag_points":
@@ -340,10 +340,12 @@
 			"bgsound": 1000,
 			"audio": 1000,
 			"video": 1000,
-			"map": 300,
+			"map": 100,
 			"blink": 100,
 			"marquee": 100
 		},
+
+		"standalone_media_points": 500,
 
 		"sensitive_words": ["b64:Ymxvd2pvYg==", "b64:Ymxvd2pvYnM=", "b64:Y3Vt", "b64:Y3Vtcw==", "b64:Y3Vtc2hvdA==", "b64:Y3VudA==", "b64:Y3VudHM=", "b64:ZG9nZ3lzdHlsZQ==", "b64:ZmFn", "b64:ZmFnZ290", "b64:ZmFnZ290cw==", "b64:ZmFncw==", "b64:ZnVja2Vk", "b64:ZnVja2luZw==", "b64:ZnVja3M=", "b64:aGFuZGpvYg==", "b64:aGFuZGpvYnM=", "b64:aGVudGFp", "b64:aG9tbw==", "b64:aG9tb3M=", "b64:aml6eg==", "b64:bWlsZg==", "b64:bW90aGVyZnVja2Vy", "b64:bW90aGVyZnVja2Vycw==", "b64:bmlnZ2Vy", "b64:bmlnZ2Vycw==", "b64:bnVkZQ==", "b64:cGFlZG9waGlsZQ==", "b64:cGFlZG9waGlsZXM=", "b64:cGVkbw==", "b64:cGVkb3BoaWxl", "b64:cGVkb3BoaWxlcw==", "b64:cGVkb3M=", "b64:cHVzc2llcw==", "b64:cHVzc3k=", "b64:cmFwZQ==", "b64:cmFwZWQ=", "b64:cmFwZXM=", "b64:cmFwaXN0", "b64:cmFwaXN0cw==", "b64:c2hlbWFsZQ==", "b64:c2hlbWFsZXM=", "b64:c2x1dA==", "b64:c2x1dHM=", "b64:dGl0ZnVjaw==", "b64:dGl0ZnVja3M=", "b64:dGl0am9i", "b64:dGl0am9icw==", "b64:dGl0cw==", "b64:dGl0dHlmdWNr", "b64:dGl0dHlmdWNrcw==", "b64:dHJhbm5pZXM=", "b64:dHJhbm55", "b64:d2hvcmU=", "b64:d2hvcmVz", "b64:eHh4"],
 
@@ -358,7 +360,7 @@
 		"scheduler": {"minute": "*/30"},
 		"num_snapshots_per_scheduled_batch": 5,
 
-		"ranking_constant": 3000,
+		"ranking_offset": 1500,
 		"min_year": null,
 		"max_year": null,
 		"record_sensitive_snapshots": true,
@@ -443,7 +445,7 @@
 		"cosmo_player_viewpoint_wait_per_cycle": 8,
 
 		"min_video_duration": 2,
-		"max_video_duration": 135,
+		"max_video_duration": 138,
 		"keep_archive_copy": false,
 
 		"screen_capture_recorder_settings":
@@ -453,8 +455,6 @@
 			"default_max_fps": null,
 			"capture_mouse_default_1": 0
 		},
-
-		"ffmpeg_global_args": ["-loglevel", "warning", "-nostats"],
 
 		"ffmpeg_recording_input_name": "video=screen-capture-recorder:audio=virtual-audio-capturer",
 		"ffmpeg_recording_input_args":
@@ -588,9 +588,17 @@
 
 	"publish":
 	{
-		"scheduler": {"minute": "*/3"},
+		"scheduler": {"minute": "*/30"},
 		"num_recordings_per_scheduled_batch": 1,
+		
+		"publish_to_twitter": true,
+		"publish_to_mastodon": false,
+
 		"require_approval": true,
+		"flag_sensitive_snapshots": true,
+		"show_standalone_media_metadata": true,
+		"reply_with_text_to_speech": true,
+		"delete_files_after_publish": false,
 
 		"twitter_api_key": "<API Key>",
 		"twitter_api_secret": "<API Secret>",
@@ -600,8 +608,8 @@
 		"twitter_max_retries": 10,
 		"twitter_retry_wait": 60,
 
-		"max_tweet_length": 280,
-		"flag_sensitive_snapshots": true,
-		"delete_video_after_upload": false
+		"twitter_max_post_length": 280,
+		"twitter_text_to_speech_segment_duration": 138,
+		"twitter_max_text_to_speech_segments": 13
 	}
 }

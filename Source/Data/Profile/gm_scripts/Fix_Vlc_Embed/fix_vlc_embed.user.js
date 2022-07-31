@@ -175,6 +175,12 @@ if(vlc_plugin)
 			// from the beginning.
 			//
 			// See: https://wiki.videolan.org/Documentation:WebPlugin/#Playlist_object
+			//
+			// Examples:
+			// - AVI: https://web.archive.org/web/19980221110733if_/http://heartcorps.com/journeys/voice.htm
+			// - MOV: https://web.archive.org/web/20200219215301if_/http://goa103.free.fr/t_63455/media_player.php
+			// - MOV: https://web.archive.org/web/20220514015040if_/https://web.nmsu.edu/~leti/portfolio/quicktimemovie.html
+			// - WMV: https://web.archive.org/web/20200713113744if_/http://thirdplanetvideo.com/Flip4MacTestPage.html
 			element.addEventListener("click", function(event)
 			{
 				const vlc = event.currentTarget;
@@ -189,11 +195,11 @@ if(vlc_plugin)
 				const vlc = event.currentTarget;
 				// If the user wants to restart the audio, then we no longer need to worry about
 				// preventing it from looping twice (see below).
-				if("vlcIntervalId" in vlc.dataset)
+				if("intervalId" in vlc.dataset)
 				{
-					clearInterval(vlc.dataset.vlcIntervalId);
-					delete vlc.dataset.vlcIntervalId;
-					delete vlc.dataset.vlcLastPosition;
+					clearInterval(parseInt(vlc.dataset.intervalId));
+					delete vlc.dataset.lastPosition;
+					delete vlc.dataset.intervalId;
 				}
 				vlc.input.position = 0;
 				vlc.playlist.play();
@@ -208,31 +214,37 @@ if(vlc_plugin)
 			// - https://wiki.videolan.org/Documentation:WebPlugin/#Optional_elements
 			// - https://wiki.videolan.org/Documentation:WebPlugin/#Root_object
 			// - https://wiki.videolan.org/Documentation:WebPlugin/#Video_object
+			//
+			// Examples:
+			// - AIFF: https://web.archive.org/web/20010306021445if_/http://www.big.or.jp:80/~frog/others/bbb.html
+			// - WAV: https://web.archive.org/web/19961221002525if_/http://www.geocities.com/Heartland/8055/
+			// - WAV: https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html
 			attributes_map.set("loop", null);
 			get_object_embed_attributes(element, attributes_map);
 
 			const loop = attributes_map.get("loop");
 			if(loop == null || loop === "false" || loop === "0")
 			{
-				element.dataset.vlcIntervalId = setInterval(function(vlc)
+				element.dataset.lastPosition = "-1";
+				element.dataset.intervalId = setInterval(function(vlc)
 				{
-					// If we're right near the end of the video or if we've looped back around.
-					if(Math.abs(1.0 - vlc.input.position) < 10e-3 || ("vlcLastPosition" in vlc.dataset && vlc.input.position < vlc.dataset.vlcLastPosition))
+					// Check if we've looped back around.
+					if(vlc.input.position < parseFloat(vlc.dataset.lastPosition))
 					{
 						vlc.playlist.stop();
 						vlc.input.position = -1;
-						clearInterval(vlc.dataset.vlcIntervalId);
-						delete vlc.dataset.vlcIntervalId;
-						delete vlc.dataset.vlcLastPosition;
-						if(LOG) console.log("Fix VLC Embed - Stopped:", vlc);
+						if(LOG) console.log("Fix Vlc Embed - Stopped:", vlc);
+						clearInterval(parseInt(vlc.dataset.intervalId));
+						delete vlc.dataset.lastPosition;
+						delete vlc.dataset.intervalId;
 					}
-					if(vlc.input.position !== -1) vlc.dataset.vlcLastPosition = vlc.input.position;
+					vlc.dataset.lastPosition = vlc.input.position;
 				}, 0, element);				
 			}
 
 			reload_object_embed(element);
 
-			if(LOG) console.log("Fix VLC Embed - Fixed:", element);
+			if(LOG) console.log("Fix Vlc Embed - Fixed:", element);
 		}
 	}
 }

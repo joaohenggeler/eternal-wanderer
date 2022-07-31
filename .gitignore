@@ -7,10 +7,6 @@ Source/Data/*
 
 !Source/Data/AutoIt
 
-!Source/Data/Other
-Source/Data/Other/*
-!Source/Data/Other/Queries
-
 !Source/Data/Plugins
 Source/Data/Plugins/*
 !Source/Data/Plugins/standalone_media.html.template
@@ -21,3 +17,5 @@ Source/Data/Plugins/Java/*
 
 !Source/Data/Profile
 Source/Data/Profile/pluginreg.dat
+
+!Source/Data/Queries

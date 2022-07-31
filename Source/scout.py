@@ -23,7 +23,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from selenium.common.exceptions import SessionNotCreatedException, StaleElementReferenceException, WebDriverException # type: ignore
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
-from common import Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url, container_to_lowercase, find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info, is_url_from_domain, is_wayback_machine_available, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
+from common import Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url, container_to_lowercase, find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info, global_rate_limiter, is_url_from_domain, is_wayback_machine_available, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
 
 ####################################################################################################
 
@@ -36,6 +36,7 @@ class ScoutConfig(CommonConfig):
 	
 	initial_snapshots: List[Dict[str, str]]
 	
+	ranking_offset: int
 	min_year: Optional[int]
 	max_year: Optional[int]
 	max_depth: Optional[int]
@@ -43,9 +44,9 @@ class ScoutConfig(CommonConfig):
 
 	excluded_url_tags: List[str]
 	
-	standalone_media_points: int
 	word_points: Dict[str, int]
 	tag_points: Dict[str, int]
+	standalone_media_points: int
 	
 	sensitive_words: Dict[str, bool] # Different from the config data type.
 	
@@ -86,6 +87,8 @@ if __name__ == '__main__':
 	parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to scout. Omit or set to %(default)s to run forever.')
 	parser.add_argument('-initial', action='store_true', help='Whether to enqueue the initial snapshots specified in the configuration file.')
 	args = parser.parse_args()
+
+	log.info('Initializing the scout.')
 
 	if config.detect_page_language:
 		import fasttext # type: ignore
@@ -154,8 +157,6 @@ if __name__ == '__main__':
 
 	####################################################################################################
 
-	log.info('Initializing the scout.')
-
 	# We don't want any extensions or user scripts that change the HTML document, but we do need to use the Greasemonkey extension with a user script
 	# that disables the alert(), confirm(), and prompt() JavaScript functions. This prevents the UnexpectedAlertPresentException, which would otherwise
 	# make it impossible to scrape pages that use those functions.
@@ -172,6 +173,7 @@ if __name__ == '__main__':
 					url = page['url']
 					timestamp = page['timestamp']
 					
+					log.info(f'Inserting the initial snapshot at "{url}" near {timestamp}.')
 					initial_snapshot = find_child_snapshot(None, url, timestamp)
 
 					if initial_snapshot is not None:
@@ -270,44 +272,15 @@ if __name__ == '__main__':
 			While the snapshot is skipped, the page we were redirected to will be added to the queue. The one exception are pages from
 			the Wayback Machine that aren't snapshots. """
 
-			# E.g. https://web.archive.org/web/19981205113927if_/http://www.fortunecity.com/millenium/bigears/43/index.html
-			# Redirects to https://web.archive.org/web/19981203010807if_/http://www.fortunecity.com/millenium/bigears/43/startherest.html
-			#
-			# E.g. https://web.archive.org/web/20100823194716if_/http://www.netfx-inc.com:80/purr/
-			# Redirects to https://web.archive.org/web/20100822160707if_/http://www.netfx-inc.com/loan-tax-card/loan-tax-card.php
-			#
-			# E.g. https://web.archive.org/web/20081203054436if_/http://www.symbolicsoft.com:80/vrml/pong3d.wrl
-			# Redirects to "https://web.archive.org/", even though it's a valid page according to the CDX API:
-			# https://web.archive.org/cdx/search/cdx?url=http://www.symbolicsoft.com:80/vrml/pong3d.wrl&fl=original,timestamp,statuscode,mimetype
-			#
-			# E.g. https://web.archive.org/web/19990117005032if_/http://www.ce.washington.edu:80/%7Esoroos/java/published/pool.html
-			# Is decoded when viewed in GUI mode (i.e. not headless):
-			# https://web.archive.org/web/19990117005032if_/http://www.ce.washington.edu:80/~soroos/java/published/pool.html
-			# But this is *not* a redirect even though the URL values are different.
-
-			# The redirectCount only seems be greater than zero for some redirected snapshots (e.g. out of the previous examples,
-			# it's only one for the first case), but it didn't result in any false positives during testing so we'll check it too.
-			current_url = driver.current_url
-			redirect_count = driver.execute_script('return window.performance.navigation.redirectCount;')
-			redirected = redirect_count > 0 or current_url.lower() not in [snapshot.WaybackUrl.lower(), unquote(snapshot.WaybackUrl.lower())]
-
-			log.debug(f'The redirection test yielded {redirected} with the redirect count at {redirect_count}.')
+			redirected, url, timestamp = browser.was_wayback_url_redirected(snapshot.WaybackUrl)
 
 			if redirected:
 				try:
-					log.warning(f'Skipping the snapshot since it was redirected to "{current_url}".')
+					log.warning(f'Skipping the snapshot since it was redirected to "{url}".')
 					db.execute('UPDATE Snapshot SET State = :invalid_state WHERE Id = :id;', {'invalid_state': Snapshot.INVALID, 'id': snapshot.Id})
 				
-					wayback_parts = parse_wayback_machine_snapshot_url(current_url)
-					if not is_url_from_domain(current_url, 'web.archive.org') or wayback_parts is not None:
-
-						wayback_parts = parse_wayback_machine_snapshot_url(current_url)
-						if wayback_parts is not None:
-							url = wayback_parts.Url
-							timestamp = wayback_parts.Timestamp
-						else:
-							url = current_url
-							timestamp = snapshot.Timestamp
+					# See example #4 in was_wayback_url_redirected().
+					if not is_url_from_domain(url, 'web.archive.org'):
 
 						child_snapshot = find_child_snapshot(snapshot, url, timestamp)
 
@@ -363,7 +336,9 @@ if __name__ == '__main__':
 				try:
 					cursor = db.execute('''
 										SELECT 	S.*,
-												CAST(MIN(SUBSTR(S.Timestamp, 1, 4), IFNULL(SUBSTR(S.LastModifiedTime, 1, 4), '9999')) AS INTEGER) AS OldestYear
+												CAST(MIN(SUBSTR(S.Timestamp, 1, 4), IFNULL(SUBSTR(S.LastModifiedTime, 1, 4), '9999')) AS INTEGER) AS OldestYear,
+												RANK_SNAPSHOT_BY_POINTS(PSI.Points, :ranking_offset) AS Rank,
+												PSI.Points AS ParentPoints
 										FROM Snapshot S
 										LEFT JOIN Snapshot PS ON S.ParentId = PS.Id
 										LEFT JOIN SnapshotInfo PSI ON PS.Id = PSI.Id
@@ -377,17 +352,16 @@ if __name__ == '__main__':
 											AND IS_URL_KEY_ALLOWED(S.UrlKey)
 										ORDER BY
 											S.Priority DESC,
-											(:max_required_depth IS NULL OR S.Depth <= :max_required_depth) DESC,
-											IFNULL(PS.PageUsesPlugins, FALSE) DESC,
-											IFNULL(PSI.Points, 0) DESC,
-											RANDOM()
+											CASE WHEN S.Depth <= :max_required_depth THEN S.Depth ELSE (SELECT MAX(Depth) + 1 FROM Snapshot) END,
+											Rank DESC
 										LIMIT 1;
-										''', {'queued_state': Snapshot.QUEUED, 'min_year': config.min_year, 'max_year': config.max_year,
-											  'max_depth': config.max_depth, 'max_required_depth': config.max_required_depth})
+										''', {'ranking_offset': config.ranking_offset, 'queued_state': Snapshot.QUEUED, 'min_year': config.min_year,
+											  'max_year': config.max_year, 'max_depth': config.max_depth, 'max_required_depth': config.max_required_depth})
 					
 					row = cursor.fetchone()
 					if row is not None:
 						snapshot = Snapshot(**dict(row))
+						parent_points = row['ParentPoints']
 					else:
 						log.info('Ran out of snapshots to scout.')
 						break
@@ -406,8 +380,7 @@ if __name__ == '__main__':
 				# set the current URL to a blank page before navigating to the Wayback Machine.
 
 				try:
-					config.wait_for_wayback_machine_rate_limit()
-					log.info(f'[{num_iterations}] Scouting snapshot #{snapshot.Id} {snapshot} located at a depth of {snapshot.Depth} pages.')
+					log.info(f'[{num_iterations}] Scouting snapshot #{snapshot.Id} {snapshot} located at a depth of {snapshot.Depth} pages and whose parent has {parent_points} points.')
 					original_window = driver.current_window_handle
 					browser.go_to_wayback_url(snapshot.WaybackUrl)
 				except SessionNotCreatedException:
@@ -550,8 +523,7 @@ if __name__ == '__main__':
 						else:
 							assert False, f'The frame URL "{frame_url}" was not formatted properly.'
 
-						# Retrieve every word on the frame. Here, the window JavaScript variable refers to the
-						# current frame since we're switching between them.
+						# Retrieve every word on the frame.
 						frame_text = driver.execute_script('return document.documentElement.innerText;')
 						frame_text_list.append(frame_text)
 						split_text = PAGE_TEXT_DELIMITER_REGEX.split(frame_text.lower())
@@ -633,7 +605,6 @@ if __name__ == '__main__':
 
 						# Redirects are expected here since the frame's timestamp is inherited from the
 						# root page's snapshot. See traverse_frames() for more details.
-						config.wait_for_wayback_machine_rate_limit()
 						browser.go_to_wayback_url(raw_frame_url)
 
 						# Retrieve tag word on the frame.

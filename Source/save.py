@@ -9,7 +9,7 @@ from argparse import ArgumentParser
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
-from common import CommonConfig
+from common import CommonConfig, global_rate_limiter
 
 ####################################################################################################
 
@@ -34,7 +34,7 @@ if __name__ == '__main__':
 				total_urls += 1
 
 				try:
-					config.wait_for_save_api_rate_limit()
+					global_rate_limiter.wait_for_save_api_rate_limit()
 					save = WaybackMachineSaveAPI(url)
 					wayback_url = save.save()
 					num_saved_urls += 1

@@ -139,21 +139,24 @@ if __name__ == '__main__':
 			snapshots_and_recordings = []
 			for row in cursor:
 
-				total_recordings += 1
-
 				row = dict(row)
+				
 				# Avoid naming conflicts with each table's primary key.
 				del row['Id']
 				snapshot = Snapshot(**row, Id=row['SnapshotId'])
 				recording = Recording(**row, Id=row['RecordingId'])
 
+				if args.text_to_speech and snapshot.IsStandaloneMedia:
+					continue
+
+				total_recordings += 1
 				recording.CompilationSegmentFilePath = recording.TextToSpeechFilePath if args.text_to_speech else recording.UploadFilePath
 
 				if recording.CompilationSegmentFilePath is not None and os.path.isfile(recording.CompilationSegmentFilePath):
 					snapshots_and_recordings.append((snapshot, recording))
 					num_valid_recordings += 1
 				else:
-					print(f'- Skipping the recording #{recording.Id} for snapshot #{snapshot.Id} ({snapshot}) since the file "{recording.UploadFilename}" is missing.')
+					print(f'- Skipping the recording #{recording.Id} for snapshot #{snapshot.Id} {snapshot} since the file "{recording.CompilationSegmentFilePath}" is missing.')
 
 			if args.any:
 				tuple_index = 0 if id_type == 'snapshot' else 1
@@ -181,8 +184,7 @@ if __name__ == '__main__':
 						ffmpeg_output_args = config.ffmpeg_text_to_speech_output_args if args.text_to_speech else config.ffmpeg_upload_output_args
 						ffmpeg_output_args['tune'] = 'stillimage'
 
-						# Remove the -shortest flags used when generating the
-						# text-to-speech file so they don't shorten the transition.
+						# Remove the -shortest flags used when generating the text-to-speech file so they don't shorten the transition.
 						if 'shortest' in ffmpeg_output_args:
 							del ffmpeg_output_args['shortest']
 
@@ -251,6 +253,18 @@ if __name__ == '__main__':
 							timestamps_file.write(f'Snapshots: {snapshot_ids}\n')
 							timestamps_file.write(f'Recordings: {recording_ids}\n')
 							timestamps_file.write(f'Total: {len(snapshots_and_recordings)}\n')
+
+							timestamps_file.write('\n')
+							
+							if args.published:
+								timestamps_file.write(f'Type: Published ({begin_date} to {end_date})\n')
+							else:
+								timestamps_file.write(f'Type: Any {id_type.title()} ({args.any[1]})\n')
+							
+							timestamps_file.write(f'Text-to-Speech: {"Yes" if args.text_to_speech else "No"}\n')
+							timestamps_file.write(f'Transition Color: {args.color}\n')
+							timestamps_file.write(f'Transition Duration: {args.duration}\n')
+							timestamps_file.write(f'Transition Sfx: {args.sfx}\n')
 
 					except (ffmpeg.Error, KeyError, ValueError) as error:
 						print(f'Failed to create the timestamps file with the error: {repr(error)}')

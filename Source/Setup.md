@@ -12,7 +12,7 @@ Python 3.8 or later is required to run the scripts. You can install the required
 pip install -r requirements.txt
 ```
 
-You can also install the optional dependencies by running the following command. These are only required if the `detect_page_language`, `tokenize_japanese_text`, `enable_text_to_speech`, or `use_proxy` options are enabled:
+You can also install the optional dependencies by running the following commands. These are only required if the `detect_page_language`, `tokenize_japanese_text`, `enable_text_to_speech`, or `enable_proxy` options are enabled:
 
 ```
 pip install -r language_requirements.txt
@@ -33,7 +33,7 @@ The following Python packages are used:
 
 * [limits](https://github.com/alisaifee/limits): to avoid making too many requests to the Wayback Machine, the CDX API, and the Save API.
 
-* [ffmpeg-python](https://github.com/kkroening/ffmpeg-python): to record the screen and manipulate the recordings using ffmpeg.
+* [ffmpeg-python](https://github.com/kkroening/ffmpeg-python): to record the screen and manipulate audio/video files.
 
 * [Tweepy](https://github.com/tweepy/tweepy): to upload the recorded videos to Twitter and publish tweets.
 
@@ -45,9 +45,9 @@ The following Python packages are used:
 
 * [comtypes](https://github.com/enthought/comtypes): to use Windows' text-to-speech API and generate page transcripts. Only used if the `enable_text_to_speech` option is true, though it should already be installed since pywinauto depends on it.
 
-* [mitmproxy](https://github.com/mitmproxy/mitmproxy) to intercept all HTTP/HTTPS requests made by Firefox and its plugins. Used to locate missing resources in other subdomains via the CDX API while also allowing plugin media that loads slowly to finish requesting assets. Only used if the `use_proxy` option is true.
+* [mitmproxy](https://github.com/mitmproxy/mitmproxy) to intercept all HTTP/HTTPS requests made by Firefox and its plugins. Used to locate missing resources in other subdomains via the CDX API while also allowing plugin media that loads slowly to finish requesting assets. Only used if the `enable_proxy` option is true.
 
-* [tldextract](https://github.com/john-kurkowski/tldextract) to determine the correct registered domain from a URL. Only used if the `use_proxy` option is true.
+* [tldextract](https://github.com/john-kurkowski/tldextract) to determine the correct registered domain from a URL. Only used if the `enable_proxy` option is true.
 
 ## Scripts
 
@@ -71,7 +71,7 @@ Below is a summary of the Python scripts located in [the source directory](Sourc
 
 * `save.py`: saves URLs from the standard input using the Wayback Machine Save API.
 
-* `wayback_proxy_addon.py`: a mitmproxy script that tells the recorder script if the page is still making requests while also checking if any missing files are available in a different subdomain. This script should not be run directly and is instead started automatically by the recorder if the `use_proxy` option is true.
+* `wayback_proxy_addon.py`: a mitmproxy script that tells the recorder script if the page is still making requests while also checking if any missing files are available in a different subdomain. This script should not be run directly and is instead started automatically by the recorder if the `enable_proxy` option is true.
 
 * `common.py`: a module that defines any general purpose functions used by all scripts, including loading configuration files, connecting to the database, and interfacing with Firefox.
 

@@ -17,7 +17,7 @@ from mitmproxy.script import concurrent # type: ignore
 from tldextract import TLDExtract
 from waybackpy import WaybackMachineCDXServerAPI as Cdx
 
-from common import Snapshot, compose_wayback_machine_snapshot_url, is_url_available, is_url_from_domain, parse_wayback_machine_snapshot_url
+from common import Snapshot, compose_wayback_machine_snapshot_url, global_rate_limiter, is_url_available, is_url_from_domain, parse_wayback_machine_snapshot_url
 from record import RecordConfig
 
 ####################################################################################################
@@ -104,7 +104,7 @@ def request(flow: http.HTTPFlow) -> None:
 				# https://web.archive.org/web/20220702123119if_/http://noisebase.t0.or.at/escape/megamix.ra
 				# By extracting the URL early in this script and later finding missing snapshots using the
 				# CDX API, we can play the audio correctly in the recorder script.
-				config.wait_for_wayback_machine_rate_limit()
+				global_rate_limiter.wait_for_wayback_machine_rate_limit()
 				metadata_response = requests.get(request.url, stream=True)
 				metadata_response.raise_for_status()
 
@@ -143,7 +143,7 @@ def request(flow: http.HTTPFlow) -> None:
 			# - https://web.archive.org/web/1if_/http://www.example.com/, allow_redirects=True -> 200
 			# - https://web.archive.org/web/1if_/http://www.example.com/this/doesnt/exist, allow_redirects=False -> 404
 			# - https://web.archive.org/web/1if_/http://www.example.com/this/doesnt/exist, allow_redirects=True -> 404
-			config.wait_for_wayback_machine_rate_limit()
+			global_rate_limiter.wait_for_wayback_machine_rate_limit()
 			wayback_response = requests.head(request.url, allow_redirects=True)
 			found_snapshot = wayback_response.status_code == 200
 		except requests.RequestException:
@@ -217,7 +217,8 @@ def request(flow: http.HTTPFlow) -> None:
 			cdx_list = [(prefix_cdx, 'PREFIX'), (subdomain_cdx, 'SUBDOMAIN'), (no_query_cdx, 'NO QUERY')]
 			for i, (cdx, identifier) in enumerate(filter(lambda x: x[0], cdx_list)):
 				try:
-					config.wait_for_cdx_api_rate_limit()
+					# Queries to the CDX API cost twice as much as the queries sent from other scripts.
+					global_rate_limiter.wait_for_cdx_api_rate_limit(cost=2)
 					snapshot = cdx.near(wayback_machine_timestamp=timestamp)
 					wayback_parts = wayback_parts._replace(Timestamp=snapshot.timestamp, Url=snapshot.original)
 					found_snapshot = True
@@ -278,7 +279,7 @@ def request(flow: http.HTTPFlow) -> None:
 				# See:
 				# - https://requests.readthedocs.io/en/latest/api/#requests.Response
 				# - https://urllib3.readthedocs.io/en/stable/reference/urllib3.response.html
-				config.wait_for_wayback_machine_rate_limit()
+				global_rate_limiter.wait_for_wayback_machine_rate_limit()
 				response = requests.request(request.method, request.url, headers=dict(request.headers))
 				flow.response = http.Response.make(response.status_code, response.content, dict(response.headers))
 			except requests.RequestException:

@@ -4,6 +4,8 @@
 	A module that defines any general purpose functions used by all scripts, including loading configuration files,
 	connecting to the database, and interfacing with Firefox.
 
+	@TODO: Get media extension when fixing mislabeled snapshots.
+
 	@TODO: Add Mastodon support
 	@TODO: Make the stats.py script to print statistics
 	
@@ -29,6 +31,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from glob import iglob
 from math import ceil
+from random import random
 from subprocess import Popen
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 from urllib.parse import ParseResult, unquote, urlparse, urlunparse
@@ -120,20 +123,10 @@ class CommonConfig():
 
 	allowed_domains: List[List[str]] # Different from the config data type.
 	disallowed_domains: List[List[str]] # Different from the config data type.
+	
+	ffmpeg_global_args: List[str]
 
 	# Determined at runtime.
-	wayback_machine_memory_storage: MemoryStorage
-	wayback_machine_rate_limiter: MovingWindowRateLimiter
-	wayback_machine_requests_per_minute: RateLimitItemPerSecond
-
-	cdx_api_memory_storage: MemoryStorage
-	cdx_api_rate_limiter: MovingWindowRateLimiter
-	cdx_api_requests_per_second: RateLimitItemPerSecond
-
-	save_api_memory_storage: MemoryStorage
-	save_api_rate_limiter: MovingWindowRateLimiter
-	save_api_requests_per_second: RateLimitItemPerSecond
-
 	default_options: dict
 
 	# Constants.
@@ -196,20 +189,6 @@ class CommonConfig():
 		self.plugins = container_to_lowercase(self.plugins)
 		self.compiled_autoit_scripts = container_to_lowercase(self.compiled_autoit_scripts)
 
-		self.wayback_machine_memory_storage = MemoryStorage()
-		self.wayback_machine_rate_limiter = MovingWindowRateLimiter(self.wayback_machine_memory_storage)
-		self.wayback_machine_requests_per_minute = RateLimitItemPerSecond(self.wayback_machine_rate_limit_amount, self.wayback_machine_rate_limit_multiple)
-		
-		self.cdx_api_memory_storage = MemoryStorage()
-		self.cdx_api_rate_limiter = MovingWindowRateLimiter(self.cdx_api_memory_storage)
-		self.cdx_api_requests_per_second = RateLimitItemPerSecond(self.cdx_api_rate_limit_amount, self.cdx_api_rate_limit_multiple)
-
-		self.save_api_memory_storage = MemoryStorage()
-		self.save_api_rate_limiter = MovingWindowRateLimiter(self.save_api_memory_storage)
-		self.save_api_requests_per_second = RateLimitItemPerSecond(self.save_api_rate_limit_amount, self.save_api_rate_limit_multiple)
-
-		self.default_options = {}
-
 		def parse_domain_list(domain_list: List[str]) -> List[List[str]]:
 			""" Transforms a list of domain patterns into a list of each pattern's components. """
 
@@ -235,6 +214,9 @@ class CommonConfig():
 
 		self.allowed_domains = parse_domain_list(self.allowed_domains)
 		self.disallowed_domains = parse_domain_list(self.disallowed_domains)
+
+		self.ffmpeg_global_args = container_to_lowercase(self.ffmpeg_global_args)
+		self.default_options = {}
 
 	def load_subconfig(self, name: str) -> None:
 		""" Loads a specific JSON object from the configuration file. """
@@ -263,23 +245,11 @@ class CommonConfig():
 		bucket = ceil(id / self.max_recordings_per_directory) * self.max_recordings_per_directory
 		return os.path.join(self.recordings_path, str(bucket))
 
-	def wait_for_wayback_machine_rate_limit(self) -> None:
-		""" Waits for a given amount of time if the user-specified Wayback Machine rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
-		while not self.wayback_machine_rate_limiter.hit(self.wayback_machine_requests_per_minute):
-			time.sleep(self.rate_limit_poll_frequency)
-
-	def wait_for_cdx_api_rate_limit(self) -> None:
-		""" Waits for a given amount of time if the user-specified CDX API rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
-		while not self.cdx_api_rate_limiter.hit(self.cdx_api_requests_per_second):
-			time.sleep(self.rate_limit_poll_frequency)
-
-	def wait_for_save_api_rate_limit(self) -> None:
-		""" Waits for a given amount of time if the user-specified Save API rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
-		while not self.save_api_rate_limiter.hit(self.save_api_requests_per_second):
-			time.sleep(self.rate_limit_poll_frequency)	
-
 config = CommonConfig()
 locale.setlocale(locale.LC_ALL, config.locale)
+
+if config.debug:
+	sqlite3.enable_callback_tracebacks(True)
 
 log = logging.getLogger('eternal wanderer')
 log.setLevel(logging.DEBUG if config.debug else logging.INFO)
@@ -302,6 +272,54 @@ def setup_logger(filename: str) -> logging.Logger:
 	
 	return log
 
+class RateLimiter():
+	""" A rate limiter wrapper that restricts the number of requests made to the Wayback Machine and its APIs. """
+
+	wayback_machine_memory_storage: MemoryStorage
+	wayback_machine_rate_limiter: MovingWindowRateLimiter
+	wayback_machine_requests_per_minute: RateLimitItemPerSecond
+
+	cdx_api_memory_storage: MemoryStorage
+	cdx_api_rate_limiter: MovingWindowRateLimiter
+	cdx_api_requests_per_second: RateLimitItemPerSecond
+
+	save_api_memory_storage: MemoryStorage
+	save_api_rate_limiter: MovingWindowRateLimiter
+	save_api_requests_per_second: RateLimitItemPerSecond
+
+	def __init__(self):
+
+		self.wayback_machine_memory_storage = MemoryStorage()
+		self.wayback_machine_rate_limiter = MovingWindowRateLimiter(self.wayback_machine_memory_storage)
+		self.wayback_machine_requests_per_minute = RateLimitItemPerSecond(config.wayback_machine_rate_limit_amount, config.wayback_machine_rate_limit_multiple)
+		
+		self.cdx_api_memory_storage = MemoryStorage()
+		self.cdx_api_rate_limiter = MovingWindowRateLimiter(self.cdx_api_memory_storage)
+		self.cdx_api_requests_per_second = RateLimitItemPerSecond(config.cdx_api_rate_limit_amount, config.cdx_api_rate_limit_multiple)
+
+		self.save_api_memory_storage = MemoryStorage()
+		self.save_api_rate_limiter = MovingWindowRateLimiter(self.save_api_memory_storage)
+		self.save_api_requests_per_second = RateLimitItemPerSecond(config.save_api_rate_limit_amount, config.save_api_rate_limit_multiple)
+
+	def wait_for_wayback_machine_rate_limit(self, **kwargs) -> None:
+		""" Waits for a given amount of time if the user-defined Wayback Machine rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
+		while not self.wayback_machine_rate_limiter.hit(self.wayback_machine_requests_per_minute, **kwargs):
+			time.sleep(config.rate_limit_poll_frequency)
+
+	def wait_for_cdx_api_rate_limit(self, **kwargs) -> None:
+		""" Waits for a given amount of time if the user-defined CDX API rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
+		while not self.cdx_api_rate_limiter.hit(self.cdx_api_requests_per_second, **kwargs):
+			time.sleep(config.rate_limit_poll_frequency)
+
+	def wait_for_save_api_rate_limit(self, **kwargs) -> None:
+		""" Waits for a given amount of time if the user-defined Save API rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
+		while not self.save_api_rate_limiter.hit(self.save_api_requests_per_second, **kwargs):
+			time.sleep(config.rate_limit_poll_frequency)
+
+# Note that different scripts use different global rate limiter instances.
+# They're only the same between a script and this module.
+global_rate_limiter = RateLimiter()
+
 def url_key_matches_domain_pattern(url_key: str, domain_patterns: List[List[str]], cache: Dict[str, bool]) -> bool:
 	""" Checks whether a URL's key matches a list of domain patterns. """
 
@@ -310,7 +328,7 @@ def url_key_matches_domain_pattern(url_key: str, domain_patterns: List[List[str]
 	if domain_patterns:
 
 		# E.g. "com,geocities)/hollywood/hills/5988"
-		domain, _ = url_key.lower().split(')')
+		domain, _ = url_key.lower().split(')', 1)
 		
 		if domain in cache:
 			return cache[domain]
@@ -362,8 +380,24 @@ class Database():
 		self.connection.execute('PRAGMA journal_mode = WAL;')
 		self.connection.execute('PRAGMA synchronous = NORMAL;')
 		self.connection.execute('PRAGMA temp_store = MEMORY;')
+
+		def rank_snapshot_by_points(points: Optional[int], offset: int) -> float:
+			""" Ranks a snapshot by its points so that the highest ranked one will be scouted or recorded next. """
+			
+			# This uses a modified weighted random sampling algorithm:
+			# - https://stackoverflow.com/a/56006340/18442724
+			# - https://stackoverflow.com/a/51090191/18442724
+			# - http://utopia.duth.gr/~pefraimi/research/data/2007EncOfAlg.pdf
+			
+			# For snapshots without a parent during scouting.
+			if points is None:
+				return 0
+
+			sign = 1 if points >= 0 else -1
+			return sign * random() ** (1 / (abs(points) + 1 + offset))
 	
 		self.connection.create_function('IS_URL_KEY_ALLOWED', 1, is_url_key_allowed)
+		self.connection.create_function('RANK_SNAPSHOT_BY_POINTS', 2, rank_snapshot_by_points)
 
 		# E.g. https://web.archive.org/web/20010203164200if_/http://www.tripod.lycos.com:80/service/welcome/preferences
 		# And https://web.archive.org/web/20010203180900if_/http://www.tripod.lycos.com:80/bin/membership/login
@@ -383,12 +417,12 @@ class Database():
 									Priority INTEGER NOT NULL DEFAULT {Snapshot.NO_PRIORITY},
 									IsExcluded BOOLEAN NOT NULL,
 									IsStandaloneMedia BOOLEAN,
-									MediaExtension TEXT,
-									MediaTitle TEXT,
-									MediaAuthor TEXT,
 									PageLanguage TEXT,
 									PageTitle TEXT,
 									PageUsesPlugins BOOLEAN,
+									MediaExtension TEXT,
+									MediaTitle TEXT,
+									MediaAuthor TEXT,
 									Url TEXT NOT NULL,
 									Timestamp VARCHAR(14) NOT NULL,
 									LastModifiedTime VARCHAR(14),
@@ -559,12 +593,12 @@ class Snapshot():
 	Priority: int
 	IsExcluded: bool
 	IsStandaloneMedia: Optional[bool]
-	MediaExtension: Optional[str]
-	MediaTitle: Optional[str]
-	MediaAuthor: Optional[str]
 	PageLanguage: Optional[str]
 	PageTitle: Optional[str]
 	PageUsesPlugins: Optional[bool]
+	MediaExtension: Optional[str]
+	MediaTitle: Optional[str]
+	MediaAuthor: Optional[str]
 	Url: str
 	Timestamp: str
 	LastModifiedTime: Optional[str]
@@ -580,8 +614,8 @@ class Snapshot():
 	# Determined at runtime.
 	WaybackUrl: str
 	OldestTimestamp: str
+	OldestDatetime: datetime
 	ShortDate: str
-	LongDate: str
 	DisplayTitle: str
 	DisplayMetadata: Optional[str]
 	
@@ -618,8 +652,8 @@ class Snapshot():
 
 		self.IsExcluded = bool_or_none(self.IsExcluded)
 		self.IsStandaloneMedia = bool_or_none(self.IsStandaloneMedia)
-		self.IsSensitiveOverride = bool_or_none(self.IsSensitiveOverride)
 		self.PageUsesPlugins = bool_or_none(self.PageUsesPlugins)	
+		self.IsSensitiveOverride = bool_or_none(self.IsSensitiveOverride)
 		self.IsSensitive = bool_or_none(self.IsSensitive)
 
 		if self.Options is not None:
@@ -639,12 +673,9 @@ class Snapshot():
 		else:
 			self.OldestTimestamp = self.Timestamp
 
+		self.OldestDatetime = datetime.strptime(self.OldestTimestamp, Snapshot.TIMESTAMP_FORMAT)
 		# How the date is formatted depends on the current locale.
-		# We won't use the %d directive since we don't want padding.
-		oldest_datetime = datetime.strptime(self.OldestTimestamp, Snapshot.TIMESTAMP_FORMAT)
-		self.ShortDate = oldest_datetime.strftime('%b %Y')
-		day_suffix = 'th' if 11 <= oldest_datetime.day <= 13 else {1: 'st', 2: 'nd', 3: 'rd'}.get(oldest_datetime.day % 10, 'th')
-		self.LongDate = oldest_datetime.strftime(f'%B {oldest_datetime.day}{day_suffix} %Y')
+		self.ShortDate = self.OldestDatetime.strftime('%b %Y')
 
 		self.DisplayTitle = self.PageTitle
 		if not self.DisplayTitle:
@@ -1193,7 +1224,7 @@ class Browser():
 		try:
 			self.driver.get(Browser.BLANK_URL)
 
-			config.wait_for_wayback_machine_rate_limit()
+			global_rate_limiter.wait_for_wayback_machine_rate_limit()
 			self.driver.get(wayback_url)
 
 			# Skip the availability check for auto-generated standalone media pages.
@@ -1201,10 +1232,93 @@ class Browser():
 				while not is_wayback_machine_available():
 					log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
 					time.sleep(config.unavailable_wayback_machine_wait)
+					global_rate_limiter.wait_for_wayback_machine_rate_limit()
 					self.driver.get(wayback_url)
 
 		except TimeoutException:
 			log.warning(f'Timed out after waiting {config.page_load_timeout} seconds for the page to load: "{wayback_url}".')
+
+	def was_wayback_url_redirected(self, expected_wayback_url: str) -> Tuple[bool, Optional[str], Optional[str]]:
+		""" Checks if a Wayback Machine page was redirected. In order to cover all edge cases, this function only works with snapshot URLs
+		and not any generic website. """
+		
+		# The redirectCount only seems be greater than zero for some redirected snapshots when opened in Firefox 52 ESR.
+		# In modern Firefox versions, the redirectCount is more accurate. That being said, the tests in Firefox 52 didn't
+		# result in any false positives so we'll use it too.
+		#
+		# 1. https://web.archive.org/web/20100823194716if_/http://www.netfx-inc.com:80/purr/
+		# Redirects to https://web.archive.org/web/20100822160707/http://www.netfx-inc.com/loan-tax-card/loan-tax-card.php
+		# In this case, the modifier is removed and the redirectCount is zero.
+		#
+		# 2. https://web.archive.org/web/19981205113927if_/http://www.fortunecity.com/millenium/bigears/43/index.html
+		# Redirects to https://web.archive.org/web/19981203010807if_/http://www.fortunecity.com/millenium/bigears/43/startherest.html
+		# In this case, the modifier is kept and the redirectCount is one.
+		# Note that this page is only redirected after a few seconds.
+		#
+		# 3. https://web.archive.org/web/20010201051300if_/http://mail.quote.com:80/
+		# Redirects to https://web.archive.org/web/20010201051300if_/http://mail.quote.com:80/default.asp
+		# In this case, the URL was not archived, a 404 page is served by the Wayback machine, and the redirectCount is zero.
+		#
+		# 4. https://web.archive.org/web/20081203054436if_/http://www.symbolicsoft.com:80/vrml/pong3d.wrl
+		# Redirects to "https://web.archive.org/", even though it's a valid page according to the CDX API:
+		# https://web.archive.org/cdx/search/cdx?url=http://www.symbolicsoft.com:80/vrml/pong3d.wrl&fl=original,timestamp,statuscode,mimetype
+		# In this case, the redirectCount is zero.
+		# Note also that the resulting page no longer follows the snapshot URL format.
+		#
+		# 5. https://web.archive.org/web/19970214141804if_/http://www.worldculture.com:80/intro.htm
+		# Redirects to https://web.archive.org/web/19970414134642if_/http://www.worldculture.com/intro.htm
+		# In this case, the modifier is kept and the redirectCount is one.
+		# Note also that, timestamps aside, the only difference between the archived URLs is the port.
+		#
+		# 6. https://web.archive.org/web/19990117005032if_/http://www.ce.washington.edu:80/%7Esoroos/java/published/pool.html
+		# Is decoded when viewed in GUI mode (i.e. not headless):
+		# https://web.archive.org/web/19990117005032if_/http://www.ce.washington.edu:80/~soroos/java/published/pool.html
+		# But this is *not* a redirect even though the URL strings are technically different.
+		# In this case, the redirectCount is zero.
+		#
+		# Additionally, keep in mind that the Wayback Machine considers certain URLs the same for the sake of convenience.
+		# For example, the following are all the same snapshot:
+		# - https://web.archive.org/web/20020120142510if_/http://example.com/
+		# - https://web.archive.org/web/20020120142510if_/https://example.com/
+		# - https://web.archive.org/web/20020120142510if_/http://example.com:80/
+		# - https://web.archive.org/web/20020120142510if_/http://www.example.com/
+		#
+		# This shouldn't matter for our checks since the Wayback Machine will use whichever URL you pass it, but it's
+		# worth noting for future reference.
+
+		expected_wayback_parts = parse_wayback_machine_snapshot_url(expected_wayback_url)
+		assert expected_wayback_parts is not None, f'The expected URL "{expected_wayback_url}" is not a valid Wayback Machine snapshot.'
+
+		current_url = self.driver.current_url
+		current_wayback_parts = parse_wayback_machine_snapshot_url(current_url)
+
+		# Catches example #4.
+		if current_wayback_parts is None:
+			log.debug(f'Passed the redirection test since the current page is not a valid snapshot: "{expected_wayback_url}" -> "{current_url}".')
+			return True, current_url, expected_wayback_parts.Timestamp
+
+		# Catches examples #2 and #5.
+		redirect_count = self.driver.execute_script('return window.performance.navigation.redirectCount;')
+		if redirect_count > 0:
+			log.debug(f'Passed the redirection test with the redirect count at {redirect_count}: "{expected_wayback_url}" -> "{current_url}".')
+			return True, current_wayback_parts.Url, current_wayback_parts.Timestamp
+
+		# Catches example #1.
+		if current_wayback_parts.Modifier != expected_wayback_parts.Modifier:
+			log.debug(f'Passed the redirection test since the modifiers changed: "{expected_wayback_url}" -> "{current_url}".')
+			return True, current_wayback_parts.Url, current_wayback_parts.Timestamp
+
+		# Catches examples #2 and #5 if they weren't detected before.
+		if current_wayback_parts.Timestamp != expected_wayback_parts.Timestamp:
+			log.debug(f'Passed the redirection test since the timestamps changed: "{expected_wayback_url}" -> "{current_url}".')
+			return True, current_wayback_parts.Url, current_wayback_parts.Timestamp
+
+		# Catches example #3 but lets #6 through.
+		if current_wayback_parts.Url.lower() not in [expected_wayback_parts.Url.lower(), unquote(expected_wayback_parts.Url.lower())]:
+			log.debug(f'Passed the redirection test since the URLs changed: "{expected_wayback_url}" -> "{current_url}".')
+			return True, current_wayback_parts.Url, current_wayback_parts.Timestamp
+
+		return False, None, None
 
 	def go_to_blank_page_with_text(self, *args) -> None:
 		""" Navigates to an autogenerated page where each argument is displayed in a different line. """
@@ -1274,7 +1388,7 @@ class Browser():
 				current_url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
 
 			if skip_missing and format_wayback_urls:
-				config.wait_for_wayback_machine_rate_limit()
+				global_rate_limiter.wait_for_wayback_machine_rate_limit()
 
 			# Redirects are allowed here since the frame's timestamp is inherited from the root page's snapshot,
 			# meaning that in the vast majority of cases we're going to be redirected to the nearest archived
@@ -1606,11 +1720,11 @@ def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> Tuple[CDXSna
 	""" Finds the best Wayback Machine snapshot given its timestamp and URL. By best snapshot we mean
 	locating the nearest one and then finding the oldest capture where the content is identical. """
 
-	config.wait_for_cdx_api_rate_limit()
+	global_rate_limiter.wait_for_cdx_api_rate_limit()
 	cdx = Cdx(url=url, filters=['statuscode:200'])
 	snapshot = cdx.near(wayback_machine_timestamp=timestamp)
 
-	config.wait_for_cdx_api_rate_limit()
+	global_rate_limiter.wait_for_cdx_api_rate_limit()
 	cdx.filters.append(f'digest:{snapshot.digest}')
 	snapshot = cdx.oldest()
 
@@ -1642,6 +1756,7 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 	last_modified_time = None
 
 	try:
+		global_rate_limiter.wait_for_wayback_machine_rate_limit()
 		response = requests.head(wayback_url)
 		response.raise_for_status()
 		
@@ -1654,23 +1769,22 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 			# E.g. https://web.archive.org/web/20010926042147if_/http://geocities.yahoo.co.jp:80/
 			# Where the last modified time is "Mon, 24 Sep 2001 04:2146 GMT".
 			
-			# E.g. ["Mon, 24 Sep 2001 04", "2146 GMT"]
-			split_header = last_modified_header.rsplit(':', 1)
+			# E.g. ["Mon, 24 Sep 2001 04", "2146 GMT"] instead of ["Mon, 24 Sep 2001 04", "21", "46 GMT"]
+			split_header = last_modified_header.split(':')
 			if len(split_header) == 2:
 				
-				# E.g. "2146 GMT" instead of "46 GMT"
-				seconds_and_timezone = split_header[1]
-				if len(seconds_and_timezone) > 6:
-					
-					# E.g. "2146 GMT" -> "21:46 GMT"
-					log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
-					last_modified_header = ':'.join([split_header[0], seconds_and_timezone[:2], seconds_and_timezone[2:]])
+				# E.g. "2146 GMT" -> "21:46 GMT"
+				log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
+				last_modified_header = ':'.join([split_header[0], split_header[1][:2], split_header[1][2:]])
 
 			last_modified_time = parsedate_to_datetime(last_modified_header).strftime(Snapshot.TIMESTAMP_FORMAT)
 
 	except requests.RequestException as error:
 		log.error(f'Failed to find any extra information from the snapshot "{wayback_url}" with the error: {repr(error)}')
-	except ValueError as error:
+	except (ValueError, TypeError) as error:
+		# Catching TypeError is necessary for broken dates like:
+		# - "Wed, 27 Mar 1996 ? GMT" (https://web.archive.org/web/19970112174206if_/http://www.manish.com:80/jneko/)
+		# - "Friday, 18-Oct-96 15:48:24 GMT GMT" (https://web.archive.org/web/19961018174824if_/http://www.com-stock.com:80/dave/)
 		log.error(f'Failed to parse the last modified time "{last_modified_header}" of the snapshot "{wayback_url}" with the error: {repr(error)}')
 	
 	return last_modified_time
@@ -1721,6 +1835,7 @@ def is_url_available(url: str, allow_redirects: bool = False) -> bool:
 
 def is_wayback_machine_available() -> bool:
 	""" Checks if the Wayback Machine website is available. """
+	global_rate_limiter.wait_for_wayback_machine_rate_limit()
 	return is_url_available('https://web.archive.org/', allow_redirects=True)
 
 def is_url_from_domain(url: Union[str, ParseResult], domain: str) -> bool:

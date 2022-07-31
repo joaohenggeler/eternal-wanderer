@@ -19,7 +19,6 @@ from contextlib import nullcontext
 from glob import iglob
 from math import ceil
 from queue import Queue
-from random import random
 from subprocess import PIPE, STDOUT
 from subprocess import Popen, TimeoutExpired
 from tempfile import NamedTemporaryFile, TemporaryDirectory
@@ -39,7 +38,7 @@ from selenium.webdriver.common.utils import free_port # type: ignore
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
-from common import TEMPORARY_PATH_PREFIX, Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, clamp, container_to_lowercase, delete_file, get_current_timestamp, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
+from common import TEMPORARY_PATH_PREFIX, Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, clamp, container_to_lowercase, delete_file, get_current_timestamp, global_rate_limiter, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
 
 ####################################################################################################
 
@@ -50,7 +49,7 @@ class RecordConfig(CommonConfig):
 	scheduler: Dict[str, Union[int, str]]
 	num_snapshots_per_scheduled_batch: int
 
-	ranking_constant: int
+	ranking_offset: int
 	min_year: Optional[int]
 	max_year: Optional[int]
 	record_sensitive_snapshots: bool
@@ -106,8 +105,6 @@ class RecordConfig(CommonConfig):
 	max_video_duration: int
 	keep_archive_copy: bool
 	screen_capture_recorder_settings: Dict[str, Optional[int]]
-
-	ffmpeg_global_args: List[str]
 	
 	ffmpeg_recording_input_name: str
 	ffmpeg_recording_input_args: Dict[str, Union[int, str]]
@@ -144,8 +141,6 @@ class RecordConfig(CommonConfig):
 			self.max_missing_proxy_snapshot_path_components = max(self.max_missing_proxy_snapshot_path_components, 1)
 
 		self.screen_capture_recorder_settings = container_to_lowercase(self.screen_capture_recorder_settings)
-
-		self.ffmpeg_global_args = container_to_lowercase(self.ffmpeg_global_args)
 		
 		self.ffmpeg_recording_input_args = container_to_lowercase(self.ffmpeg_recording_input_args)
 		self.ffmpeg_recording_output_args = container_to_lowercase(self.ffmpeg_recording_output_args)
@@ -486,12 +481,12 @@ if __name__ == '__main__':
 					if voice is not None:
 						self.language_to_voice[language] = voice
 
-			def generate_text_to_speech_file(self, text: str, language: Optional[str], output_path_prefix: str) -> Optional[str]:
+			def generate_text_to_speech_file(self, intro: str, text: str, language: Optional[str], output_path_prefix: str) -> Optional[str]:
 				""" Generates a video file that contains the text-to-speech in the audio track and a blank screen on the video one.
 				The voice used by the Speech API is specified in the configuration file and depends on the page's language.
 				The correct voice packages have been installed on Windows, otherwise a default voice is used instead. """
 				
-				output_path: Optional[str] = output_path_prefix + '.tts.mp4'
+				output_path: Optional[str] = output_path_prefix + (f'.tts.{language}.mp4' if language is not None else '.tts.mp4')
 
 				try:
 					# See:
@@ -500,6 +495,7 @@ if __name__ == '__main__':
 					self.stream.Open(self.temporary_file.name, SpeechLib.SSFMCreateForWrite)
 					self.engine.AudioOutputStream = self.stream
 					self.engine.Voice = self.language_to_voice[language]
+					self.engine.Speak(intro, SpeechLib.SVSFPurgeBeforeSpeak | SpeechLib.SVSFIsXML)
 					self.engine.Speak(text, SpeechLib.SVSFPurgeBeforeSpeak | SpeechLib.SVSFIsNotXML)
 					self.stream.Close()
 
@@ -716,6 +712,7 @@ if __name__ == '__main__':
 					if media_extension not in config.nondownloadable_standalone_media_extensions:
 						
 						try:
+							global_rate_limiter.wait_for_wayback_machine_rate_limit()
 							response = requests.get(wayback_url)
 							response.raise_for_status()
 							
@@ -777,19 +774,10 @@ if __name__ == '__main__':
 						db.rollback()
 						time.sleep(config.database_error_wait)
 
-				def rank_snapshot_by_points(points: int) -> float:
-					""" Ranks a snapshot by its points so that the highest ranked one will be recorded next. """
-					# This uses a modified weighted random sampling algorithm:
-					# - https://stackoverflow.com/a/56006340/18442724
-					# - https://stackoverflow.com/a/51090191/18442724
-					# - http://utopia.duth.gr/~pefraimi/research/data/2007EncOfAlg.pdf
-					return random() ** (1 / max(points + config.ranking_constant, 1)) if points >= 0 else points
-
 				def is_standalone_media_extension_allowed(media_extension: str) -> bool:
 					""" Checks if a standalone media snapshot should be recorded. """
 					return bool(config.allowed_standalone_media_extensions) and media_extension in config.allowed_standalone_media_extensions
 
-				db.create_function('RANK_SNAPSHOT_BY_POINTS', 1, rank_snapshot_by_points)
 				db.create_function('IS_STANDALONE_MEDIA_EXTENSION_ALLOWED', 1, is_standalone_media_extension_allowed)
 
 				if config.fullscreen_browser:
@@ -843,8 +831,8 @@ if __name__ == '__main__':
 						cursor = db.execute('''
 											SELECT 	S.*,
 													CAST(MIN(SUBSTR(S.Timestamp, 1, 4), IFNULL(SUBSTR(S.LastModifiedTime, 1, 4), '9999')) AS INTEGER) AS OldestYear,
+													RANK_SNAPSHOT_BY_POINTS(SI.Points, :ranking_offset) AS Rank,
 													SI.Points,
-													RANK_SNAPSHOT_BY_POINTS(SI.Points) AS Rank,
 													LR.DaysSinceLastPublished
 											FROM Snapshot S
 											INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
@@ -870,10 +858,9 @@ if __name__ == '__main__':
 												S.Priority DESC,
 												Rank DESC
 											LIMIT 1;
-											''', {'scouted_state': Snapshot.SCOUTED, 'published_state': Snapshot.PUBLISHED,
-												  'min_publish_days_for_new_recording': config.min_publish_days_for_new_recording,
-												  'min_year': config.min_year, 'max_year': config.max_year,
-												  'record_sensitive_snapshots': config.record_sensitive_snapshots})
+											''', {'ranking_offset': config.ranking_offset, 'scouted_state': Snapshot.SCOUTED, 'published_state': Snapshot.PUBLISHED,
+												  'min_publish_days_for_new_recording': config.min_publish_days_for_new_recording, 'min_year': config.min_year,
+												  'max_year': config.max_year, 'record_sensitive_snapshots': config.record_sensitive_snapshots})
 						
 						row = cursor.fetchone()
 						if row is not None:
@@ -1074,7 +1061,7 @@ if __name__ == '__main__':
 						
 						parts = urlparse(snapshot.Url)
 						media_identifier = snapshot.MediaExtension if snapshot.IsStandaloneMedia else ('p' if snapshot.PageUsesPlugins else '')
-						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, snapshot.Timestamp[:4], snapshot.Timestamp[4:6], snapshot.Timestamp[6:8], media_identifier]
+						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, str(snapshot.OldestDatetime.year), str(snapshot.OldestDatetime.month).zfill(2), str(snapshot.OldestDatetime.day).zfill(2), media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
 						browser.close_all_windows_except(original_window)
@@ -1104,13 +1091,13 @@ if __name__ == '__main__':
 									for _ in browser.traverse_frames():
 										driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
 									time.sleep(wait_per_scroll)
+					
+						redirected = False
+						if not snapshot.IsStandaloneMedia:
+							redirected, url, timestamp = browser.was_wayback_url_redirected(content_url)
+							if redirected:
+								log.error(f'The page was redirected to "{url}" at {timestamp} while recording.')
 
-						# Check if the snapshot was redirected. See check_snapshot_redirection() in the
-						# scout script for more details. This is good enough for the recorder script
-						# because we're already filtering redirects in the scout, and because we're not
-						# extracting any information from the page.
-						redirected = not snapshot.IsStandaloneMedia and driver.current_url.lower() not in [content_url.lower(), unquote(content_url.lower())]
-						
 						browser.close_all_windows_except(original_window)
 						browser.go_to_blank_page_with_text('\N{Film Projector} Post Processing \N{Film Projector}', str(snapshot))
 						capture.perform_post_processing()
@@ -1198,7 +1185,7 @@ if __name__ == '__main__':
 								browser.go_to_blank_page_with_text('\N{Floppy Disk} Saving Missings URLs \N{Floppy Disk}', f'{i+1} of {len(missing_urls)}', f'{url}')
 
 								try:
-									config.wait_for_save_api_rate_limit()
+									global_rate_limiter.wait_for_save_api_rate_limit()
 									save = WaybackMachineSaveAPI(url)
 									wayback_url = save.save()
 
@@ -1237,10 +1224,16 @@ if __name__ == '__main__':
 						if config.enable_text_to_speech and not snapshot.IsStandaloneMedia:
 							
 							browser.go_to_blank_page_with_text('\N{Speech Balloon} Generating Text-to-Speech \N{Speech Balloon}', str(snapshot))
-							title = f'Page Title: {snapshot.PageTitle} ({snapshot.LongDate})' if snapshot.PageTitle else f'Untitled Page ({snapshot.LongDate})'
-							frame_text_list.insert(0, title)
+							
+							# Add some context XML so the date is spoken correctly no matter the language.
+							# See: https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125665(v=vs.85)
+							title = f'Page Title: "{snapshot.PageTitle}"' if snapshot.PageTitle else 'Untitled Page'
+							year, month, day = snapshot.OldestDatetime.year, snapshot.OldestDatetime.month, snapshot.OldestDatetime.day
+							date = f'<context id="date_ymd">{year}/{month}/{day}</context>'
+							
+							page_intro = f'{title} ({date})'
 							page_text = '.\n'.join(frame_text_list)
-							text_to_speech_file_path = text_to_speech.generate_text_to_speech_file(page_text, snapshot.PageLanguage, recording_path_prefix)
+							text_to_speech_file_path = text_to_speech.generate_text_to_speech_file(page_intro, page_text, snapshot.PageLanguage, recording_path_prefix)
 
 							if text_to_speech_file_path is not None:
 								log.info(f'Saved the text-to-speech file to "{text_to_speech_file_path}".')
