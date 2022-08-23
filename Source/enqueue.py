@@ -1,18 +1,11 @@
 #!/usr/bin/env python3
 
-"""
-	This script adds a Wayback Machine snapshot to the Eternal Wanderer queue with a given priority.
-	This can be used to scout, record, or publish any existing or new snapshots as soon as possible.
-"""
-
 import sqlite3
 from argparse import ArgumentParser
 
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
 from common import Database, Snapshot, find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info, is_wayback_machine_available, parse_wayback_machine_snapshot_url
-
-####################################################################################################
 
 if __name__ == '__main__':
 

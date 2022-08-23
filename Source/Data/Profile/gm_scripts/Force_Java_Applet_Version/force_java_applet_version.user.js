@@ -8,8 +8,7 @@
 const LOG = true;
 
 // This is used to tell the Java Plugin to use the JRE that came bundled with it instead of
-// a newer installed version in the system. The applets will still work even if the versions
-// don't match up, but it's useful to 
+// a newer installed version in the system.
 const JAVA_VERSION = "1.8.0_11";
 
 // See:
@@ -19,7 +18,7 @@ const JAVA_VERSION = "1.8.0_11";
 // - https://wiki.videolan.org/Documentation:WebPlugin/#Required_elements
 const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
 
-// The attribute names used in get_object_embed_attributes() and set_object_embed_attributes() must be lowercase.
+// The attribute names and values passed to and returned from the next two functions are always lowercase.
 
 function get_object_embed_attributes(element, attributes_map)
 {
@@ -29,7 +28,7 @@ function get_object_embed_attributes(element, attributes_map)
 		{
 			let value = element.getAttribute(name);
 			
-			if(value == null)
+			if(!value)
 			{
 				const param_tags = element.querySelectorAll("param");
 				for(const param of param_tags)
@@ -44,6 +43,7 @@ function get_object_embed_attributes(element, attributes_map)
 				}
 			}
 
+			if(value) value = value.toLowerCase();
 			attributes_map.set(name, value);
 		}
 	}
@@ -51,7 +51,8 @@ function get_object_embed_attributes(element, attributes_map)
 	{
 		for(const name of attributes_map.keys())
 		{
-			const value = element.getAttribute(name);
+			let value = element.getAttribute(name);
+			if(value) value = value.toLowerCase();
 			attributes_map.set(name, value);
 		}
 	}
@@ -114,31 +115,6 @@ function object_embed_uses_java_plugin(element)
 		|| (class_id && class_id.startsWith("clsid:cafeefac-"));
 }
 
-/*const JAPANESE_ENCODING_JAVA_ARGUMENTS = "-Dfile.encoding=UTF8 -Duser.language=ja -Duser.country=JP";
-
-function is_current_domain_japanese()
-{
-	let domain = window.location.hostname;
-	const path = window.location.pathname;
-	
-	if(domain == "web.archive.org" && path.startsWith("/web/"))
-	{
-		try
-		{
-			// E.g. "https://web.archive.org/web/20000101235959if_/http://www.example.com" -> "http://www.example.com".
-			let snapshot_url = path.split("/").slice(3).join("/");
-			snapshot_url = new URL(snapshot_url);
-			domain = snapshot_url.hostname;
-		}
-		catch(error)
-		{
-			// Ignore errors for invalid URLs.
-		}
-	}
-
-	return domain.endsWith(".jp");
-}*/
-
 const applet_tags = Array.from(document.querySelectorAll("applet"));
 let object_and_embed_tags = Array.from(document.querySelectorAll("object, embed"));
 object_and_embed_tags = object_and_embed_tags.filter(object_embed_uses_java_plugin);
@@ -150,28 +126,6 @@ for(const element of java_tags)
 {
 	// See: https://docs.oracle.com/javase/8/docs/technotes/guides/deploy/applet_dev_guide.html#JSDPG709
 	const attributes_map = new Map();
-	
-	/*attributes_map.set("java-vm-args", null);
-	attributes_map.set("java_arguments", null);
-	get_object_embed_attributes(element, attributes_map);
-
-	let java_arguments = attributes_map.get("java-vm-args") || attributes_map.get("java_arguments");
-	if(java_arguments)
-	{
-		java_arguments += " " + JAPANESE_ENCODING_JAVA_ARGUMENTS;
-	}
-	else
-	{
-		java_arguments = JAPANESE_ENCODING_JAVA_ARGUMENTS;
-	}
-
-	attributes_map.clear();
-
-	if(is_japanese_domain)
-	{
-		attributes_map.set("java-vm-args", java_arguments);
-		attributes_map.set("java_arguments", java_arguments);
-	}*/
 
 	attributes_map.set("java_version", JAVA_VERSION);
 	attributes_map.set("separate_jvm", "true");

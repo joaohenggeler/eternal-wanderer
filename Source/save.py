@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
 
-"""
-	This script saves URLs from the standard input using the Wayback Machine Save API.
-"""
-
 from argparse import ArgumentParser
 
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
 from common import CommonConfig, global_rate_limiter
-
-####################################################################################################
 
 if __name__ == '__main__':
 

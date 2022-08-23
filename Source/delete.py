@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 
-"""
-	This script deletes all video files belonging to unapproved and/or compiled recordings.
-"""
-
 import os
 import sqlite3
 import tempfile
@@ -12,8 +8,6 @@ from glob import iglob
 from typing import List, Optional, Tuple
 
 from common import TEMPORARY_PATH_PREFIX, Database, Recording, delete_directory, delete_file
-
-####################################################################################################
 
 if __name__ == '__main__':
 

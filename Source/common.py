@@ -4,8 +4,6 @@
 	A module that defines any general purpose functions used by all scripts, including loading configuration files,
 	connecting to the database, and interfacing with Firefox.
 
-	@TODO: Get media extension when fixing mislabeled snapshots.
-
 	@TODO: Add Mastodon support
 	@TODO: Make the stats.py script to print statistics
 	
@@ -52,8 +50,6 @@ from selenium.webdriver.support import expected_conditions as expected_webdriver
 from selenium.webdriver.support.ui import WebDriverWait # type: ignore
 from waybackpy import WaybackMachineCDXServerAPI as Cdx
 from waybackpy.cdx_snapshot import CDXSnapshot
-
-####################################################################################################
 
 TEMPORARY_PATH_PREFIX = 'wanderer.'
 
@@ -124,6 +120,9 @@ class CommonConfig():
 	allowed_domains: List[List[str]] # Different from the config data type.
 	disallowed_domains: List[List[str]] # Different from the config data type.
 	
+	enable_fallback_encoding: bool
+	use_guessed_encoding_as_fallback: bool
+
 	ffmpeg_global_args: List[str]
 
 	# Determined at runtime.
@@ -360,8 +359,6 @@ checked_disallowed_domains: Dict[str, bool] = {}
 def is_url_key_allowed(url_key: str) -> bool:
 	""" Checks whether a URL should be scouted or recorded given its URL key. """
 	return (not config.allowed_domains or url_key_matches_domain_pattern(url_key, config.allowed_domains, checked_allowed_domains)) and (not config.disallowed_domains or not url_key_matches_domain_pattern(url_key, config.disallowed_domains, checked_disallowed_domains))
-
-####################################################################################################
 
 class Database():
 	""" The database that contains all scraped snapshot metadata and their recordings. """
@@ -1056,9 +1053,8 @@ class Browser():
 		# Disable Java bytecode verification in order to run older applets correctly.
 		#
 		# Originally, we wanted to pass the character encoding and locale Java arguments on a page-by-page basis.
-		# This would allow Japanese applets to display their content correctly. Although the code to do this still
-		# exists in the "Improve Java Applets" Greasemonkey user script, it has since been commented out. This is
-		# because, in practice, the applets wouldn't change their encoding or locale even when the "java_arguments"
+		# This would allow Japanese applets to display their content correctly regardless of its encoding. This
+		# feature was removed since the encoding and locale didn't seem to change even when the "java_arguments"
 		# and "java-vm-args" parameters were set.
 		#
 		# We'll just set them globally since that seems to work out, though it means that we only support Latin and
@@ -1487,16 +1483,19 @@ class Browser():
 		Firefox had the required plugins installed). Returns None if Firefox is running in headless mode. """
 		return len(self.window.children(class_name='GeckoPluginWindow')) if self.window is not None else None
 
-	def close_all_windows_except(self, window_handle) -> None:
-		""" Closes every Firefox tab or window except a specific one. """
+	def close_all_windows(self) -> None:
+		""" Closes every Firefox tab and window, leaving only a single blank page. """
 
-		try:			
+		try:
+			self.driver.get(Browser.BLANK_URL)
+			current_handle = self.driver.current_window_handle
+
 			for handle in self.driver.window_handles:
-				if handle != window_handle:
+				if handle != current_handle:
 					self.driver.switch_to.window(handle)
 					self.driver.close()
 
-			self.driver.switch_to.window(window_handle)
+			self.driver.switch_to.window(current_handle)
 
 			try:
 				condition = expected_webdriver_conditions.number_of_windows_to_be(1)
@@ -1506,6 +1505,57 @@ class Browser():
 
 		except NoSuchWindowException:
 			pass
+
+	def set_preference(self, name: str, value: Union[bool, int, str]) -> None:
+		""" Sets a Firefox preference at runtime via XPCOM. Note that this will change the current page to "about:config".
+		This should be done sparingly since the vast majority of preferences can be defined before creating the WebDriver. """
+
+		# We can't use this interface to change the prefs in a regular page. We must navigate to "about:config" first.
+		# See:
+		# - https://stackoverflow.com/a/48816511/18442724
+		# - https://web.archive.org/web/20210417185248if_/https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules/Services.jsm
+		# - https://web.archive.org/web/20210629053921if_/https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIPrefBranch
+		setter_name = 'setBoolPref' if isinstance(value, bool) else ('setIntPref' if isinstance(value, int) else 'setCharPref')
+		self.driver.get('about:config')
+		self.driver.execute_script(f'''
+									// const prefs = Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefBranch);
+									// prefs.{setter_name}(arguments[0], arguments[1]);
+									Components.utils.import("resource://gre/modules/Services.jsm");
+									Services.prefs.{setter_name}(arguments[0], arguments[1]);
+									''', name, value)
+
+	def set_fallback_encoding_for_snapshot(self, snapshot: Snapshot) -> None:
+		""" Changes Firefox's fallback character encoding to the best charset for a given Wayback Machine snapshot.
+		This will either be a user-defined charset or an autodetected charset determined by the Wayback Machine. """
+		
+		if not config.enable_fallback_encoding:
+			return
+
+		try:
+			encoding = snapshot.Options.get('encoding')
+
+			# Note that not every snapshot has a guessed encoding.
+			if encoding is None and config.use_guessed_encoding_as_fallback:
+
+				global_rate_limiter.wait_for_wayback_machine_rate_limit()
+				response = requests.head(snapshot.WaybackUrl)
+				response.raise_for_status()
+				
+				# This header requires a snapshot URL with the iframe modifier.
+				encoding = response.headers.get('x-archive-guessed-charset')
+
+			encoding = encoding or ''
+
+			# E.g. https://web.archive.org/web/19991011153317if_/http://www.geocities.com/Athens/Delphi/1240/midigr.htm
+			# In older Firefox versions, the "windows-1252" encoding is used.
+			# In modern versions or when using the Wayback Machine's guessed encoding, "iso-8859-7" is used.
+			log.debug(f'Setting the fallback encoding to "{encoding}".')
+			self.set_preference('intl.charset.fallback.override', encoding)
+
+		except requests.RequestException as error:
+			log.error(f'Failed to find the guessed encoding for the snapshot {snapshot} with the error: {repr(error)}')
+		except WebDriverException as error:
+			log.error(f'Failed to set the fallback preference with the error: {repr(error)}')
 
 class TemporaryRegistry():
 	""" A temporary registry that remembers and undos any changes (key additions and deletions) made to the Windows registry. """
@@ -1706,8 +1756,6 @@ class TemporaryRegistry():
 	def __exit__(self, exception_type, exception_value, traceback):
 		self.restore()
 
-####################################################################################################
-
 def clamp(value: float, min_value: float, max_value: float) -> float:
 	""" Clamps a number between a minimum and maximum value. """
 	return max(min_value, min(value, max_value))
@@ -1715,6 +1763,22 @@ def clamp(value: float, min_value: float, max_value: float) -> float:
 def get_current_timestamp() -> str:
 	""" Retrieves the current timestamp in UTC. """
 	return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+def extract_standalone_media_extension_from_url(url: str) -> str:
+	""" Retrieves the file extension from a standalone media URL. The returned extension may be
+	different from the real value for the sake of convenience (e.g. compressed VRML worlds). """
+
+	parts = urlparse(url)
+	path = parts.path.lower()
+
+	# For compressed VRML worlds that would otherwise be stored as "gz".
+	if path.endswith('.wrl.gz'):
+		extension = 'wrz'
+	else:
+		_, extension = os.path.splitext(path)
+		extension = extension.lstrip('.')
+
+	return extension
 
 def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> Tuple[CDXSnapshot, bool, Optional[str]]:
 	""" Finds the best Wayback Machine snapshot given its timestamp and URL. By best snapshot we mean
@@ -1731,19 +1795,7 @@ def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> Tuple[CDXSna
 	# Consider plain text files since regular HTML pages may be served with this MIME type.
 	# E.g. https://web.archive.org/web/20011201170113if_/http://www.yahoo.co.jp/bin/top3
 	is_standalone_media = snapshot.mimetype not in ['text/html', 'text/plain']
-
-	media_extension = None
-
-	if is_standalone_media:
-		parts = urlparse(snapshot.original)
-		path = parts.path.lower()
-
-		# For compressed VRML worlds that would otherwise be stored as "gz".
-		if path.endswith('.wrl.gz'):
-			media_extension = 'wrz'
-		else:
-			_, media_extension = os.path.splitext(path)
-			media_extension = media_extension.strip('.')
+	media_extension = extract_standalone_media_extension_from_url(snapshot.original) if is_standalone_media else None
 
 	return snapshot, is_standalone_media, media_extension
 

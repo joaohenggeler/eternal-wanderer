@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
 
-"""
-	This script traverses web pages archived by the Wayback Machine (snapshots) and collects metadata from their content and from the CDX API.
-	The scout script prioritizes pages that were manually added by the user through the configuration file as well as pages whose parent snapshot
-	contains specific words and plugin media.
-"""
-
 import binascii
 import os
 import re
@@ -18,14 +12,12 @@ from argparse import ArgumentParser
 from base64 import b64decode
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse, urlunparse
 
 from selenium.common.exceptions import SessionNotCreatedException, StaleElementReferenceException, WebDriverException # type: ignore
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
-from common import Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url, container_to_lowercase, find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info, global_rate_limiter, is_url_from_domain, is_wayback_machine_available, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
-
-####################################################################################################
+from common import Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url, container_to_lowercase, extract_standalone_media_extension_from_url, find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info, global_rate_limiter, is_url_from_domain, is_wayback_machine_available, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
 
 class ScoutConfig(CommonConfig):
 	""" The configuration that applies to the scout script. """
@@ -103,8 +95,6 @@ if __name__ == '__main__':
 		for info in japanese_tagger.dictionary_info:
 			log.info(f'Found the Japanese dictionary: {info}')
 
-	####################################################################################################
-
 	def find_child_snapshot(parent_snapshot: Optional[Snapshot], url: str, timestamp: str) -> Optional[dict]:
 		""" Retrieves a snapshot's metadata from the Wayback Machine. """
 
@@ -154,8 +144,6 @@ if __name__ == '__main__':
 					break
 
 		return result
-
-	####################################################################################################
 
 	# We don't want any extensions or user scripts that change the HTML document, but we do need to use the Greasemonkey extension with a user script
 	# that disables the alert(), confirm(), and prompt() JavaScript functions. This prevents the UnexpectedAlertPresentException, which would otherwise
@@ -253,8 +241,6 @@ if __name__ == '__main__':
 			log.error(f'Failed to update the word and tag attributes with the error: {repr(error)}')
 			db.rollback()
 			raise
-
-	####################################################################################################
 
 		def invalidate_snapshot(snapshot: Snapshot) -> None:
 			""" Invalidates a snapshot that couldn't be scouted correctly due to a WebDriver error. """
@@ -361,6 +347,7 @@ if __name__ == '__main__':
 					row = cursor.fetchone()
 					if row is not None:
 						snapshot = Snapshot(**dict(row))
+						browser.set_fallback_encoding_for_snapshot(snapshot)
 						parent_points = row['ParentPoints']
 					else:
 						log.info('Ran out of snapshots to scout.')
@@ -381,17 +368,16 @@ if __name__ == '__main__':
 
 				try:
 					log.info(f'[{num_iterations}] Scouting snapshot #{snapshot.Id} {snapshot} located at a depth of {snapshot.Depth} pages and whose parent has {parent_points} points.')
-					original_window = driver.current_window_handle
 					browser.go_to_wayback_url(snapshot.WaybackUrl)
-				except SessionNotCreatedException:
-					log.warning('Terminated the WebDriver session abruptly.')
+				except SessionNotCreatedException as error:
+					log.warning(f'Terminated the WebDriver session abruptly with the error: {repr(error)}')
 					break
 				except WebDriverException as error:
 					log.error(f'Failed to load the snapshot with the error: {repr(error)}')
 					invalidate_snapshot(snapshot)
 					continue
 
-				# Skip downloads, i.e., regular pages that were labelled as standalone media.
+				# Skip downloads, i.e., regular pages that were mislabeled as standalone media.
 				# When this happens, we have to wait for the WebDriver to time out.
 				#
 				# E.g. https://web.archive.org/web/20060321063750if_/http://www.thekidfrombrooklyn.com/movies/PoundCake_02_06.wmv
@@ -399,9 +385,16 @@ if __name__ == '__main__':
 				if driver.current_url == Browser.BLANK_URL:
 					try:
 						log.warning(f'Skipping the snapshot since it was mislabeled as standalone media.')
-						db.execute(	'UPDATE Snapshot SET State = :scouted_state, IsStandaloneMedia = :is_standalone_media WHERE Id = :id;',
-									{'scouted_state': Snapshot.SCOUTED, 'is_standalone_media': True, 'id': snapshot.Id})
+						
+						media_extension = extract_standalone_media_extension_from_url(snapshot.Url)
+						db.execute(	'UPDATE Snapshot SET State = :scouted_state, IsStandaloneMedia = :is_standalone_media, MediaExtension = :media_extension WHERE Id = :id;',
+									{'scouted_state': Snapshot.SCOUTED, 'is_standalone_media': True, 'media_extension': media_extension, 'id': snapshot.Id})
+						
+						if snapshot.Priority == Snapshot.SCOUT_PRIORITY:
+							db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
+						
 						db.commit()
+					
 					except sqlite3.Error as error:
 						log.error(f'Failed to update the mislabeled snapshot with the error: {repr(error)}')
 						db.rollback()
@@ -424,28 +417,19 @@ if __name__ == '__main__':
 					if check_snapshot_redirection(snapshot):
 						continue
 
-					# Analyze the page and its frames by using the Wayback Machine iframe modifier.
-					# This modifier has two main advantages:
-					# - The tags use absolute URLs instead of relative ones, making it easier to collect them.
-					# - The Wayback Machine is able to serve the page with a guessed character encoding, which
-					# is very useful for older pages that don't specify their encoding and whose text would
-					# be incorrectly decoded and inserted into the database.
+					# Analyze the page and its frames by using the Wayback Machine iframe modifier. This makes it
+					# so the tags use absolute URLs instead of relative ones, making it easier to collect them.
 					#
-					# E.g. compare the following Japanese pages. The first one uses the guessed EUC-JP encoding,
-					# while the second has none, defaulting to ISO-8859-1.
-					# - https://web.archive.org/web/19980123230336if_/http://www.geocities.co.jp:80/join/freehp.html
-					# - https://web.archive.org/web/19980123230336id_/http://www.geocities.co.jp:80/join/freehp.html
-					#
-					# This last point has one disadvantage, which is that the tags inserted by the Wayback Machine
+					# This modifier has one disadvantage, which is that the tags inserted by the Wayback Machine
 					# would also be counted by our script, even though they're not part of the original page. As
-					# such, we'll count them below using the identical modifier.
+					# such, we'll count them below using the identical modifier instead.
 					#
-					# The same frame may show up more than once, which is fine since that's what the user sees,
-					# meaning we want to count duplicate words and tags in this case.
+					# The same frame may show up more than once, meaning the script will count duplicate words
+					# and tags. This is fine since that's what the user sees.
 					#
-					# We'll also avoid counting words (and later tags) from 404 Wayback Machine pages by skipping
-					# any missing snapshots. Keeping the Wayback Machine URL format is also necessary when counting
-					# tags below.
+					# We'll avoid counting words (and later tags) from 404 Wayback Machine pages by skipping any
+					# missing snapshots. Keeping the Wayback Machine URL format is also necessary when counting
+					# tags later on in the script.
 					frame_text_list = []
 					for i, frame_url in enumerate(browser.traverse_frames(format_wayback_urls=True, skip_missing=True)):
 
@@ -487,6 +471,18 @@ if __name__ == '__main__':
 								is_wayback_machine = is_url_from_domain(parts, 'web.archive.org')
 	
 								if is_valid and not is_wayback_machine:
+
+									# Handle URLs with non-HTTP schemes (FTP, Gopher, etc). In these cases, the
+									# snapshot URL uses a different format.
+									# E.g. https://web.archive.org/web/19970617032419if_/http://www.acer.net/document/InternetViaMail/elmgophe.htm
+									# Which links to http://19970617032419/gopher://cwis.usc.edu/
+									# Where the Gopher URL "gopher://cwis.usc.edu/" is converted to "http://cwis.usc.edu/".
+									if parts.netloc == snapshot.Timestamp:
+										# We can't remove the port directly so we have to change the entire netloc.
+										new_parts = urlparse(parts.path.lstrip('/'))
+										new_parts = new_parts._replace(scheme='http', netloc=new_parts.hostname or '')
+										url = urlunparse(new_parts)
+										parts = urlparse(url)
 
 									url_list.append((url, wayback_timestamp))
 
@@ -536,14 +532,25 @@ if __name__ == '__main__':
 							# browser to use a heuristic for these type of pages. Otherwise, we'd be storing
 							# garbage in the database. This also applies to retrieving the page's title.
 							#
+							# For other languages (but also some Japanese pages), we'll tell Firefox to use an
+							# encoding that was autodetected by the Wayback Machine as a fallback. This is done
+							# in practice by setting the "intl.charset.fallback.override" preference to this
+							# guessed encoding. See set_fallback_encoding_for_snapshot().
+							#
+							# These two preferences should ensure that the content in most pages is displayed
+							# and retrieved correctly. For specific edge cases, we'll allow the user to set the
+							# encoding via each snapshot's options. Note also that using the correct encoding
+							# affects the page language detection and the text-to-speech voice selection.
+							#
 							# See:
 							# - https://www-archive.mozilla.org/projects/intl/chardet.html
 							# - https://udn.realityripple.com/docs/Web/Guide/Localizations_and_character_encodings
 							# - https://groups.google.com/g/mozilla.dev.platform/c/TCiODi3Fea4
 							#
 							# E.g.
-							# - Requires Detector: https://web.archive.org/web/19990424053506if_/http://geochat00.geocities.co.jp/
-							# - Does Not Require Detector: https://web.archive.org/web/19980123230614if_/http://www.geocities.co.jp:80/Milkyway/
+							# - Requires detector: https://web.archive.org/web/19990424053506if_/http://geochat00.geocities.co.jp/
+							# - Does not require detector: https://web.archive.org/web/19980123230614if_/http://www.geocities.co.jp:80/Milkyway/
+							# - Requires the fallback encoding: https://web.archive.org/web/19991011153317if_/http://www.geocities.com/Athens/Delphi/1240/midigr.htm
 							if config.tokenize_japanese_text:
 								
 								# In order to avoid tokenizing non-Japanese text, we would need to determine
@@ -578,8 +585,8 @@ if __name__ == '__main__':
 					else:
 						page_language = None
 
-				except SessionNotCreatedException:
-					log.warning('Terminated the WebDriver session abruptly.')
+				except SessionNotCreatedException as error:
+					log.warning(f'Terminated the WebDriver session abruptly with the error: {repr(error)}')
 					break
 				except WebDriverException as error:
 					log.error(f'Failed to retrieve the snapshot\'s page elements with the error: {repr(error)}')
@@ -625,10 +632,10 @@ if __name__ == '__main__':
 						# We're able to catch these edge cases in the recorder script.
 						page_uses_plugins = page_uses_plugins or any(driver.find_elements_by_tag_name(tag) for tag in ['object', 'embed', 'applet', 'app', 'bgsound'])
 
-					browser.close_all_windows_except(original_window)
+					browser.close_all_windows()
 
-				except SessionNotCreatedException:
-					log.warning('Terminated the WebDriver session abruptly.')
+				except SessionNotCreatedException as error:
+					log.warning(f'Terminated the WebDriver session abruptly with the error: {repr(error)}')
 					break
 				except WebDriverException as error:
 					# E.g. https://web.archive.org/web/19990117002229if_/http://www.geocities.com:80/cgi-bin/homestead/mbrlookup

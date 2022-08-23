@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 
-"""
-	This script opens a URL in a Firefox version equipped with various plugins and extensions.
-	Avoid using this version to browse live websites.
-"""
-
 import os
 import shutil
 from argparse import ArgumentParser
@@ -12,8 +7,6 @@ from argparse import ArgumentParser
 from selenium.common.exceptions import WebDriverException # type: ignore
 
 from common import CommonConfig, Browser
-
-####################################################################################################
 
 if __name__ == '__main__':
 

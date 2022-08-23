@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 
-"""
-	This script publishes the previously recorded snapshots to Twitter on a set schedule.
-	The publisher script uploads each snapshot's MP4 video and generates a tweet with the web page's title, its date, and a link to its Wayback Machine capture.
-"""
-
 import os
 import sqlite3
 import sys
@@ -21,8 +16,6 @@ from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
 
 from common import TEMPORARY_PATH_PREFIX, CommonConfig, Database, Recording, Snapshot, delete_file, get_current_timestamp, setup_logger, was_exit_command_entered
-
-####################################################################################################
 
 class PublishConfig(CommonConfig):
 	""" The configuration that applies to the publisher script. """
@@ -67,8 +60,6 @@ if __name__ == '__main__':
 
 	if not config.publish_to_twitter and not config.publish_to_mastodon:
 		parser.error('The configuration must enable posting to at least one platform.')
-
-	####################################################################################################
 
 	log.info('Initializing the publisher.')
 
@@ -170,8 +161,6 @@ if __name__ == '__main__':
 		def publish_to_mastodon(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, language: Optional[str]) -> Tuple[Optional[int], Optional[int]]:
 			""" @TODO """
 			return None, None
-
-	####################################################################################################
 
 	scheduler = BlockingScheduler()
 
@@ -284,8 +273,6 @@ if __name__ == '__main__':
 			pass
 
 		log.info(f'Finished publishing {num_recordings} recordings.')
-
-	####################################################################################################
 
 	if args.max_iterations >= 0:
 		publish_recordings(args.max_iterations)

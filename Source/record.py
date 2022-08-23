@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
 
-"""
-	This script records the previously scouted snapshots by opening their pages in Firefox and scrolling through them at a set pace.
-	If the recorder script detects that any plugins crashed or that the page was redirected while capturing the screen, the recording is aborted.
-	This script is inherently unsafe since it relies on web plugins (e.g. Flash, Shockwave, Java, etc).
-"""
-
 import ctypes
 import itertools
 import os
@@ -39,8 +33,6 @@ from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
 from common import TEMPORARY_PATH_PREFIX, Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, clamp, container_to_lowercase, delete_file, get_current_timestamp, global_rate_limiter, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
-
-####################################################################################################
 
 class RecordConfig(CommonConfig):
 	""" The configuration that applies to the recorder script. """
@@ -199,8 +191,6 @@ if __name__ == '__main__':
 	parser = ArgumentParser(description='Records the previously scouted snapshots by opening their pages in Firefox and scrolling through them at a set pace. If the recorder script detects that any plugins crashed or that the page was redirected while capturing the screen, the recording is aborted. This script is inherently unsafe since it relies on web plugins (e.g. Flash, Shockwave, Java, etc).')
 	parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to record. Omit or set to %(default)s to run forever on a set schedule.')
 	args = parser.parse_args()
-
-	####################################################################################################
 
 	class Proxy(Thread):
 		""" A proxy thread that intercepts all HTTP/HTTPS requests made by Firefox and its plugins. Used to locate missing resources
@@ -619,8 +609,6 @@ if __name__ == '__main__':
 				except Exception:
 					pass				
 
-	####################################################################################################
-
 	log.info('Initializing the recorder.')
 	log.info(f'Detected the physical screen resolution {config.physical_screen_width}x{config.physical_screen_height} with the DPI scaling ({config.width_dpi_scaling:.2f}, {config.height_dpi_scaling:.2f}).')
 
@@ -867,7 +855,9 @@ if __name__ == '__main__':
 							snapshot = Snapshot(**dict(row))
 
 							assert snapshot.Points is not None, 'The Points column is not being computed properly.'
+							
 							config.apply_snapshot_options(snapshot)
+							browser.set_fallback_encoding_for_snapshot(snapshot)
 
 							days_since_last_published = row['DaysSinceLastPublished']
 
@@ -912,7 +902,6 @@ if __name__ == '__main__':
 
 						log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} with {snapshot.Points} points (last published = {days_since_last_published} days ago).')
 						
-						original_window = driver.current_window_handle
 						browser.bring_to_front()
 						pywinauto.mouse.move(coords=(0, config.physical_screen_height // 2))
 						
@@ -942,6 +931,10 @@ if __name__ == '__main__':
 							# This may be less than the real value if we had to kill any plugin instances.
 							num_plugin_instances = browser.count_plugin_instances()
 							log.debug(f'Found {num_plugin_instances} plugin instances.')
+
+							if snapshot.PageUsesPlugins and num_plugin_instances == 0:
+								log.warning('Could not find any plugin instances when at least one was expected.')
+								num_plugin_instances = 1
 							
 							wait_after_load: float
 							wait_per_scroll: float
@@ -1064,7 +1057,7 @@ if __name__ == '__main__':
 						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, str(snapshot.OldestDatetime.year), str(snapshot.OldestDatetime.month).zfill(2), str(snapshot.OldestDatetime.day).zfill(2), media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
-						browser.close_all_windows_except(original_window)
+						browser.close_all_windows()
 						browser.bring_to_front()
 						pywinauto.mouse.move(coords=(0, config.physical_screen_height // 2))
 
@@ -1098,7 +1091,7 @@ if __name__ == '__main__':
 							if redirected:
 								log.error(f'The page was redirected to "{url}" at {timestamp} while recording.')
 
-						browser.close_all_windows_except(original_window)
+						browser.close_all_windows()
 						browser.go_to_blank_page_with_text('\N{Film Projector} Post Processing \N{Film Projector}', str(snapshot))
 						capture.perform_post_processing()
 						
@@ -1238,8 +1231,8 @@ if __name__ == '__main__':
 							if text_to_speech_file_path is not None:
 								log.info(f'Saved the text-to-speech file to "{text_to_speech_file_path}".')
 
-					except SessionNotCreatedException:
-						log.warning('Terminated the WebDriver session abruptly.')
+					except SessionNotCreatedException as error:
+						log.warning(f'Terminated the WebDriver session abruptly with the error: {repr(error)}')
 						break
 					except WebDriverException as error:
 						log.error(f'Failed to record the snapshot with the WebDriver error: {repr(error)}')
@@ -1317,8 +1310,6 @@ if __name__ == '__main__':
 				proxy.shutdown()
 
 		log.info(f'Finished recording {num_snapshots} snapshots.')
-
-	####################################################################################################
 
 	if args.max_iterations >= 0:
 		record_snapshots(args.max_iterations)

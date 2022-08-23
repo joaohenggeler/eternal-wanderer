@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
 
-"""
-	This script compiles multiple snapshot recordings into a single video.
-	This can be done for published recordings that haven't been compiled yet, or for any recordings given their database IDs.
-	A short transition with a user-defined background color, duration, and sound effect is inserted between each recording.
-"""
-
 import os
 import sqlite3
 from argparse import ArgumentParser
@@ -17,8 +11,6 @@ import ffmpeg # type: ignore
 
 from common import TEMPORARY_PATH_PREFIX, Database, Recording, Snapshot, delete_file, get_current_timestamp
 from record import RecordConfig
-
-####################################################################################################
 
 if __name__ == '__main__':
 
@@ -59,7 +51,7 @@ if __name__ == '__main__':
 			for id in id_list.split(','):
 				
 				current_list = exclude_id_list if id.startswith('!') else include_id_list
-				id = id.strip('!')
+				id = id.lstrip('!')
 
 				if '-' in id:
 					begin_id, end_id = id.split('-', 1)
@@ -110,10 +102,14 @@ if __name__ == '__main__':
 									''', {'begin_date': begin_date, 'end_date': end_date})
 
 			else:
-				query_id_list = '(' + ', '.join(str(id) for id in id_list) + ')'
+				def is_recording_part_of_compilation(id: int) -> bool:
+					""" Checks if a recording should be compiled given its snapshot or recording ID. """
+					return id in id_list
+
+				db.create_function('IS_RECORDING_PART_OF_COMPILATION', 1, is_recording_part_of_compilation)
 
 				if id_type == 'snapshot':
-					cursor = db.execute(f'''
+					cursor = db.execute('''
 										SELECT S.*, R.*, R.Id AS RecordingId
 										FROM Snapshot S
 										INNER JOIN Recording R ON S.Id = R.SnapshotId
@@ -123,14 +119,14 @@ if __name__ == '__main__':
 											FROM Recording LR
 											GROUP BY LR.SnapshotId
 										) LR ON S.Id = LR.SnapshotId AND R.CreationTime = LR.LastCreationTime
-										WHERE S.Id IN {query_id_list};
+										WHERE IS_RECORDING_PART_OF_COMPILATION(S.Id);
 										''')
 				else:
-					cursor = db.execute(f'''
+					cursor = db.execute('''
 										SELECT S.*, R.*, R.Id AS RecordingId
 										FROM Snapshot S
 										INNER JOIN Recording R ON S.Id = R.SnapshotId
-										WHERE R.Id IN {query_id_list};
+										WHERE IS_RECORDING_PART_OF_COMPILATION(R.Id);
 										''')
 
 			total_recordings = 0
@@ -246,10 +242,11 @@ if __name__ == '__main__':
 								recording_duration = float(probe['format']['duration'])
 								current_duration += recording_duration + transition_duration
 
+							timestamps_file.write('\n')
+
 							snapshot_ids = ','.join(str(snapshot.Id) for snapshot, _ in snapshots_and_recordings)
 							recording_ids = ','.join(str(recording.Id) for _, recording in snapshots_and_recordings)
 							
-							timestamps_file.write('\n')
 							timestamps_file.write(f'Snapshots: {snapshot_ids}\n')
 							timestamps_file.write(f'Recordings: {recording_ids}\n')
 							timestamps_file.write(f'Total: {len(snapshots_and_recordings)}\n')

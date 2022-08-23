@@ -14,7 +14,7 @@ const LOG = true;
 // - https://wiki.videolan.org/Documentation:WebPlugin/#Required_elements
 const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
 
-// The attribute names used in get_object_embed_attributes() and set_object_embed_attributes() must be lowercase.
+// The attribute names and values passed to and returned from the next two functions are always lowercase.
 
 function get_object_embed_attributes(element, attributes_map)
 {
@@ -24,7 +24,7 @@ function get_object_embed_attributes(element, attributes_map)
 		{
 			let value = element.getAttribute(name);
 			
-			if(value == null)
+			if(!value)
 			{
 				const param_tags = element.querySelectorAll("param");
 				for(const param of param_tags)
@@ -39,6 +39,7 @@ function get_object_embed_attributes(element, attributes_map)
 				}
 			}
 
+			if(value) value = value.toLowerCase();
 			attributes_map.set(name, value);
 		}
 	}
@@ -46,7 +47,8 @@ function get_object_embed_attributes(element, attributes_map)
 	{
 		for(const name of attributes_map.keys())
 		{
-			const value = element.getAttribute(name);
+			let value = element.getAttribute(name);
+			if(value) value = value.toLowerCase();
 			attributes_map.set(name, value);
 		}
 	}
@@ -178,6 +180,7 @@ if(vlc_plugin)
 			//
 			// Examples:
 			// - AVI: https://web.archive.org/web/19980221110733if_/http://heartcorps.com/journeys/voice.htm
+			// - MOV: https://web.archive.org/web/19970502031035if_/http://www.verticalonline.com/dh.html
 			// - MOV: https://web.archive.org/web/20200219215301if_/http://goa103.free.fr/t_63455/media_player.php
 			// - MOV: https://web.archive.org/web/20220514015040if_/https://web.nmsu.edu/~leti/portfolio/quicktimemovie.html
 			// - WMV: https://web.archive.org/web/20200713113744if_/http://thirdplanetvideo.com/Flip4MacTestPage.html
@@ -197,7 +200,7 @@ if(vlc_plugin)
 				// preventing it from looping twice (see below).
 				if("intervalId" in vlc.dataset)
 				{
-					clearInterval(parseInt(vlc.dataset.intervalId));
+					clearInterval(Number(vlc.dataset.intervalId));
 					delete vlc.dataset.lastPosition;
 					delete vlc.dataset.intervalId;
 				}
@@ -229,17 +232,20 @@ if(vlc_plugin)
 				element.dataset.intervalId = setInterval(function(vlc)
 				{
 					// Check if we've looped back around.
-					if(vlc.input.position < parseFloat(vlc.dataset.lastPosition))
+					if(vlc.input.position < Number(vlc.dataset.lastPosition))
 					{
 						vlc.playlist.stop();
 						vlc.input.position = -1;
 						if(LOG) console.log("Fix Vlc Embed - Stopped:", vlc);
-						clearInterval(parseInt(vlc.dataset.intervalId));
+						clearInterval(Number(vlc.dataset.intervalId));
 						delete vlc.dataset.lastPosition;
 						delete vlc.dataset.intervalId;
 					}
-					vlc.dataset.lastPosition = vlc.input.position;
-				}, 0, element);				
+					else
+					{
+						vlc.dataset.lastPosition = vlc.input.position;
+					}
+				}, 0, element);
 			}
 
 			reload_object_embed(element);

@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 
-"""
-	This script approves snapshot recordings for publishing.
-	This operation is optional and may only be done if the publisher script was started with the "require_approval" option set to true.
-"""
-
 import os
 import sqlite3
 from argparse import ArgumentParser
@@ -12,8 +7,6 @@ from typing import Optional
 
 from common import Database, Recording, Snapshot
 from publish import PublishConfig
-
-####################################################################################################
 
 if __name__ == '__main__':
 

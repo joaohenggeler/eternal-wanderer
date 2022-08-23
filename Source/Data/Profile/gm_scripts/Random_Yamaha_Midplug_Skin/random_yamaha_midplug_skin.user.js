@@ -14,7 +14,7 @@ const LOG = true;
 // - https://wiki.videolan.org/Documentation:WebPlugin/#Required_elements
 const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
 
-// The attribute names used in get_object_embed_attributes() and set_object_embed_attributes() must be lowercase.
+// The attribute names and values passed to and returned from the next two functions are always lowercase.
 
 function get_object_embed_attributes(element, attributes_map)
 {
@@ -24,7 +24,7 @@ function get_object_embed_attributes(element, attributes_map)
 		{
 			let value = element.getAttribute(name);
 			
-			if(value == null)
+			if(!value)
 			{
 				const param_tags = element.querySelectorAll("param");
 				for(const param of param_tags)
@@ -39,6 +39,7 @@ function get_object_embed_attributes(element, attributes_map)
 				}
 			}
 
+			if(value) value = value.toLowerCase();
 			attributes_map.set(name, value);
 		}
 	}
@@ -46,7 +47,8 @@ function get_object_embed_attributes(element, attributes_map)
 	{
 		for(const name of attributes_map.keys())
 		{
-			const value = element.getAttribute(name);
+			let value = element.getAttribute(name);
+			if(value) value = value.toLowerCase();
 			attributes_map.set(name, value);
 		}
 	}
