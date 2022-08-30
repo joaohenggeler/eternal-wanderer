@@ -37,6 +37,8 @@ The following Python packages are used:
 
 * [Tweepy](https://github.com/tweepy/tweepy): to upload the recorded videos to Twitter and publish tweets.
 
+* [Mastodon.py](https://github.com/halcy/Mastodon.py): to upload the recorded videos to Mastodon and publish toots.
+
 * [APScheduler](https://github.com/agronholm/apscheduler): to schedule both the video recordings and uploads.
 
 * [fastText](https://github.com/facebookresearch/fastText): to detect a page's language from its text. Only used if the `detect_page_language` option is true.
@@ -57,7 +59,7 @@ Below is a summary of the Python scripts located in [the source directory](Sourc
 
 * `record.py`: records the previously scouted snapshots on a set schedule by opening their pages in Firefox and scrolling through them at a set pace. If the recorder script detects that any plugins crashed or that the page was redirected while capturing the screen, the recording is aborted. **This script is inherently unsafe since it relies on web plugins (e.g. Flash, Shockwave, Java, etc).**
 
-* `publish.py`: publishes the previously recorded snapshots to Twitter on a set schedule. The publisher script uploads each snapshot's MP4 video and generates a tweet with the web page's title, its date, and a link to its Wayback Machine capture.
+* `publish.py`: publishes the previously recorded snapshots to Twitter and Mastodon on a set schedule. The publisher script uploads each snapshot's MP4 video and generates a tweet with the web page's title, its date, and a link to its Wayback Machine capture.
 
 * `approve.py`: approves snapshot recordings for publishing. This operation is optional and may only be done if the publisher script was started with the `require_approval` option set to true.
 
@@ -70,6 +72,10 @@ Below is a summary of the Python scripts located in [the source directory](Sourc
 * `browse.py`: opens a URL in a Firefox version equipped with various plugins and extensions. Avoid using this version to browse live websites.
 
 * `save.py`: saves URLs from the standard input using the Wayback Machine Save API.
+
+* `voices.py`: lists and exports the voices used by the Microsoft Speech API.
+
+* `stats.py`: shows snapshot and recording statistics from the database.
 
 * `wayback_proxy_addon.py`: a mitmproxy script that tells the recorder script if the page is still making requests while also checking if any missing files are available in a different subdomain. This script should not be run directly and is instead started automatically by the recorder if the `enable_proxy` option is true.
 
@@ -116,6 +122,8 @@ Below is a step-by-step guide on how to obtain and configure all the necessary c
 13. Download and install the [Screen Capturer Recorder](https://github.com/rdp/screen-capture-recorder-to-video-windows-free/releases) device in order to capture the screen using ffmpeg. Note that this program requires Java. You can either use a modern Java install, or reuse the local Java install from step 11. For the latter, you must add the Java executable path (e.g. `Data/Plugins/Java/jdk1.8.0_11/jre/bin` or `Data/Plugins/Java/jre1.8.0_11/bin`) to the PATH environment variable.
 
 14. To publish the recorded videos on Twitter, create an account for the bot, log into the [Twitter Developer Platform](https://developer.twitter.com/en), and apply for elevated access on the dashboard. Then, create a new project and application, set up OAuth 1.0a authentication with at least read and write permissions, and generate an access token and access token secret. Enter your application's API key, API secret, and the previous tokens into the options `twitter_api_key`, `twitter_api_secret`, `twitter_access_token`, and `twitter_access_token_secret`, respectively. At the time of writing, you need to use the standard Twitter API version 1.1 to upload videos. This requires having both elevated access and using OAuth 1.0a.
+
+15. To publish the recorded videos on Mastodon, create an account for the bot in an appropriate instance. Choose either an instance your hosting yourself or one that was designed specifically for bots. Then, go to Settings > Development and create a new application. While doing so, select the `write:media` and `write:statuses` scopes and uncheck any others. Save these changes and copy the generated access token to the `mastodon_access_token` option. Finally, set the `mastodon_instance_url` option to the instance's URL.
 
 ## Configuration
 

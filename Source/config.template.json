@@ -350,7 +350,7 @@
 
 		"standalone_media_points": 500,
 
-		"sensitive_words": ["b64:Ymxvd2pvYg==", "b64:Ymxvd2pvYnM=", "b64:Y3Vt", "b64:Y3Vtcw==", "b64:Y3Vtc2hvdA==", "b64:Y3VudA==", "b64:Y3VudHM=", "b64:ZmFn", "b64:ZmFnZ290", "b64:ZmFnZ290cw==", "b64:ZmFncw==", "b64:aGFuZGpvYg==", "b64:aGFuZGpvYnM=", "b64:aGVudGFp", "b64:aml6eg==", "b64:bWlsZg==", "b64:bmlnZ2Vy", "b64:bmlnZ2Vycw==", "b64:cGFlZG9waGlsZQ==", "b64:cGFlZG9waGlsZXM=", "b64:cGVkbw==", "b64:cGVkb3BoaWxl", "b64:cGVkb3BoaWxlcw==", "b64:cGVkb3M=", "b64:cHVzc2llcw==", "b64:cHVzc3k=", "b64:cmFwZQ==", "b64:cmFwZWQ=", "b64:cmFwZXM=", "b64:cmFwaXN0", "b64:cmFwaXN0cw==", "b64:c2hlbWFsZQ==", "b64:c2hlbWFsZXM=", "b64:c2x1dA==", "b64:c2x1dHM=", "b64:dGl0ZnVjaw==", "b64:dGl0ZnVja3M=", "b64:dGl0am9i", "b64:dGl0am9icw==", "b64:dGl0cw==", "b64:dGl0dHlmdWNr", "b64:dGl0dHlmdWNrcw==", "b64:dHJhbm5pZXM=", "b64:dHJhbm55", "b64:d2hvcmU=", "b64:d2hvcmVz"],
+		"sensitive_words": ["b64:Ymxvd2pvYg==", "b64:Ymxvd2pvYnM=", "b64:Y3Vt", "b64:Y3Vtcw==", "b64:Y3Vtc2hvdA==", "b64:Y3Vtc2hvdHM=", "b64:Y3VudA==", "b64:Y3VudHM=", "b64:ZG9nZ3lzdHlsZQ==", "b64:ZmFn", "b64:ZmFnZ290", "b64:ZmFnZ290cw==", "b64:ZmFncw==", "b64:aGFuZGpvYg==", "b64:aGFuZGpvYnM=", "b64:aGVudGFp", "b64:aml6eg==", "b64:aml6emVk", "b64:aml6emVz", "b64:bWlsZg==", "b64:bWlsZnM=", "b64:bW90aGVyZnVja2Vy", "b64:bW90aGVyZnVja2Vycw==", "b64:bmlnZ2Vy", "b64:bmlnZ2Vycw==", "b64:bnVkZQ==", "b64:cGFlZG9waGlsZQ==", "b64:cGFlZG9waGlsZXM=", "b64:cGVkbw==", "b64:cGVkb3BoaWxl", "b64:cGVkb3BoaWxlcw==", "b64:cGVkb3M=", "b64:cHVzc2llcw==", "b64:cHVzc3k=", "b64:cmFwZQ==", "b64:cmFwZWQ=", "b64:cmFwZXM=", "b64:cmFwaXN0", "b64:cmFwaXN0cw==", "b64:c2hlbWFsZQ==", "b64:c2hlbWFsZXM=", "b64:c2x1dA==", "b64:c2x1dHM=", "b64:dGl0ZnVjaw==", "b64:dGl0ZnVja2Vk", "b64:dGl0ZnVja3M=", "b64:dGl0am9i", "b64:dGl0am9icw==", "b64:dGl0cw==", "b64:dGl0dHlmdWNr", "b64:dGl0dHlmdWNrZWQ=", "b64:dGl0dHlmdWNrcw==", "b64:dHJhbm5pZXM=", "b64:dHJhbm55", "b64:d2hvcmU=", "b64:d2hvcmVz"],
 
 		"store_all_words_and_tags": true,
 		"detect_page_language": true,
@@ -591,17 +591,17 @@
 
 	"publish":
 	{
-		"scheduler": {"minute": "*/30"},
+		"scheduler": {"hour": "*/3"},
 		"num_recordings_per_scheduled_batch": 1,
 		
-		"publish_to_twitter": true,
-		"publish_to_mastodon": false,
+		"enable_twitter": true,
+		"enable_mastodon": true,
 
 		"require_approval": true,
 		"flag_sensitive_snapshots": true,
 		"show_standalone_media_metadata": true,
 		"reply_with_text_to_speech": true,
-		"delete_files_after_publish": false,
+		"delete_files_after_upload": false,
 
 		"twitter_api_key": "<API Key>",
 		"twitter_api_secret": "<API Secret>",
@@ -613,6 +613,18 @@
 
 		"twitter_max_post_length": 280,
 		"twitter_text_to_speech_segment_duration": 138,
-		"twitter_max_text_to_speech_segments": 13
+		"twitter_max_text_to_speech_segments": 13,
+
+		"mastodon_instance_url": "<Instance URL>",
+		"mastodon_access_token": "<Access Token>",
+
+		"mastodon_max_post_length": 500,
+		"mastodon_max_file_size": 40,
+
+		"mastodon_enable_ffmpeg": true,
+		"mastodon_ffmpeg_output_args":
+		{
+			"vf": "fps=30"
+		}
 	}
 }

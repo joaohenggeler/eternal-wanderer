@@ -4,7 +4,6 @@
 	A module that defines any general purpose functions used by all scripts, including loading configuration files,
 	connecting to the database, and interfacing with Firefox.
 
-	@TODO: Add Mastodon support
 	@TODO: Make the stats.py script to print statistics
 	
 	@TODO: Docs
@@ -33,7 +32,7 @@ from random import random
 from subprocess import Popen
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 from urllib.parse import ParseResult, unquote, urlparse, urlunparse
-from winreg import CreateKeyEx, DeleteKey, DeleteValue, EnumKey, EnumValue, OpenKey, QueryValueEx, SetValueEx
+from winreg import CreateKeyEx, DeleteKey, DeleteValue, EnumKey, EnumValue, OpenKey, QueryInfoKey, QueryValueEx, SetValueEx
 from xml.etree import ElementTree
 
 import requests
@@ -244,6 +243,9 @@ class CommonConfig():
 		bucket = ceil(id / self.max_recordings_per_directory) * self.max_recordings_per_directory
 		return os.path.join(self.recordings_path, str(bucket))
 
+for option in ['encoding', 'notes']:
+	assert option not in CommonConfig.MUTABLE_OPTIONS, f'The mutable option name "{option}" is reserved.'
+
 config = CommonConfig()
 locale.setlocale(locale.LC_ALL, config.locale)
 
@@ -378,9 +380,12 @@ class Database():
 		self.connection.execute('PRAGMA synchronous = NORMAL;')
 		self.connection.execute('PRAGMA temp_store = MEMORY;')
 
-		def rank_snapshot_by_points(points: Optional[int], offset: int) -> float:
+		def rank_snapshot_by_points(points: Optional[int], offset: Optional[int]) -> float:
 			""" Ranks a snapshot by its points so that the highest ranked one will be scouted or recorded next. """
 			
+			if offset is None:
+				return random()
+
 			# This uses a modified weighted random sampling algorithm:
 			# - https://stackoverflow.com/a/56006340/18442724
 			# - https://stackoverflow.com/a/51090191/18442724
@@ -627,6 +632,8 @@ class Snapshot():
 	PUBLISHED = 7
 	ARCHIVED = 8
 
+	STATE_NAMES: Dict[int, str]
+
 	NO_PRIORITY = 0
 	SCOUT_PRIORITY = 1
 	RECORD_PRIORITY = 2
@@ -695,6 +702,18 @@ class Snapshot():
 
 	def __str__(self):
 		return f'({self.Url}, {self.Timestamp})'
+
+Snapshot.STATE_NAMES = {
+	Snapshot.QUEUED: 'Queued',
+	Snapshot.INVALID: 'Invalid',
+	Snapshot.SCOUTED: 'Scouted',
+	Snapshot.ABORTED: 'Aborted',
+	Snapshot.RECORDED: 'Recorded',
+	Snapshot.REJECTED: 'Rejected',
+	Snapshot.APPROVED: 'Approved',
+	Snapshot.PUBLISHED: 'Published',
+	Snapshot.ARCHIVED: 'Archived',
+}
 
 class Recording():
 	""" A video recording of a Wayback Machine snapshot. """
@@ -871,11 +890,7 @@ class Browser():
 			plugin_extender_source_path = os.path.join(config.plugins_path, 'BrowserPluginExtender', 'BrowserPluginExtender.dll')
 			shutil.copy(plugin_extender_source_path, self.firefox_directory_path)
 
-			# The value we're changing here is the default one that is usually displayed as "(Default)",
-			# even though the subkey is actually an empty string.
-			self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\allowfallback\\', 'y')
-			self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\allowfallback\\', 'y')
-
+			self.configure_shockwave_player()
 			self.configure_java_plugin()
 			self.configure_cosmo_player()
 		else:
@@ -973,7 +988,15 @@ class Browser():
 						log.error(f'Failed to run the AutoIt script "{filename}" with the error: {repr(error)}')
 				else:
 					log.info(f'Skipping the AutoIt script "{filename}" at the user\'s request.')
-				
+		
+	def configure_shockwave_player(self) -> None:
+		""" Configures the Shockwave Player by setting the appropriate registry keys. """
+
+		# The value we're changing here is the default one that is usually displayed as "(Default)",
+		# even though the subkey is actually an empty string.
+		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\allowfallback\\', 'y')
+		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\allowfallback\\', 'y')
+
 	def configure_java_plugin(self) -> None:
 		""" Configures the Java Plugin by generating the appropriate deployment files and passing any useful parameters to the JRE. """
 
@@ -1090,7 +1113,6 @@ class Browser():
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia AudioRenderer3',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\': os.path.join(cosmo_player_system32_path, 'cm12_dshow.dll'),
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\THREADINGMODEL': 'Both',	
-			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia AudioRenderer3',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\MERIT': 2097152,
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\DIRECTION': 0,
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\ISRENDERED': 0,
@@ -1099,10 +1121,11 @@ class Browser():
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\CONNECTSTOPIN': 'Output',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\TYPES\\{73647561-0000-0010-8000-00AA00389B71}\\{00000000-0000-0000-0000-000000000000}\\': '',
 			
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia AudioRenderer3',
+
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia VideoRenderer3',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\': os.path.join(cosmo_player_system32_path, 'cm12_dshow.dll'),
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\THREADINGMODEL': 'Both',
-			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia VideoRenderer3',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\MERIT': 2097152,
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\INPUT\\DIRECTION': 0,
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\INPUT\\ISRENDERED': 0,
@@ -1111,6 +1134,8 @@ class Browser():
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\INPUT\\CONNECTSTOPIN': 'Output',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\INS\\INPUT\\TYPES\\{73646976-0000-0010-8000-00AA00389B71}\\{00000000-0000-0000-0000-000000000000}\\': '',
 			
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia VideoRenderer3',
+
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\D3D\\PATH': os.path.join(cosmo_player_system32_path, 'rob10_d3d.dll'),
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\D3D\\UINAME': 'Direct3D Renderer',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\NORENDER\\PATH': os.path.join(cosmo_player_system32_path, 'rob10_none.dll'),
@@ -1119,6 +1144,21 @@ class Browser():
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\OPENGL\\UINAME': 'OpenGL Renderer',
 		}
 
+		# Keep in mind that the temporary registry always operates on the 32-bit view of the registry.
+		# In other words, the previous values will be redirected to the following registry keys:
+		#
+		# HKEY_LOCAL_MACHINE\SOFTWARE\Classes\WOW6432Node\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}
+		# HKEY_LOCAL_MACHINE\SOFTWARE\Classes\WOW6432Node\CLSID\{06646732-BCF3-11D0-9518-00C04FC2DD79}
+		# HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Classes\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}
+		# HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Classes\CLSID\{06646732-BCF3-11D0-9518-00C04FC2DD79}
+		# HKEY_CLASSES_ROOT\WOW6432Node\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}
+		# HKEY_CLASSES_ROOT\WOW6432Node\CLSID\{06646732-BCF3-11D0-9518-00C04FC2DD79}
+		#
+		# HKEY_CLASSES_ROOT\Filter\{06646731-BCF3-11D0-9518-00C04FC2DD79}
+		# HKEY_CLASSES_ROOT\Filter\{06646732-BCF3-11D0-9518-00C04FC2DD79}
+		#
+		# HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\COSMOSOFTWARE
+		
 		SETTINGS_REGISTRY_KEYS: Dict[str, Union[int, str]] = {
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\PANEL_MAXIMIZED': 0, # Minimize dashboard.
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\renderer': 'OPENGL', # OpenGL renderer.
@@ -1131,15 +1171,13 @@ class Browser():
 				self.registry.set(key, value)
 
 			# These don't require elevated privileges but there's no point in setting them if the Cosmo Player isn't set up correctly.
-			previous_settings = [key for key, value, type in TemporaryRegistry.traverse('HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1')]
-			for key in previous_settings:
-				self.registry.delete(key)
+			self.registry.clear('HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1')
 			
 			for key, value in SETTINGS_REGISTRY_KEYS.items():
 				self.registry.set(key, value)
 
 		except PermissionError:
-			log.error('Failed to set up the Cosmo Player since elevated privileges are required to temporarily set the appropriate registry keys.')
+			log.error('Failed to set up the Cosmo Player since elevated privileges are required to temporarily set the necessary registry keys.')
 
 	def delete_user_level_java_properties(self) -> None:
 		""" Deletes the current user-level Java deployment properties file. """
@@ -1214,25 +1252,109 @@ class Browser():
 	def __exit__(self, exception_type, exception_value, traceback):
 		self.shutdown()
 
+	def set_preference(self, name: str, value: Union[bool, int, str]) -> None:
+		""" Sets a Firefox preference at runtime via XPCOM. Note that this will change the current page to "about:config".
+		This should be done sparingly since the vast majority of preferences can be defined before creating the WebDriver. """
+
+		# We can't use this interface to change the prefs in a regular page. We must navigate to "about:config" first.
+		# See:
+		# - https://stackoverflow.com/a/48816511/18442724
+		# - https://web.archive.org/web/20210417185248if_/https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules/Services.jsm
+		# - https://web.archive.org/web/20210629053921if_/https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIPrefBranch
+		setter_name = 'setBoolPref' if isinstance(value, bool) else ('setIntPref' if isinstance(value, int) else 'setCharPref')
+		self.driver.get('about:config')
+		self.driver.execute_script(f'''
+									// const prefs = Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefBranch);
+									// prefs.{setter_name}(arguments[0], arguments[1]);
+									Components.utils.import("resource://gre/modules/Services.jsm");
+									Services.prefs.{setter_name}(arguments[0], arguments[1]);
+									''', name, value)
+
+	def set_fallback_encoding_for_snapshot(self, snapshot: Snapshot) -> None:
+		""" Changes Firefox's fallback character encoding to the best charset for a given Wayback Machine snapshot.
+		This will either be a user-defined charset or an autodetected charset determined by the Wayback Machine.
+		Note that this function will retry this last operation if the Wayback Machine is unavailable. """
+		
+		if not config.enable_fallback_encoding:
+			return
+
+		while True:
+
+			retry = False
+
+			try:
+				encoding = snapshot.Options.get('encoding')
+
+				# Note that not every snapshot has a guessed encoding.
+				if encoding is None and config.use_guessed_encoding_as_fallback:
+
+					global_rate_limiter.wait_for_wayback_machine_rate_limit()
+					response = requests.head(snapshot.WaybackUrl)
+					response.raise_for_status()
+					
+					# This header requires a snapshot URL with the iframe modifier.
+					encoding = response.headers.get('x-archive-guessed-charset')
+
+				encoding = encoding or ''
+
+				# E.g. https://web.archive.org/web/19991011153317if_/http://www.geocities.com/Athens/Delphi/1240/midigr.htm
+				# In older Firefox versions, the "windows-1252" encoding is used.
+				# In modern versions or when using the Wayback Machine's guessed encoding, "iso-8859-7" is used.
+				log.debug(f'Setting the fallback encoding to "{encoding}".')
+				self.set_preference('intl.charset.fallback.override', encoding)
+
+			except requests.RequestException as error:
+				log.error(f'Failed to find the guessed encoding for the snapshot {snapshot} with the error: {repr(error)}')
+				# Keep trying until the Wayback Machine is available.
+				retry = not is_wayback_machine_available()
+			except WebDriverException as error:
+				log.error(f'Failed to set the fallback preference with the error: {repr(error)}')
+			finally:
+				if retry:
+					continue
+				else:
+					break
+
 	def go_to_wayback_url(self, wayback_url: str) -> None:
 		""" Navigates to a Wayback Machine URL, taking into account any rate limiting and retrying if the service is unavailable. """
 
-		try:
-			self.driver.get(Browser.BLANK_URL)
+		while True:
 
-			global_rate_limiter.wait_for_wayback_machine_rate_limit()
-			self.driver.get(wayback_url)
+			retry = False
 
-			# Skip the availability check for auto-generated standalone media pages.
-			if not self.driver.current_url.startswith('file:'):
-				while not is_wayback_machine_available():
+			try:
+				self.driver.get(Browser.BLANK_URL)
+
+				global_rate_limiter.wait_for_wayback_machine_rate_limit()
+				self.driver.get(wayback_url)
+
+				# Skip the availability check for auto-generated standalone media pages.
+				# This check works for expected downtime (e.g. maintenance).
+				retry = not wayback_url.startswith('file:') and not is_wayback_machine_available()
+
+			except TimeoutException:
+				log.warning(f'Timed out after waiting {config.page_load_timeout} seconds for the page to load: "{wayback_url}".')
+				# This covers the same case as the next exception without passing the error
+				# along to the caller if a regular page took to long to load.
+				retry = not is_wayback_machine_available()
+
+			except WebDriverException:
+				# For cases where the Wayback Machine is unreachable (unexpected downtime)
+				# and an error is raised because we were redirected to "about:neterror".
+				# If this was some other error and the service is available, then it should
+				# be handled by the caller.
+				if is_wayback_machine_available():
+					raise
+				else:
+					retry = True
+
+			finally:
+				if retry:
 					log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
 					time.sleep(config.unavailable_wayback_machine_wait)
-					global_rate_limiter.wait_for_wayback_machine_rate_limit()
-					self.driver.get(wayback_url)
-
-		except TimeoutException:
-			log.warning(f'Timed out after waiting {config.page_load_timeout} seconds for the page to load: "{wayback_url}".')
+					continue
+				else:
+					break
 
 	def was_wayback_url_redirected(self, expected_wayback_url: str) -> Tuple[bool, Optional[str], Optional[str]]:
 		""" Checks if a Wayback Machine page was redirected. In order to cover all edge cases, this function only works with snapshot URLs
@@ -1506,57 +1628,6 @@ class Browser():
 		except NoSuchWindowException:
 			pass
 
-	def set_preference(self, name: str, value: Union[bool, int, str]) -> None:
-		""" Sets a Firefox preference at runtime via XPCOM. Note that this will change the current page to "about:config".
-		This should be done sparingly since the vast majority of preferences can be defined before creating the WebDriver. """
-
-		# We can't use this interface to change the prefs in a regular page. We must navigate to "about:config" first.
-		# See:
-		# - https://stackoverflow.com/a/48816511/18442724
-		# - https://web.archive.org/web/20210417185248if_/https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules/Services.jsm
-		# - https://web.archive.org/web/20210629053921if_/https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIPrefBranch
-		setter_name = 'setBoolPref' if isinstance(value, bool) else ('setIntPref' if isinstance(value, int) else 'setCharPref')
-		self.driver.get('about:config')
-		self.driver.execute_script(f'''
-									// const prefs = Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefBranch);
-									// prefs.{setter_name}(arguments[0], arguments[1]);
-									Components.utils.import("resource://gre/modules/Services.jsm");
-									Services.prefs.{setter_name}(arguments[0], arguments[1]);
-									''', name, value)
-
-	def set_fallback_encoding_for_snapshot(self, snapshot: Snapshot) -> None:
-		""" Changes Firefox's fallback character encoding to the best charset for a given Wayback Machine snapshot.
-		This will either be a user-defined charset or an autodetected charset determined by the Wayback Machine. """
-		
-		if not config.enable_fallback_encoding:
-			return
-
-		try:
-			encoding = snapshot.Options.get('encoding')
-
-			# Note that not every snapshot has a guessed encoding.
-			if encoding is None and config.use_guessed_encoding_as_fallback:
-
-				global_rate_limiter.wait_for_wayback_machine_rate_limit()
-				response = requests.head(snapshot.WaybackUrl)
-				response.raise_for_status()
-				
-				# This header requires a snapshot URL with the iframe modifier.
-				encoding = response.headers.get('x-archive-guessed-charset')
-
-			encoding = encoding or ''
-
-			# E.g. https://web.archive.org/web/19991011153317if_/http://www.geocities.com/Athens/Delphi/1240/midigr.htm
-			# In older Firefox versions, the "windows-1252" encoding is used.
-			# In modern versions or when using the Wayback Machine's guessed encoding, "iso-8859-7" is used.
-			log.debug(f'Setting the fallback encoding to "{encoding}".')
-			self.set_preference('intl.charset.fallback.override', encoding)
-
-		except requests.RequestException as error:
-			log.error(f'Failed to find the guessed encoding for the snapshot {snapshot} with the error: {repr(error)}')
-		except WebDriverException as error:
-			log.error(f'Failed to set the fallback preference with the error: {repr(error)}')
-
 class TemporaryRegistry():
 	""" A temporary registry that remembers and undos any changes (key additions and deletions) made to the Windows registry. """
 
@@ -1566,10 +1637,11 @@ class TemporaryRegistry():
 	#
 	# Focusing only on 32-bit applications makes sense since we're configuring old web plugins. Depending on the registry
 	# key, Windows will redirect a query to a different location. For example, writing a value to the registry key
-	# "HKEY_CLASSES_ROOT\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}" will store the value in
-	# "HKEY_CLASSES_ROOT\WOW6432Node\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}" and
-	# "HKEY_LOCAL_MACHINE\SOFTWARE\Classes\WOW6432Node\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}" and
-	# "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Classes\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}".
+	# "HKEY_CLASSES_ROOT\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}" will store the value in the following keys:
+	#
+	# - "HKEY_CLASSES_ROOT\WOW6432Node\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}"
+	# - "HKEY_LOCAL_MACHINE\SOFTWARE\Classes\WOW6432Node\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}"
+	# - "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Classes\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}"
 	#
 	# See:
 	# - https://docs.microsoft.com/en-us/windows/win32/winprog64/registry-reflection
@@ -1692,38 +1764,78 @@ class TemporaryRegistry():
 
 			success = True
 			result = original_value
-		except OSError:
+		except OSError as error:
+			log.error(f'Failed to delete the value "{key}" with the error: {repr(error)}')
 			success = False
 			result = None
 
 		return success, result
 
+	def clear(self, key: str) -> None:
+		""" Deletes every value in a registry key. Does not modify its subkeys or their values. """
+
+		key_list = [key for key, _, _ in TemporaryRegistry.traverse(key)]
+		for key in key_list:
+			self.delete(key)
+
 	@staticmethod
 	def traverse(key: str, recursive: bool = False) -> Iterator[Tuple[str, Any, int]]:
-		""" Iterates over the values of a registry key. """
+		""" Iterates over the values of a registry key and optionally its subkeys. """
 
 		hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
 		key_path = f'{key_path}\\{sub_key}'
 
 		try:
 			with OpenKey(hkey, key_path, access=winreg.KEY_READ | winreg.KEY_WOW64_32KEY) as key_handle: 
-				try:
-					for index in itertools.count():
-						name, data, type = EnumValue(key_handle, index)
+				
+				num_keys, num_values, _ = QueryInfoKey(key_handle)
+
+				for i in range(num_values):
+					try:
+						name, data, type = EnumValue(key_handle, i)
 						yield f'{key}\\{name}', data, type
-				except OSError:
-					pass
+					except OSError as error:
+						log.error(f'Failed to enumerate value {i+1} of {num_values} in the registry key "{key}" with the error: {repr(error)}')
 
 				if recursive:
-					try:
-						for index in itertools.count():
-							sub_key = EnumKey(key_handle, index)
-							yield from TemporaryRegistry.traverse(f'{key}\\{sub_key}', recursive=recursive)
-					except OSError:
-						pass
 
-		except OSError:
-			pass
+					for i in range(num_keys):
+						try:
+							child_sub_key = EnumKey(key_handle, i)
+							yield from TemporaryRegistry.traverse(f'{key}\\{child_sub_key}', recursive=recursive)
+						except OSError as error:
+							log.error(f'Failed to enumerate subkey {i+1} of {num_keys} in the registry key "{key}" with the error: {repr(error)}')
+
+		except OSError as error:
+			log.error(f'Failed to traverse the registry key "{key}" with the error: {repr(error)}')
+
+	@staticmethod
+	def delete_key_tree(key: str) -> None:
+		""" Deletes a registry key and all of its subkeys. """
+
+		hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
+		key_path = f'{key_path}\\{sub_key}'
+
+		try:
+			with OpenKey(hkey, key_path, access=winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_32KEY) as key_handle: 
+				
+				num_keys, _, _ = QueryInfoKey(key_handle)
+
+				for i in range(num_keys):
+					try:
+						child_sub_key = EnumKey(key_handle, i)
+						TemporaryRegistry.delete_key_tree(f'{key}\\{child_sub_key}')
+					except OSError as error:
+						log.error(f'Failed to enumerate subkey {i+1} of {num_keys} in the registry key "{key}" with the error: {repr(error)}')
+
+				try:
+					# Delete self.
+					DeleteKey(key_handle, '')
+				except OSError as error:
+					log.error(f'Failed to delete the registry key "{key}" with the error: {repr(error)}')
+
+		except OSError as error:
+			log.error(f'Failed to delete the registry key tree "{key}" with the error: {repr(error)}')
 
 	def restore(self) -> None:
 		""" Restores the Windows registry to its original state by undoing any changes, additions, and deletions. """

@@ -6,7 +6,6 @@ import sys
 import tempfile
 import time
 from argparse import ArgumentParser
-from datetime import datetime, timezone
 from glob import glob
 from typing import Dict, Optional, Tuple, Union
 
@@ -14,8 +13,10 @@ import ffmpeg # type: ignore
 import tweepy # type: ignore
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
+from mastodon import Mastodon, MastodonError # type: ignore
+from tweepy.errors import TweepyException # type: ignore
 
-from common import TEMPORARY_PATH_PREFIX, CommonConfig, Database, Recording, Snapshot, delete_file, get_current_timestamp, setup_logger, was_exit_command_entered
+from common import TEMPORARY_PATH_PREFIX, CommonConfig, Database, Recording, Snapshot, container_to_lowercase, delete_file, get_current_timestamp, setup_logger, was_exit_command_entered
 
 class PublishConfig(CommonConfig):
 	""" The configuration that applies to the publisher script. """
@@ -24,14 +25,14 @@ class PublishConfig(CommonConfig):
 	scheduler: Dict[str, Union[int, str]]
 	num_recordings_per_scheduled_batch: int
 	
-	publish_to_twitter: bool
-	publish_to_mastodon: bool
+	enable_twitter: bool
+	enable_mastodon: bool
 
 	require_approval: bool
 	flag_sensitive_snapshots: bool
 	show_standalone_media_metadata: bool
 	reply_with_text_to_speech: bool
-	delete_files_after_publish: bool
+	delete_files_after_upload: bool
 
 	twitter_api_key: str
 	twitter_api_secret: str
@@ -45,25 +46,40 @@ class PublishConfig(CommonConfig):
 	twitter_text_to_speech_segment_duration: int
 	twitter_max_text_to_speech_segments: Optional[int]
 	
+	mastodon_instance_url: str
+	mastodon_access_token: str
+
+	mastodon_max_post_length: int
+	mastodon_max_file_size: Optional[int]
+
+	mastodon_enable_ffmpeg: bool
+	mastodon_ffmpeg_output_args: Dict[str, Union[int, str]]
+
 	def __init__(self):
 		super().__init__()
 		self.load_subconfig('publish')
+
+		self.scheduler = container_to_lowercase(self.scheduler)
+		self.mastodon_ffmpeg_output_args = container_to_lowercase(self.mastodon_ffmpeg_output_args)
+
+		if self.mastodon_max_file_size is not None:
+			self.mastodon_max_file_size = self.mastodon_max_file_size * 10 ** 6
 
 if __name__ == '__main__':
 
 	config = PublishConfig()
 	log = setup_logger('publish')
 
-	parser = ArgumentParser(description='Publishes the previously recorded snapshots to Twitter on a set schedule. The publisher script uploads each snapshot\'s MP4 video and generates a tweet with the web page\'s title, its date, and a link to its Wayback Machine capture.')
+	parser = ArgumentParser(description='Publishes the previously recorded snapshots to Twitter and Mastodon on a set schedule. The publisher script uploads each snapshot\'s MP4 video and generates a tweet with the web page\'s title, its date, and a link to its Wayback Machine capture.')
 	parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to publish. Omit or set to %(default)s to run forever on a set schedule.')
 	args = parser.parse_args()
 
-	if not config.publish_to_twitter and not config.publish_to_mastodon:
-		parser.error('The configuration must enable posting to at least one platform.')
+	if not config.enable_twitter and not config.enable_mastodon:
+		parser.error('The configuration must enable publishing to at least one platform.')
 
 	log.info('Initializing the publisher.')
 
-	if config.publish_to_twitter:
+	if config.enable_twitter:
 		
 		try:
 			# At the time of writing, you need to use the standard Twitter API version 1.1 to upload videos.
@@ -73,7 +89,7 @@ if __name__ == '__main__':
 													config.twitter_access_token, config.twitter_access_token_secret)
 			twitter_api = tweepy.API(twitter_auth, 	retry_count=config.twitter_max_retries, retry_delay=config.twitter_retry_wait,
 													retry_errors=[408, 502, 503, 504], wait_on_rate_limit=True)
-		except tweepy.errors.TweepyException as error:
+		except TweepyException as error:
 			log.error(f'Failed to initialize the Twitter API interface with the error: {repr(error)}')
 			sys.exit(1)
 
@@ -96,12 +112,12 @@ if __name__ == '__main__':
 				
 				max_title_length = max(config.twitter_max_post_length - len(body), 0)
 				title = title[:max_title_length]
-				post = f'{title}\n{body}'
+				text = f'{title}\n{body}'
 
-				status = twitter_api.update_status(post, media_ids=[media_id], possibly_sensitive=sensitive)
+				status = twitter_api.update_status(text, media_ids=[media_id], possibly_sensitive=sensitive)
 				post_id = status.id
 
-				log.info(f'Posted the tweet #{post_id} with the media #{media_id} using {len(post)} characters.')
+				log.info(f'Posted the tweet #{post_id} with the media #{media_id} using {len(text)} characters.')
 
 				# Add the text-to-speech file as a reply to the previous tweet. While Twitter has a generous
 				# file size limit, the maximum video duration isn't great for the text-to-speech files. To
@@ -129,12 +145,12 @@ if __name__ == '__main__':
 							for i, segment_path in enumerate(segment_file_paths):
 									
 								segment_media = twitter_api.chunked_upload(filename=segment_path, file_type='video/mp4', media_category='TweetVideo')
-								segment_post = 'Text-to-Speech' if len(segment_file_paths) == 1 else f'Text-to-Speech {i+1} of {len(segment_file_paths)}'
+								segment_text = 'Text-to-Speech' if len(segment_file_paths) == 1 else f'Text-to-Speech {i+1} of {len(segment_file_paths)}'
 								
 								if language is not None:
-									segment_post += f' ({language})'
+									segment_text += f' ({language})'
 								
-								segment_status = twitter_api.update_status(segment_post, in_reply_to_status_id=last_post_id, media_ids=[segment_media.media_id], possibly_sensitive=sensitive)
+								segment_status = twitter_api.update_status(segment_text, in_reply_to_status_id=last_post_id, media_ids=[segment_media.media_id], possibly_sensitive=sensitive)
 								last_post_id = segment_status.id
 
 								log.debug(f'Posted the text-to-speech segment #{segment_status.id} with the media #{segment_media.media_id} ({i+1} of {len(segment_file_paths)}).')
@@ -143,24 +159,116 @@ if __name__ == '__main__':
 						else:
 							log.info(f'Skipping {len(segment_file_paths)} text-to-speech segments since it exceeds the limit of {config.twitter_max_text_to_speech_segments} files.')
 	
-					except tweepy.errors.TweepyException as error:
+					except TweepyException as error:
 						log.error(f'Failed to post the text-to-speech segments with the error: {repr(error)}')
 					finally:
 						for segment_path in segment_file_paths:
 							delete_file(segment_path)
 
-			except tweepy.errors.TweepyException as error:
+			except TweepyException as error:
 				log.error(f'Failed to post the tweet with the error: {repr(error)}')
 			except ffmpeg.Error as error:
 				log.error(f'Failed to split the text-to-speech file with the error: {repr(error)}')
 
 			return media_id, post_id
 
-	if config.publish_to_mastodon:
+	if config.enable_mastodon:
 		
+		try:
+			mastodon_api = Mastodon(access_token=config.mastodon_access_token, api_base_url=config.mastodon_instance_url)
+		except MastodonError as error:
+			log.error(f'Failed to initialize the Mastodon API interface with the error: {repr(error)}')
+			sys.exit(1)
+
 		def publish_to_mastodon(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, language: Optional[str]) -> Tuple[Optional[int], Optional[int]]:
-			""" @TODO """
-			return None, None
+			""" Publishes a snapshot recording and text-to-speech file to a given Mastodon instance. The video recording is added to the
+			main toot along with a message whose content is generated using the remaining arguments. The text-to-speech file is added
+			as a reply to the main toot. This function can optionally attempt to reduce both files' size before uploading them. If a
+			file exceeds the user-defined size limit, then it will be skipped. """
+
+			media_id = None
+			post_id = None
+
+			def process_video_file(input_path: str) -> str:
+				""" Runs a video file through ffmpeg, potentially reducing its size before uploading it to the Mastodon instance. """
+				
+				temporary_path = tempfile.gettempdir()
+				output_path = os.path.join(temporary_path, TEMPORARY_PATH_PREFIX + os.path.basename(input_path))
+
+				stream = ffmpeg.input(input_path)
+				stream = stream.output(output_path, **config.mastodon_ffmpeg_output_args)
+				stream = stream.global_args(*config.ffmpeg_global_args)
+				stream = stream.overwrite_output()
+				
+				log.debug(f'Processing the video file with the ffmpeg arguments: {stream.get_args()}')
+				stream.run()
+
+				return output_path
+
+			recording_path = None
+			tts_path = None
+
+			try:
+				recording_path = process_video_file(recording.UploadFilePath) if config.mastodon_enable_ffmpeg else recording.UploadFilePath
+				recording_file_size = os.path.getsize(recording_path)
+				
+				if config.mastodon_max_file_size is None or recording_file_size <= config.mastodon_max_file_size:
+
+					media = mastodon_api.media_post(recording_path, mime_type='video/mp4', description=alt_text)
+					media_id = media.id
+
+					max_title_length = max(config.mastodon_max_post_length - len(body), 0)
+					title = title[:max_title_length]
+					text = f'{title}\n{body}'
+
+					status = mastodon_api.status_post(text, media_ids=[media_id], sensitive=sensitive)
+					post_id = status.id
+
+					log.info(f'Posted the toot #{post_id} with the media #{media_id} ({recording_file_size / 10 ** 6:.1f} MB) using {len(text)} characters.')
+
+					try:
+						# Unlike with Twitter, uploading videos to Mastodon can be trickier due to hosting costs.
+						# We'll try to reduce the file size while also having a size limit for both files.
+						if config.reply_with_text_to_speech and recording.TextToSpeechFilePath is not None:
+
+							tts_path = process_video_file(recording.TextToSpeechFilePath) if config.mastodon_enable_ffmpeg else recording.TextToSpeechFilePath
+							tts_file_size = os.path.getsize(tts_path)
+
+							if config.mastodon_max_file_size is None or tts_file_size <= config.mastodon_max_file_size:
+
+								tts_media = mastodon_api.media_post(tts_path, mime_type='video/mp4')
+								
+								tts_text = 'Text-to-Speech'
+								if language is not None:
+									tts_text += f' ({language})'
+
+								tts_status = mastodon_api.status_post(tts_text, in_reply_to_id=status, media_ids=[tts_media.id], sensitive=sensitive)
+
+								log.info(f'Posted the text-to-speech toot #{tts_status.id} with the media #{tts_media.id} ({tts_file_size / 10 ** 6:.1f} MB).')
+							else:
+								log.info(f'Skipping the text-to-speech file since its size ({recording_file_size}) exceeds the limit of {config.mastodon_max_file_size} bytes.')
+					
+					except MastodonError as error:
+						log.error(f'Failed to post the text-to-speech file with the error: {repr(error)}')
+				else:
+					log.info(f'Skipping the recording since its size ({recording_file_size}) exceeds the limit of {config.mastodon_max_file_size} bytes.')
+
+			except ffmpeg.Error as error:
+				log.error(f'Failed to process the video file with the error: {repr(error)}')
+			except OSError as error:
+				log.error(f'Failed to determine the video file size with the error: {repr(error)}')
+			except MastodonError as error:
+				log.error(f'Failed to post the toot with the error: {repr(error)}')
+			finally:
+				if config.mastodon_enable_ffmpeg:
+					
+					if recording_path is not None:
+						delete_file(recording_path)
+					
+					if tts_path is not None:
+						delete_file(tts_path)
+
+			return media_id, post_id
 
 	scheduler = BlockingScheduler()
 
@@ -190,6 +298,16 @@ if __name__ == '__main__':
 											FROM Snapshot S
 											INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 											INNER JOIN Recording R ON S.Id = R.SnapshotId
+											INNER JOIN
+											(
+												-- Select only the latest recording if multiple files exist.
+												-- Processed recordings must be excluded here since we only
+												-- care about the unpublished ones.
+												SELECT LR.SnapshotId, MAX(LR.CreationTime) AS LastCreationTime
+												FROM Recording LR
+												WHERE NOT LR.IsProcessed
+												GROUP BY LR.SnapshotId
+											) LR ON S.Id = LR.SnapshotId AND R.CreationTime = LR.LastCreationTime
 											WHERE
 												(S.State = :approved_state OR (S.State = :recorded_state AND NOT :require_approval))
 												AND NOT R.IsProcessed
@@ -227,15 +345,16 @@ if __name__ == '__main__':
 					body = '\n'.join(filter(None, [display_metadata, snapshot.ShortDate, snapshot.WaybackUrl, plugin_identifier]))
 
 					# How the date is formatted depends on the current locale.
+					snapshot_type = 'media file' if snapshot.IsStandaloneMedia else 'web page'
 					long_date = snapshot.OldestDatetime.strftime('%B %Y')
-					alt_text = f'The web page "{snapshot.Url}" as seen on {long_date} via the Wayback Machine.'
+					alt_text = f'The {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine.'
 					sensitive = config.flag_sensitive_snapshots and snapshot.IsSensitive
 					language = snapshot.PageLanguage
 
-					twitter_media_id, twitter_post_id = publish_to_twitter(recording, title, body, alt_text, sensitive, language) if config.publish_to_twitter else (None, None)
-					mastodon_media_id, mastodon_post_id = publish_to_mastodon(recording, title, body, alt_text, sensitive, language) if config.publish_to_mastodon else (None, None)
+					twitter_media_id, twitter_post_id = publish_to_twitter(recording, title, body, alt_text, sensitive, language) if config.enable_twitter else (None, None)
+					mastodon_media_id, mastodon_post_id = publish_to_mastodon(recording, title, body, alt_text, sensitive, language) if config.enable_mastodon else (None, None)
 
-					if config.delete_files_after_publish:
+					if config.delete_files_after_upload:
 						delete_file(recording.UploadFilePath)
 						
 						if recording.TextToSpeechFilePath is not None:
@@ -255,6 +374,10 @@ if __name__ == '__main__':
 										  'twitter_media_id': twitter_media_id, 'twitter_post_id': twitter_post_id,
 										  'mastodon_media_id': mastodon_media_id, 'mastodon_post_id': mastodon_post_id,
 										  'id': recording.Id})
+
+						# Mark any earlier recordings as processed so the same snapshot isn't published multiple times in
+						# cases where there is more than one video file. See the LastCreationTime part in the main query.
+						db.execute('UPDATE Recording SET IsProcessed = :is_processed WHERE SnapshotId = :snapshot_id;', {'is_processed': True, 'snapshot_id': snapshot.Id})
 
 						if snapshot.Priority == Snapshot.PUBLISH_PRIORITY:
 							db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})

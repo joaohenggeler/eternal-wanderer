@@ -28,7 +28,7 @@ class ScoutConfig(CommonConfig):
 	
 	initial_snapshots: List[Dict[str, str]]
 	
-	ranking_offset: int
+	ranking_offset: Optional[int]
 	min_year: Optional[int]
 	max_year: Optional[int]
 	max_depth: Optional[int]
@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Traverses web pages archived by the Wayback Machine (snapshots) and collects metadata from their content and from the CDX API. The scout script prioritizes pages that were manually added by the user through the configuration file as well as pages whose parent snapshot contains specific words and plugin media.')
 	parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to scout. Omit or set to %(default)s to run forever.')
-	parser.add_argument('-initial', action='store_true', help='Whether to enqueue the initial snapshots specified in the configuration file.')
+	parser.add_argument('-initial', action='store_true', help='Enqueue the initial snapshots specified in the configuration file.')
 	args = parser.parse_args()
 
 	log.info('Initializing the scout.')
@@ -125,11 +125,13 @@ if __name__ == '__main__':
 						  'digest': best_snapshot.digest}
 			except NoCDXRecordFound:
 				pass
+			
 			except BlockedSiteError:
 				log.warning(f'The snapshot at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
 				result = {'parent_id': parent_id, 'depth': depth, 'state': Snapshot.QUEUED, 'is_excluded': True,
 						  'is_standalone_media': None, 'media_extension': None, 'url': url, 'timestamp': timestamp,
 						  'last_modified_time': None, 'url_key': None, 'digest': None}
+			
 			except Exception as error:
 				log.error(f'Failed to find the snapshot at "{url}" near {timestamp} with the error: {repr(error)}')
 
@@ -137,6 +139,7 @@ if __name__ == '__main__':
 					retry = True
 					log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
 					time.sleep(config.unavailable_wayback_machine_wait)
+			
 			finally:
 				if retry:
 					continue

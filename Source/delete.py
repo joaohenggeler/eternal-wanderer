@@ -7,18 +7,19 @@ from argparse import ArgumentParser
 from glob import iglob
 from typing import List, Optional, Tuple
 
-from common import TEMPORARY_PATH_PREFIX, Database, Recording, delete_directory, delete_file
+from common import TEMPORARY_PATH_PREFIX, Database, Recording, TemporaryRegistry, delete_directory, delete_file
 
 if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Deletes all video files belonging to unapproved and/or compiled recordings.')
-	parser.add_argument('-unapproved', action='store_true', help='Whether to delete unapproved recordings (rejected or to be recorded again).')
-	parser.add_argument('-compiled', action='store_true', help='Whether to delete published recordings that are part of a compilation.')
-	parser.add_argument('-temporary', action='store_true', help=f'Whether to delete any temporary files or directories with the "{TEMPORARY_PATH_PREFIX}" prefix.')
+	parser.add_argument('-unapproved', action='store_true', help='Delete unapproved recordings (rejected or to be recorded again).')
+	parser.add_argument('-compiled', action='store_true', help='Delete published recordings that are part of a compilation.')
+	parser.add_argument('-temporary', action='store_true', help=f'Delete any temporary files or directories with the "{TEMPORARY_PATH_PREFIX}" prefix.')
+	parser.add_argument('-registry', action='store_true', help=f'Delete any leftover registry keys used by plugins. This option requires running the script with elevated privileges.')
 	args = parser.parse_args()
 
-	if not args.unapproved and not args.compiled:
-		parser.error('You must specify at least one type of recording to delete.')
+	if not any(vars(args).values()):
+		parser.error('No arguments provided.')
 
 	def delete_recordings(recording_list: List[Recording]) -> Tuple[int, int]:
 		""" Deletes the all video files from a list of recordings. """
@@ -76,12 +77,30 @@ if __name__ == '__main__':
 				for i, path in enumerate(iglob(temporary_search_path)):
 					
 					total_temporary += 1
-					print(f'- Temporary #{i+1}: {path}')
+					print(f'- Temporary: {path}')
 
 					if os.path.isfile(path) and delete_file(path):
 						num_temporary_deleted += 1
 					elif os.path.isdir(path) and delete_directory(path):
 						num_temporary_deleted += 1
+
+			if args.registry:
+
+				COSMO_PLAYER_REGISTRY_KEYS = [
+					'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}',
+					'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646731-BCF3-11D0-9518-00C04FC2DD79}',
+					'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}',
+					'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646732-BCF3-11D0-9518-00C04FC2DD79}',
+					'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE',
+					'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware',
+				]
+
+				try:
+					for key in COSMO_PLAYER_REGISTRY_KEYS:
+						print(f'- Registry Key: {key}')
+						TemporaryRegistry.delete_key_tree(key)
+				except PermissionError:
+					print('Deleting the registry keys requires elevated privileges.')
 
 			if args.unapproved:
 				print(f'Deleted {num_unapproved_deleted} of {total_unapproved} unapproved recordings.')
