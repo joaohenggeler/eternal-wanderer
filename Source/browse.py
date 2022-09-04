@@ -10,13 +10,13 @@ from common import CommonConfig, Browser
 
 if __name__ == '__main__':
 
-	config = CommonConfig()
-
 	parser = ArgumentParser(description='Opens a URL in a Firefox version equipped with various plugins and extensions. Avoid using this version to browse live websites.')
 	parser.add_argument('url', nargs='?', default='about:support', help='The URL of the page to open. If omitted, it defaults to "%(default)s".')
 	parser.add_argument('-pluginreg', action='store_true', help='Generate the pluginreg.dat file inside the profile template directory.')
 	parser.add_argument('-disable_multiprocess', action='store_false', dest='multiprocess', help='Disable multiprocess Firefox. This should only be used when running the Classic Add-ons Archive extension since disabling this mode may crash some plugins.')
 	args = parser.parse_args()
+
+	config = CommonConfig()
 
 	if args.pluginreg and config.use_master_plugin_registry:
 		parser.error('The "use_master_plugin_registry" configuration option must be set to false in order to generate the pluginreg.dat file.')

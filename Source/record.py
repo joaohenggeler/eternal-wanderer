@@ -189,12 +189,12 @@ class RecordConfig(CommonConfig):
 
 if __name__ == '__main__':
 
-	config = RecordConfig()
-	log = setup_logger('record')
-
 	parser = ArgumentParser(description='Records the previously scouted snapshots by opening their pages in Firefox and scrolling through them at a set pace. If the recorder script detects that any plugins crashed or that the page was redirected while capturing the screen, the recording is aborted. This script is inherently unsafe since it relies on web plugins (e.g. Flash, Shockwave, Java, etc).')
 	parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to record. Omit or set to %(default)s to run forever on a set schedule.')
 	args = parser.parse_args()
+
+	config = RecordConfig()
+	log = setup_logger('record')
 
 	class Proxy(Thread):
 		""" A proxy thread that intercepts all HTTP/HTTPS requests made by Firefox and its plugins. Used to locate missing resources

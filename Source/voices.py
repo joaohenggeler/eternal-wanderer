@@ -9,8 +9,6 @@ from record import RecordConfig
 
 if __name__ == '__main__':
 
-	config = RecordConfig()
-
 	parser = ArgumentParser(description='Lists and exports the voices used by the Microsoft Speech API.')
 	parser.add_argument('-list', action='store_true', help='List every voice visible to the Microsoft Speech API.')
 	parser.add_argument('-registry', action='store_true', help='Export every installed voice registry key to a .REG file.')
@@ -18,6 +16,8 @@ if __name__ == '__main__':
 
 	if not any(vars(args).values()):
 		parser.error('No arguments provided.')
+
+	config = RecordConfig()
 
 	# The voices listed here were previously installed from voices packages, some of which
 	# can be downloaded via the Windows Speech settings. Note, however, that some voices are
@@ -54,11 +54,12 @@ if __name__ == '__main__':
 		print()
 
 		if config.text_to_speech_default_voice is not None:
-			config.text_to_speech_language_voices['default'] = config.text_to_speech_default_voice
+			config.text_to_speech_language_voices['Default'] = config.text_to_speech_default_voice
 
 		for language, name in config.text_to_speech_language_voices.items():
 			voice = next((voice for voice in voice_list if name.lower() in voice.GetAttribute('Name').lower()), None)
 			if voice is None:
+				language = config.language_names.get(language, language)
 				print(f'Could not find the voice "{name}" ({language}) specified in the configuration file.')
 
 	if args.registry:

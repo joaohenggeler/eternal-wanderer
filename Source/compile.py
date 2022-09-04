@@ -14,8 +14,6 @@ from record import RecordConfig
 
 if __name__ == '__main__':
 
-	config = RecordConfig()
-
 	parser = ArgumentParser(description='Compiles multiple snapshot recordings into a single video. This can be done for published recordings that haven\'t been compiled yet, or for any recordings given their database IDs. A short transition with a user-defined background color, duration, and sound effect is inserted between each recording.')
 	parser.add_argument('-published', nargs=2, metavar=('BEGIN_DATE', 'END_DATE'), help='Which published recordings to compile. Each date must use a format between "YYYY" and "YYYY-MM-DD HH:MM:SS" with different granularities. For example, "2022-07" and "2022-08-15" would compile all published recordings between July 1st (inclusive) and August 15th (exclusive), 2022. The selected recordings are stored in a database to prevent future compilations from showing repeated snapshots. This option cannot be used with -any.')
 	parser.add_argument('-any', nargs=2, metavar=('ID_TYPE', 'ID_LIST'), help='Which recordings to compile, regardless if they have been published or not. The ID_TYPE argument must be either "snapshot" or "recording" depending on the database IDs specified in ID_LIST. The ID_LIST argument specifies which of these IDs to include or exclude from the compilation. For example, "1,5-10,!7,!9-10" would result in the ID list [1, 5, 6, 8]. For ID ranges, if the first value is greater than the second then the range is reversed. For example, "3-1" would result in [3, 2, 1], meaning the recordings would be shown in reverse order. This option cannot be used with -published.')
@@ -76,6 +74,8 @@ if __name__ == '__main__':
 	else:
 		assert False, f'Found an unhandled command line option.'
 
+	config = RecordConfig()
+
 	with Database() as db:
 		
 		try:
@@ -88,6 +88,7 @@ if __name__ == '__main__':
 				cursor = db.execute('''
 									SELECT S.*, R.*, R.Id AS RecordingId
 									FROM Snapshot S
+									INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 									INNER JOIN Recording R ON S.Id = R.SnapshotId
 									INNER JOIN
 									(
@@ -112,6 +113,7 @@ if __name__ == '__main__':
 					cursor = db.execute('''
 										SELECT S.*, R.*, R.Id AS RecordingId
 										FROM Snapshot S
+										INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 										INNER JOIN Recording R ON S.Id = R.SnapshotId
 										INNER JOIN
 										(
@@ -125,6 +127,7 @@ if __name__ == '__main__':
 					cursor = db.execute('''
 										SELECT S.*, R.*, R.Id AS RecordingId
 										FROM Snapshot S
+										INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 										INNER JOIN Recording R ON S.Id = R.SnapshotId
 										WHERE IS_RECORDING_PART_OF_COMPILATION(R.Id);
 										''')
@@ -141,6 +144,8 @@ if __name__ == '__main__':
 				del row['Id']
 				snapshot = Snapshot(**row, Id=row['SnapshotId'])
 				recording = Recording(**row, Id=row['RecordingId'])
+
+				assert snapshot.IsSensitive is not None, 'The IsSensitive column is not being computed properly.'
 
 				if args.text_to_speech and snapshot.IsStandaloneMedia:
 					continue
@@ -234,7 +239,10 @@ if __name__ == '__main__':
 
 								timestamp = timedelta(seconds=round(current_duration))
 								formatted_timestamp = str(timestamp).zfill(8)
-								recording_identifiers = [formatted_timestamp, f'"{snapshot.DisplayTitle}"', f'({snapshot.ShortDate})', '\N{jigsaw puzzle piece}' if snapshot.IsStandaloneMedia or snapshot.PageUsesPlugins else None]
+								plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsStandaloneMedia or snapshot.PageUsesPlugins else None
+								sensitive_identifier = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
+								recording_identifiers = [formatted_timestamp, f'"{snapshot.DisplayTitle}"', f'({snapshot.ShortDate})', plugin_identifier, sensitive_identifier]
+								
 								timestamp_line = ' '.join(filter(None, recording_identifiers))
 								timestamps_file.write(f'{timestamp_line}\n')
 								

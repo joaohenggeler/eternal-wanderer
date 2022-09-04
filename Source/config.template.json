@@ -251,7 +251,45 @@
 		"enable_fallback_encoding": true,
 		"use_guessed_encoding_as_fallback": true,
 
-		"ffmpeg_global_args": ["-loglevel", "warning", "-nostats"]
+		"ffmpeg_global_args": ["-loglevel", "warning", "-nostats"],
+
+		"language_names":
+		{
+			"ar": "Arabic",
+			"bg": "Bulgarian",
+			"ca": "Catalan",
+			"cs": "Czech",
+			"da": "Danish",
+			"de": "German",
+			"el": "Greek",
+			"en": "English",
+			"es": "Spanish",
+			"fi": "Finnish",
+			"fr": "French",
+			"he": "Hebrew",
+			"hi": "Hindi",
+			"hr": "Croatian",
+			"hu": "Hungarian",
+			"id": "Indonesian",
+			"it": "Italian",
+			"ja": "Japanese",
+			"ko": "Korean",
+			"ms": "Malay",
+			"nl": "Dutch",
+			"no": "Norwegian",
+			"pl": "Polish",
+			"pt": "Portuguese",
+			"ro": "Romanian",
+			"ru": "Russian",
+			"sk": "Slovak",
+			"sl": "Slovenian",
+			"sv": "Swedish",
+			"ta": "Tamil",
+			"th": "Thai",
+			"tr": "Turkish",
+			"vi": "Vietnamese",
+			"zh": "Chinese"
+		}
 	},
 
 	"scout":
@@ -525,6 +563,7 @@
 			"da": "Helle",
 			"de": "Hedda",
 			"el": "Stefanos",
+			"en": "David",
 			"es": "Laura",
 			"fi": "Heidi",
 			"fr": "Julie",

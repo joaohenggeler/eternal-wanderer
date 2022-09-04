@@ -81,7 +81,7 @@ Below is a summary of the Python scripts located in [the source directory](Sourc
 
 * `common.py`: a module that defines any general purpose functions used by all scripts, including loading configuration files, connecting to the database, and interfacing with Firefox.
 
-## Regular Use
+## How To Use
 
 The Eternal Wanderer bot is normally used by running the `scout.py`, `record.py`, and `publish.py` scripts at the same time. The scout script will collect the necessary metadata in the background which doesn't generally require a lot of disk space. For the recorder script, however, continuously generating videos will eventually start taking up disk space. If you don't care about archiving the lossless recordings and you don't plan on creating a compilation of multiple snapshot videos, you can set the `keep_archive_copy` and `delete_video_after_upload` options to false and true, respectively. Much like the scout, the publisher script can also be left running in the background without any issues.
 
@@ -109,21 +109,25 @@ Below is a step-by-step guide on how to obtain and configure all the necessary c
 
 7. Select the extensions you want to use by toggling the filenames in the `extensions_before_running` and `extensions_after_running` options. The former is used for extensions that require restarting Firefox, while the latter is for extensions that can run immediately after being installed while using the browser. Installing larger extensions before running can also reduce the time it takes to start Firefox, even if they don't require it (e.g. Classic Theme Restorer).
 
-8. To find more legacy Firefox extensions, download the [Classic Add-ons Archive](https://github.com/JustOff/ca-archive/releases/download/2.0.3/ca-archive-2.0.3.xpi) extension and browse its catalog by running Firefox with the `browse.py` script. Note that you cannot use this extension if you started Firefox in multiprocess mode. Be sure to set `multiprocess_firefox` to false while using this extension, and setting it back to true for regular use.
+8. If you want to find more legacy Firefox extensions, download the [Classic Add-ons Archive](https://github.com/JustOff/ca-archive/releases/download/2.0.3/ca-archive-2.0.3.xpi) extension, enable it as mentioned above, and browse its catalog by running the following script: `browse.py caa: -disable_multiprocess`.
 
-9. Download the necessary Firefox plugins. For most plugins, you can obtain their files from the latest [Flashpoint Core](https://bluemaxima.org/flashpoint/downloads/) release. Extract the Flashpoint archive and copy the contents of `FPSoftware/BrowserPlugins` to `Data/Plugins` as specified by the `plugins_path` option. Place the DLL files from `SoundPlayback` inside different subdirectories (e.g. `Npxgplugin.dll` in `MIDI`, `npmod32.dll` in `MOD`, `npsid.dll` in `SID`). As a general rule, the plugin files (`np*.dll`) must be in different directories so they can be individually toggled using the `plugins` option.
+9. Download the necessary Firefox plugins. For most plugins, you can obtain their files from the latest [Flashpoint Core](https://bluemaxima.org/flashpoint/downloads/) release. Extract the Flashpoint archive and copy the contents of `FPSoftware/BrowserPlugins` to `Data/Plugins` as specified by the `plugins_path` option. Place the DLL files from `SoundPlayback` inside different subdirectories (e.g. `Npxgplugin.dll` in `MIDI`, `npmod32.dll` in `MOD`, `npsid.dll` in `SID`). Additionally, copy `FPSoftware\VRML\Cosmo211` to the plugins directory. As a general rule, the plugin files (`np*.dll`) must be in different directories so they can be individually toggled using the `plugins` option.
 
 10. Download the latest 32-bit version of [VLC 3.x](https://www.videolan.org/vlc/releases/) and install it in `Data/Plugins/VLC`. Note that the web plugin was removed in VLC 4.x.
 
-11. Download the 32-bit version of Oracle's Java 8 update 11. You can get either the [Java Development Kit (JDK)]((https://download.oracle.com/otn/java/jdk/8u11-b12/jdk-8u11-windows-i586.exe) or just the [Java Runtime Environment (JRE)](https://download.oracle.com/otn/java/jdk/8u11-b12/jre-8u11-windows-i586.tar.gz), which is smaller. Install it in `Data/Plugins/Java/jdk1.8.0_11` or `Data/Plugins/Java/jre1.8.0_11` depending on the one you chose. The scripts determine the Java version by looking at this last directory's name. Note that you cannot use OpenJDK since the source code for the Java Plugin was never released before it was removed completely in Java 11.
+11. Download the 32-bit version of Oracle's Java 8 update 11. You can get either the [Java Development Kit (JDK)](https://download.oracle.com/otn/java/jdk/8u11-b12/jdk-8u11-windows-i586.exe) or just the [Java Runtime Environment (JRE)](https://download.oracle.com/otn/java/jdk/8u11-b12/jre-8u11-windows-i586.tar.gz), which is smaller. Install it in `Data/Plugins/Java/jdk1.8.0_11` or `Data/Plugins/Java/jre1.8.0_11` depending on the one you chose. The scripts determine the Java version by looking at this last directory's name. Note that you cannot use OpenJDK since the source code for the Java Plugin was never released before it was removed completely in Java 11.
 
-12. Set the `use_master_plugin_registry` option to false and run the following Python script: `browse.py about:plugins -pluginreg`. This accomplishes two things. First, it will show you a list of every plugin installed in the previous steps. Second, it generates the `pluginreg.dat` file that will be used for future Firefox executions. The file itself is autogenerated by Firefox, but it will also be modified by the script to fix certain issues (e.g. allowing the VLC plugin to play QuickTime videos). Exit the browser by pressing enter in the console and then set the `use_master_plugin_registry` option to true. Doing so will force Firefox to use this modified file in the future.
+12. Set the `use_master_plugin_registry` option to false and run the following script: `browse.py about:plugins -pluginreg`. This accomplishes two things. First, it will show you a list of every plugin installed in the previous steps. Second, it generates the `pluginreg.dat` file that will be used for future Firefox executions. The file itself is autogenerated by Firefox, but it will also be modified by the script to fix certain issues (e.g. allowing the VLC plugin to play QuickTime videos). Exit the browser by pressing enter in the console and then set the `use_master_plugin_registry` option to true. Doing so will force Firefox to use this modified file in the future.
 
 13. Download and install the [Screen Capturer Recorder](https://github.com/rdp/screen-capture-recorder-to-video-windows-free/releases) device in order to capture the screen using ffmpeg. Note that this program requires Java. You can either use a modern Java install, or reuse the local Java install from step 11. For the latter, you must add the Java executable path (e.g. `Data/Plugins/Java/jdk1.8.0_11/jre/bin` or `Data/Plugins/Java/jre1.8.0_11/bin`) to the PATH environment variable.
 
-14. To publish the recorded videos on Twitter, create an account for the bot, log into the [Twitter Developer Platform](https://developer.twitter.com/en), and apply for elevated access on the dashboard. Then, create a new project and application, set up OAuth 1.0a authentication with at least read and write permissions, and generate an access token and access token secret. Enter your application's API key, API secret, and the previous tokens into the options `twitter_api_key`, `twitter_api_secret`, `twitter_access_token`, and `twitter_access_token_secret`, respectively. At the time of writing, you need to use the standard Twitter API version 1.1 to upload videos. This requires having both elevated access and using OAuth 1.0a.
+14. If you want to automatically detect a page's language, enable the `detect_page_language` option, download a [language identification model](https://fasttext.cc/docs/en/language-identification.html) to `Data`, and enter its path in the `language_model_path` option.
 
-15. To publish the recorded videos on Mastodon, create an account for the bot in an appropriate instance. Choose either an instance your hosting yourself or one that was designed specifically for bots. Then, go to Settings > Development and create a new application. While doing so, select the `write:media` and `write:statuses` scopes and uncheck any others. Save these changes and copy the generated access token to the `mastodon_access_token` option. Finally, set the `mastodon_instance_url` option to the instance's URL.
+15.	If you want to generate the text-to-speech audio files, enable the `enable_text_to_speech` option and install any missing voice packages by going to Windows Settings > Add Speech Voice > Add Voices. Note that just installing the packages isn't enough to make the voices visible to the Microsoft Speech API. You can run the following script to generate a .REG file that will automatically add all installed voices to the appropriate registry key: `voices.py -registry`. Execute the resulting `voices.reg` file and then run the following script to list every visible voice: `voices.py -list`. The script will warn you if it can't find a voice specified in the `text_to_speech_language_voices` option. The configuration template lists every language available in the Speech menu at the time of writing.
+
+16. To publish the recorded videos on Twitter, create an account for the bot, log into the [Twitter Developer Platform](https://developer.twitter.com/en), and apply for elevated access on the dashboard. Then, create a new project and application, set up OAuth 1.0a authentication with at least read and write permissions, and generate an access token and access token secret. Enter your application's API key, API secret, and the previous tokens into the options `twitter_api_key`, `twitter_api_secret`, `twitter_access_token`, and `twitter_access_token_secret`, respectively. At the time of writing, you need to use the standard Twitter API version 1.1 to upload videos. This requires having both elevated access and using OAuth 1.0a.
+
+17. To publish the recorded videos on Mastodon, create an account for the bot in an appropriate instance. Choose either an instance your hosting yourself or one that was designed specifically for bots. Then, go to Settings > Development and create a new application. While doing so, select the `write:media` and `write:statuses` scopes and uncheck any others. Save these changes and copy the generated access token to the `mastodon_access_token` option. Finally, set the `mastodon_instance_url` option to the instance's URL.
 
 ## Configuration
 
@@ -176,43 +180,3 @@ Notable Java versions:
 ### AutoIt Scripts
 
 @TODO
-
-## Test Cases
-
-@TODO:
-
-* Flash: [Adobe Flash Player About Page](https://web.archive.org/web/20220513094750/https://get.adobe.com/flashplayer/about)
-
-* Shockwave: [Test Adobe Shockwave Player](https://web.archive.org/web/20210828174110if_/https://www.adobe.com/shockwave/welcome/index.html)
-
-* Java + MIDI + MOD + SID: [Urbanoids](https://web.archive.org/web/20161025015506if_/http://www.javaonthebrain.com/java/noids/tpanindex.html)
-
-* Silverlight: [Demo: IIS Smooth Streaming](https://web.archive.org/web/20220412005408if_/http://www.microsoft.com/silverlight/iis-smooth-streaming/demo/)
-
-* Authorware: [Test Authorware Web Player](https://web.archive.org/web/20210618085926if_/https://www.adobe.com/shockwave/welcome/authorwareonly.html)
-
-* MIDI: [YAMAHA MIDPLUG for XG Sample Gallery](https://web.archive.org/web/20021010095601if_/http://www.yamaha-xg.com/mps/index.html), [Jordan's Homepage!!!!](https://web.archive.org/web/19961221004112if_/http://www.geocities.com/TimesSquare/8497/index.html) (Crescendo)
-
-* MIDI + WAV: [RAISINS!!!!  (really, really loud)](https://web.archive.org/web/19961221002525if_/http://www.geocities.com/Heartland/8055/)
-
-* AIFF: [abc](https://web.archive.org/web/20010306021445if_/http://www.big.or.jp:80/~frog/others/bbb.html)
-
-* RealAudio: [RealAudio(3K)sample](http://web.archive.org/web/19991012120206if_/http://www.big.or.jp/~frog/others/plug/hello.ra)
-
-* QuickTime: [Leticia "Fettiplace"](https://web.archive.org/web/20220514015040if_/https://web.nmsu.edu/~leti/portfolio/quicktimemovie.html), [Testing the VLC media player Mozilla/Firefox plugin](https://web.archive.org/web/20200219215301if_/http://goa103.free.fr/t_63455/media_player.php)
-
-* WMV: [Flip4Mac Test Page](https://web.archive.org/web/20200713113744if_/http://thirdplanetvideo.com/Flip4MacTestPage.html)
-
-* Bgsound: [BGSOUND example](https://web.archive.org/web/20070702203805if_/http://www.spacerock.com/htmlref/BGSOUND1.html)
-
-* New Window: [Orioles Hangout Encyclopedia](https://web.archive.org/web/20010516004218if_/http://www.geocities.com/colosseum/8533/)
-
-* Multiple Frames + MIDI Without Embed: [Alan's Midi Paradise](https://web.archive.org/web/19961221002554if_/http://www.geocities.com:80/Hollywood/Hills/5988/)
-
-* Redirect: [GeoCities - Heartland](https://web.archive.org/web/19990127111318if_/http://www6.geocities.com:80/Heartland/)
-
-* Standalone Media: [puro](https://web.archive.org/web/20181106025854if_/http://www.geocities.co.jp/AnimalPark-Pochi/1130/animation.html)
-
-* Java + MIDI + WAV+ Alert + Prompt + Multiple Frames: [XTM´s HOMEPAGE](https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html)
-
-* Java + Requires Japanese Encoding: [World Wide Adventure](https://web.archive.org/web/20210511030504if_/http://chutapita.nobody.jp/top/mapdata/zumidan1.html)

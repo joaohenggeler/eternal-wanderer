@@ -5,11 +5,9 @@ from argparse import ArgumentParser
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
-from common import CommonConfig, global_rate_limiter
+from common import global_rate_limiter
 
 if __name__ == '__main__':
-
-	config = CommonConfig()
 
 	parser = ArgumentParser(description='Saves URLs from the standard input using the Wayback Machine Save API.')
 	args = parser.parse_args()

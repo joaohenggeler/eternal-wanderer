@@ -72,13 +72,13 @@ class ScoutConfig(CommonConfig):
 
 if __name__ == '__main__':
 
-	config = ScoutConfig()
-	log = setup_logger('scout')
-
 	parser = ArgumentParser(description='Traverses web pages archived by the Wayback Machine (snapshots) and collects metadata from their content and from the CDX API. The scout script prioritizes pages that were manually added by the user through the configuration file as well as pages whose parent snapshot contains specific words and plugin media.')
 	parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to scout. Omit or set to %(default)s to run forever.')
 	parser.add_argument('-initial', action='store_true', help='Enqueue the initial snapshots specified in the configuration file.')
 	args = parser.parse_args()
+
+	config = ScoutConfig()
+	log = setup_logger('scout')
 
 	log.info('Initializing the scout.')
 

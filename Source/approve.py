@@ -10,11 +10,11 @@ from publish import PublishConfig
 
 if __name__ == '__main__':
 
-	config = PublishConfig()
-
 	parser = ArgumentParser(description='Approves snapshot recordings for publishing. This operation is optional and may be done if the publisher script was started with the "require_approval" option set to true.')
 	parser.add_argument('max_recordings', nargs='?', type=int, default=-1, help='How many recordings to approve. Omit or set to %(default)s to approve all recordings.')
 	args = parser.parse_args()
+
+	config = PublishConfig()
 
 	if not config.require_approval:
 		parser.error('This script can only be used if the "require_approval" option is set to true.')

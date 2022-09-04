@@ -10,10 +10,10 @@ from common import CommonConfig, Database, Recording, Snapshot
 
 if __name__ == '__main__':
 
-	config = CommonConfig()
-
 	parser = ArgumentParser(description='Shows snapshot and recording statistics from the database.')
 	args = parser.parse_args()
+
+	config = CommonConfig()
 
 	with Database() as db:
 
@@ -91,7 +91,7 @@ if __name__ == '__main__':
 
 				print()
 
-			total_recordings_size = 0
+			total_recordings_size: float = 0
 			for path in iglob(os.path.join(config.recordings_path, '**'), recursive=True):
 				if os.path.isfile(path):
 					total_recordings_size += os.path.getsize(path)

@@ -3,10 +3,6 @@
 """
 	A module that defines any general purpose functions used by all scripts, including loading configuration files,
 	connecting to the database, and interfacing with Firefox.
-
-	@TODO: Make the stats.py script to print statistics
-	
-	@TODO: Docs
 """
 
 import itertools
@@ -123,6 +119,7 @@ class CommonConfig():
 	use_guessed_encoding_as_fallback: bool
 
 	ffmpeg_global_args: List[str]
+	language_names: Dict[str, str]
 
 	# Determined at runtime.
 	default_options: dict
@@ -214,6 +211,8 @@ class CommonConfig():
 		self.disallowed_domains = parse_domain_list(self.disallowed_domains)
 
 		self.ffmpeg_global_args = container_to_lowercase(self.ffmpeg_global_args)
+		self.language_names = container_to_lowercase(self.language_names)
+		
 		self.default_options = {}
 
 	def load_subconfig(self, name: str) -> None:
@@ -401,13 +400,17 @@ class Database():
 		self.connection.create_function('IS_URL_KEY_ALLOWED', 1, is_url_key_allowed)
 		self.connection.create_function('RANK_SNAPSHOT_BY_POINTS', 2, rank_snapshot_by_points)
 
-		# E.g. https://web.archive.org/web/20010203164200if_/http://www.tripod.lycos.com:80/service/welcome/preferences
-		# And https://web.archive.org/web/20010203180900if_/http://www.tripod.lycos.com:80/bin/membership/login
-
-		# Some examples of the Url, Timestamp, UrlKey, and Digest columns from the CDX API:
-		# http://www.geocities.com/Heartland/Plains/1036/africa.gif 20090730213441 com,geocities)/heartland/plains/1036/africa.gif RRCC3TTUVIQTMFN6BDRRIXR7OBNCGS6X
-		# http://geocities.com/Heartland/Plains/1036/africa.gif 	20090820053240 com,geocities)/heartland/plains/1036/africa.gif RRCC3TTUVIQTMFN6BDRRIXR7OBNCGS6X
-		# http://geocities.com/Heartland/Plains/1036/africa.gif 	20091026145159 com,geocities)/heartland/plains/1036/africa.gif RRCC3TTUVIQTMFN6BDRRIXR7OBNCGS6X	
+		# A few notes for future reference:
+		#
+		# The following two pages have different URLs and timestamps but their digest (i.e. content) is the same:
+		# - https://web.archive.org/web/20010203164200if_/http://www.tripod.lycos.com:80/service/welcome/preferences
+		# - https://web.archive.org/web/20010203180900if_/http://www.tripod.lycos.com:80/bin/membership/login
+		#
+		# Some examples of the Url, Timestamp, UrlKey, and Digest database columns as seen in the CDX API.
+		# Notice how the UrlKey and Digest are the same, even though the URLs and timestamps are different.
+		# - http://www.geocities.com/Heartland/Plains/1036/africa.gif	20090730213441	com,geocities)/heartland/plains/1036/africa.gif	RRCC3TTUVIQTMFN6BDRRIXR7OBNCGS6X
+		# - http://geocities.com/Heartland/Plains/1036/africa.gif		20090820053240	com,geocities)/heartland/plains/1036/africa.gif	RRCC3TTUVIQTMFN6BDRRIXR7OBNCGS6X
+		# - http://geocities.com/Heartland/Plains/1036/africa.gif		20091026145159	com,geocities)/heartland/plains/1036/africa.gif	RRCC3TTUVIQTMFN6BDRRIXR7OBNCGS6X	
 
 		self.connection.execute(f'''
 								CREATE TABLE IF NOT EXISTS Snapshot
@@ -434,6 +437,7 @@ class Database():
 									Options JSON,
 
 									UNIQUE (Url, Timestamp)
+									UNIQUE (Url, Digest)
 
 									FOREIGN KEY (ParentId) REFERENCES Snapshot (Id)
 								);
@@ -485,6 +489,7 @@ class Database():
 								);
 								''')
 
+		# Regular words should only count once, even if they appear multiple times on a page.
 		self.connection.execute(f'''
 								CREATE VIEW IF NOT EXISTS SnapshotInfo AS
 								SELECT

@@ -7,6 +7,7 @@ import tempfile
 import time
 from argparse import ArgumentParser
 from glob import glob
+from tempfile import NamedTemporaryFile
 from typing import Dict, Optional, Tuple, Union
 
 import ffmpeg # type: ignore
@@ -60,19 +61,20 @@ class PublishConfig(CommonConfig):
 		self.load_subconfig('publish')
 
 		self.scheduler = container_to_lowercase(self.scheduler)
-		self.mastodon_ffmpeg_output_args = container_to_lowercase(self.mastodon_ffmpeg_output_args)
 
 		if self.mastodon_max_file_size is not None:
 			self.mastodon_max_file_size = self.mastodon_max_file_size * 10 ** 6
 
-if __name__ == '__main__':
+		self.mastodon_ffmpeg_output_args = container_to_lowercase(self.mastodon_ffmpeg_output_args)
 
-	config = PublishConfig()
-	log = setup_logger('publish')
+if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Publishes the previously recorded snapshots to Twitter and Mastodon on a set schedule. The publisher script uploads each snapshot\'s MP4 video and generates a tweet with the web page\'s title, its date, and a link to its Wayback Machine capture.')
 	parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to publish. Omit or set to %(default)s to run forever on a set schedule.')
 	args = parser.parse_args()
+
+	config = PublishConfig()
+	log = setup_logger('publish')
 
 	if not config.enable_twitter and not config.enable_mastodon:
 		parser.error('The configuration must enable publishing to at least one platform.')
@@ -192,18 +194,19 @@ if __name__ == '__main__':
 			def process_video_file(input_path: str) -> str:
 				""" Runs a video file through ffmpeg, potentially reducing its size before uploading it to the Mastodon instance. """
 				
-				temporary_path = tempfile.gettempdir()
-				output_path = os.path.join(temporary_path, TEMPORARY_PATH_PREFIX + os.path.basename(input_path))
+				# Closing the file right away makes it easier to delete it later.
+				output_file = NamedTemporaryFile(mode='wb', prefix=TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
+				output_file.close()
 
 				stream = ffmpeg.input(input_path)
-				stream = stream.output(output_path, **config.mastodon_ffmpeg_output_args)
+				stream = stream.output(output_file.name, **config.mastodon_ffmpeg_output_args)
 				stream = stream.global_args(*config.ffmpeg_global_args)
 				stream = stream.overwrite_output()
 				
 				log.debug(f'Processing the video file with the ffmpeg arguments: {stream.get_args()}')
 				stream.run()
 
-				return output_path
+				return output_file.name
 
 			recording_path = None
 			tts_path = None
@@ -342,14 +345,15 @@ if __name__ == '__main__':
 					title = snapshot.DisplayTitle
 					display_metadata = snapshot.DisplayMetadata if config.show_standalone_media_metadata else None
 					plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsStandaloneMedia or snapshot.PageUsesPlugins else None
-					body = '\n'.join(filter(None, [display_metadata, snapshot.ShortDate, snapshot.WaybackUrl, plugin_identifier]))
+					body_identifiers = [display_metadata, snapshot.ShortDate, snapshot.WaybackUrl, plugin_identifier]
+					body = '\n'.join(filter(None, body_identifiers))
 
 					# How the date is formatted depends on the current locale.
 					snapshot_type = 'media file' if snapshot.IsStandaloneMedia else 'web page'
 					long_date = snapshot.OldestDatetime.strftime('%B %Y')
 					alt_text = f'The {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine.'
 					sensitive = config.flag_sensitive_snapshots and snapshot.IsSensitive
-					language = snapshot.PageLanguage
+					language = config.language_names.get(snapshot.PageLanguage, snapshot.PageLanguage) if snapshot.PageLanguage is not None else None
 
 					twitter_media_id, twitter_post_id = publish_to_twitter(recording, title, body, alt_text, sensitive, language) if config.enable_twitter else (None, None)
 					mastodon_media_id, mastodon_post_id = publish_to_mastodon(recording, title, body, alt_text, sensitive, language) if config.enable_mastodon else (None, None)
