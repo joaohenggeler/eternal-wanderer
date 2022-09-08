@@ -2,7 +2,7 @@
 	"common":
 	{
 		"debug": false,
-		"locale": "en_US",
+		"locale": "english-us",
 
 		"database_path": "Data/wanderer.db",
 		"database_error_wait": 15,
@@ -215,9 +215,11 @@
 			"npvlc.dll": true
 		},
 		
-		"java_arguments": ["-Dfile.encoding=UTF8", "-Duser.language=ja", "-Duser.country=JP"],
 		"show_java_console": false,
+		"java_arguments": ["-Dfile.encoding=UTF8", "-Duser.language=ja", "-Duser.country=JP"],
+		
 		"show_cosmo_player_console": false,
+		"cosmo_player_renderer": "D3D",
 
 		"autoit_path": "Data/AutoIt",
 		"autoit_poll_frequency": 20,
@@ -251,6 +253,7 @@
 		"enable_fallback_encoding": true,
 		"use_guessed_encoding_as_fallback": true,
 
+		"ffmpeg_path": "Data/FFmpeg",
 		"ffmpeg_global_args": ["-loglevel", "warning", "-nostats"],
 
 		"language_names":
@@ -398,8 +401,8 @@
 
 	"record":
 	{
-		"scheduler": {"minute": "*/30"},
-		"num_snapshots_per_scheduled_batch": 5,
+		"scheduler": {"day_of_week": "sun", "hour": 6, "minute": 30},
+		"num_snapshots_per_scheduled_batch": 56,
 
 		"ranking_offset": 1500,
 		"min_year": null,

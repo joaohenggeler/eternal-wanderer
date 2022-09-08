@@ -35,7 +35,8 @@ if __name__ == '__main__':
 
 			for state, name in Snapshot.STATE_NAMES.items():
 				total = state_total.get(state, 0)
-				print(f'- {name}: {total} ({total / total_snapshots * 100:.2f}%)')
+				percent = total / total_snapshots * 100 if total_snapshots > 0 else 0
+				print(f'- {name}: {total} ({percent:.2f}%)')
 
 			print()
 
@@ -44,7 +45,8 @@ if __name__ == '__main__':
 
 			for type, name in [(0, 'Pages'), (1, 'Media'), (None, 'Excluded')]:
 				total = type_total.get(type, 0)
-				print(f'- {name}: {total} ({total / total_snapshots * 100:.2f}%)')
+				percent = total / total_snapshots * 100 if total_snapshots > 0 else 0
+				print(f'- {name}: {total} ({percent:.2f}%)')
 
 			print()
 
@@ -56,7 +58,8 @@ if __name__ == '__main__':
 
 			for is_processed, name in [(0, 'Unprocessed'), (1, 'Processed')]:
 				total = recording_total.get(is_processed, 0)
-				print(f'- {name}: {total} ({total / total_recordings * 100:.2f}%)')
+				percent = total / total_recordings * 100 if total_recordings > 0 else 0
+				print(f'- {name}: {total} ({percent:.2f}%)')
 
 			print()
 
@@ -96,8 +99,8 @@ if __name__ == '__main__':
 				if os.path.isfile(path):
 					total_recordings_size += os.path.getsize(path)
 
-			total_recordings_size = total_recordings_size / 10 ** 9
-			total_disk_space, _, free_disk_space = (size / 10 ** 9 for size in shutil.disk_usage('/'))
+			total_recordings_size = total_recordings_size / 10e9
+			total_disk_space, _, free_disk_space = (size / 10e9 for size in shutil.disk_usage('/'))
 			
 			print(f'- Recordings Disk Space: {total_recordings_size:.2f} of {total_disk_space:.2f} GB ({free_disk_space:.2f} free).')
 
@@ -111,7 +114,8 @@ if __name__ == '__main__':
 
 			for status, name in [(0, 'Saved'), (1, 'Failed')]:
 				total = saved_urls_total.get(status, 0)
-				print(f'- {name}: {total} ({total / total_saved * 100:.2f}%)')
+				percent = total / total_saved * 100 if total_saved > 0 else 0
+				print(f'- {name}: {total} ({percent:.2f}%)')
 
 		except sqlite3.Error as error:
 			print(f'Failed to query the database with the error: {repr(error)}')

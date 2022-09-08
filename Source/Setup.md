@@ -6,7 +6,7 @@ This page documents every relevant component of the Eternal Wanderer bot includi
 
 ## Dependencies
 
-Python 3.8 or later is required to run the scripts. You can install the required dependencies by running the following command:
+Python 3.8 (64-bit) or later is required to run the scripts. You can install the required dependencies by running the following command:
 
 ```
 pip install -r requirements.txt
@@ -50,6 +50,16 @@ The following Python packages are used:
 * [mitmproxy](https://github.com/mitmproxy/mitmproxy) to intercept all HTTP/HTTPS requests made by Firefox and its plugins. Used to locate missing resources in other subdomains via the CDX API while also allowing plugin media that loads slowly to finish requesting assets. Only used if the `enable_proxy` option is true.
 
 * [tldextract](https://github.com/john-kurkowski/tldextract) to determine the correct registered domain from a URL. Only used if the `enable_proxy` option is true.
+
+### Troubleshooting
+
+If you encounter any errors while installing the packages, try the following two solutions before reinstalling them. Some known errors include fastText failing to install, and mitmproxy not being able to create the proxy when executing `record.py`.
+
+* Run the command `pip install --upgrade setuptools`.
+
+* Download and install the latest [Microsoft Visual C++ Redistributable](https://docs.microsoft.com/en-US/cpp/windows/latest-supported-vc-redist?view=msvc-170).
+
+If you followed the previous instructions and fastText still fails to install with the error `Microsoft Visual C++ 14.0 or greater is required. Get it with "Microsoft C++ Build Tools"`, try installing [this package](https://github.com/messense/fasttext-wheel) instead by running the command `pip install fasttext-wheel`. This is recommended if you're using Windows 8.1 and Windows Server 2012.
 
 ## Scripts
 
@@ -99,15 +109,15 @@ Below is a step-by-step guide on how to obtain and configure all the necessary c
 
 2. Download the portable versions of [Firefox 52 ESR](https://portableapps.com/redirect/?a=FirefoxPortableLegacy52&s=s&d=pa&f=FirefoxPortableLegacy52_52.9.0_English.paf.exe) and [Firefox 56](https://sourceforge.net/projects/portableapps/files/Mozilla%20Firefox%2C%20Portable%20Ed./Mozilla%20Firefox%2C%20Portable%20Edition%2056.0.2/FirefoxPortable_56.0.2_English.paf.exe/download).
 
-3. Install Firefox 52 ESR Portable in `Data/Firefox/52.9.0` and Firefox 56 Portable in `Data/Firefox/56.0.2`. These paths are already defined by the options `gui_firefox_path` and `headless_firefox_path`, respectively. If you use different paths be sure to change them too. Note that these options should always point to `App/Firefox/firefox.exe` inside those two directories since the web plugins require the 32-bit version of Firefox. You may delete the 64-bit subdirectory (`App/Firefox64`) to save disk space.
+3. Install Firefox 52 ESR Portable in `Data/Firefox/52.9.0` and Firefox 56 Portable in `Data/Firefox/56.0.2`. These paths are already defined by the options `gui_firefox_path` and `headless_firefox_path`, respectively. If you use different paths be sure to change them too. Note that these options should always point to `App/Firefox/firefox.exe` inside those two directories since the web plugins require the 32-bit version of Firefox. You may delete the 64-bit subdirectories (`App/Firefox64`) to save disk space.
 
 4. Download [geckodriver 0.17.0](https://github.com/mozilla/geckodriver/releases/download/v0.17.0/geckodriver-v0.17.0-win32.zip) and [geckodriver 0.20.1](https://github.com/mozilla/geckodriver/releases/download/v0.20.1/geckodriver-v0.20.1-win32.zip). These are used by Firefox 52 ESR and 56, respectively. Like in the previous step, you also need the 32-bit versions of these drivers.
 
 5. Place the drivers 0.17.0 in `Data/Drivers/0.17.0` and 0.20.1 in `Data/Drivers/0.20.1`. Much like in step 3, you can use different paths as long as you change the `gui_webdriver_path` and `headless_webdriver_path` options, respectively.
 
-6. Download the necessary Firefox extensions from the following links: [Blink Enable](https://ca-archive.us.to/storage/459/459933/blink_enable-1.1-fx.xpi), [Classic Theme Restorer](https://ca-archive.us.to/storage/472/472577/classic_theme_restorer_fx29_56-1.7.7.2-fx.xpi), and [Greasemonkey](https://ca-archive.us.to/storage/0/748/greasemonkey-3.17-fx.xpi). Place them in `Data/Extensions` as specified by the `extensions_path` option.
+6. Download the [Blink Enable](https://ca-archive.us.to/storage/459/459933/blink_enable-1.1-fx.xpi) and [Greasemonkey](https://ca-archive.us.to/storage/0/748/greasemonkey-3.17-fx.xpi) Firefox extensions and place them in `Data/Extensions` as specified by the `extensions_path` option.
 
-7. Select the extensions you want to use by toggling the filenames in the `extensions_before_running` and `extensions_after_running` options. The former is used for extensions that require restarting Firefox, while the latter is for extensions that can run immediately after being installed while using the browser. Installing larger extensions before running can also reduce the time it takes to start Firefox, even if they don't require it (e.g. Classic Theme Restorer).
+7. Select the extensions you want to use by toggling the filenames in the `extensions_before_running` and `extensions_after_running` options. The former is used for extensions that require restarting Firefox, while the latter is for extensions that can run immediately after being installed while using the browser. Installing larger extensions before running can also reduce the time it takes to start Firefox, even if they don't require it.
 
 8. If you want to find more legacy Firefox extensions, download the [Classic Add-ons Archive](https://github.com/JustOff/ca-archive/releases/download/2.0.3/ca-archive-2.0.3.xpi) extension, enable it as mentioned above, and browse its catalog by running the following script: `browse.py caa: -disable_multiprocess`.
 
@@ -119,15 +129,17 @@ Below is a step-by-step guide on how to obtain and configure all the necessary c
 
 12. Set the `use_master_plugin_registry` option to false and run the following script: `browse.py about:plugins -pluginreg`. This accomplishes two things. First, it will show you a list of every plugin installed in the previous steps. Second, it generates the `pluginreg.dat` file that will be used for future Firefox executions. The file itself is autogenerated by Firefox, but it will also be modified by the script to fix certain issues (e.g. allowing the VLC plugin to play QuickTime videos). Exit the browser by pressing enter in the console and then set the `use_master_plugin_registry` option to true. Doing so will force Firefox to use this modified file in the future.
 
-13. Download and install the [Screen Capturer Recorder](https://github.com/rdp/screen-capture-recorder-to-video-windows-free/releases) device in order to capture the screen using ffmpeg. Note that this program requires Java. You can either use a modern Java install, or reuse the local Java install from step 11. For the latter, you must add the Java executable path (e.g. `Data/Plugins/Java/jdk1.8.0_11/jre/bin` or `Data/Plugins/Java/jre1.8.0_11/bin`) to the PATH environment variable.
+13. Download the latest [ffmpeg](https://ffmpeg.org/download.html#build-windows) version and place the `ffmpeg.exe`, `ffprobe.exe`, and `ffplay.exe` executables in `Data/FFmpeg` as specified by the `ffmpeg_path` option. The scripts will automatically add this ffmpeg version to the PATH before running. If you already have ffmpeg in your PATH and don't want to use a different version, you can ignore this step and set `ffmpeg_path` to null. You can check if ffmpeg is in your PATH by running the command `ffmpeg -version`.
 
-14. If you want to automatically detect a page's language, enable the `detect_page_language` option, download a [language identification model](https://fasttext.cc/docs/en/language-identification.html) to `Data`, and enter its path in the `language_model_path` option.
+14. Download and install the [Screen Capturer Recorder](https://github.com/rdp/screen-capture-recorder-to-video-windows-free/releases) device in order to capture the screen using ffmpeg. Note that this program requires Java. You can either use a modern Java install, or reuse the local Java install from step 11. If you choose the latter, you must add the Java executable path (e.g. `Data/Plugins/Java/jdk1.8.0_11/jre/bin` or `Data/Plugins/Java/jre1.8.0_11/bin`) to the PATH environment variable.
 
-15.	If you want to generate the text-to-speech audio files, enable the `enable_text_to_speech` option and install any missing voice packages by going to Windows Settings > Add Speech Voice > Add Voices. Note that just installing the packages isn't enough to make the voices visible to the Microsoft Speech API. You can run the following script to generate a .REG file that will automatically add all installed voices to the appropriate registry key: `voices.py -registry`. Execute the resulting `voices.reg` file and then run the following script to list every visible voice: `voices.py -list`. The script will warn you if it can't find a voice specified in the `text_to_speech_language_voices` option. The configuration template lists every language available in the Speech menu at the time of writing.
+15. If you want to automatically detect a page's language, enable the `detect_page_language` option, download a [language identification model](https://fasttext.cc/docs/en/language-identification.html) to `Data`, and enter its path in the `language_model_path` option.
 
-16. To publish the recorded videos on Twitter, create an account for the bot, log into the [Twitter Developer Platform](https://developer.twitter.com/en), and apply for elevated access on the dashboard. Then, create a new project and application, set up OAuth 1.0a authentication with at least read and write permissions, and generate an access token and access token secret. Enter your application's API key, API secret, and the previous tokens into the options `twitter_api_key`, `twitter_api_secret`, `twitter_access_token`, and `twitter_access_token_secret`, respectively. At the time of writing, you need to use the standard Twitter API version 1.1 to upload videos. This requires having both elevated access and using OAuth 1.0a.
+16.	If you want to generate the text-to-speech audio files, enable the `enable_text_to_speech` option and install any missing voice packages by going to `Windows Settings > Add Speech Voice > Add Voices`. Note that just installing the packages isn't enough to make the voices visible to the Microsoft Speech API. You can run the following script to generate a .REG file that will automatically add all installed voices to the appropriate registry key: `voices.py -registry`. Execute the resulting `voices.reg` file and then run the following script to list every visible voice: `voices.py -list`. The script will warn you if it can't find a voice specified in the `text_to_speech_language_voices` option. The configuration template lists every language available in the Speech menu at the time of writing.
 
-17. To publish the recorded videos on Mastodon, create an account for the bot in an appropriate instance. Choose either an instance your hosting yourself or one that was designed specifically for bots. Then, go to Settings > Development and create a new application. While doing so, select the `write:media` and `write:statuses` scopes and uncheck any others. Save these changes and copy the generated access token to the `mastodon_access_token` option. Finally, set the `mastodon_instance_url` option to the instance's URL.
+17. To publish the recorded videos on Twitter, create an account for the bot, log into the [Twitter Developer Platform](https://developer.twitter.com/en), and apply for elevated access on the dashboard. Then, create a new project and application, set up OAuth 1.0a authentication with at least read and write permissions, and generate an access token and access token secret. Enter your application's API key, API secret, and the previous tokens into the options `twitter_api_key`, `twitter_api_secret`, `twitter_access_token`, and `twitter_access_token_secret`, respectively. At the time of writing, you need to use the standard Twitter API version 1.1 to upload videos. This requires having both elevated access and using OAuth 1.0a.
+
+18. To publish the recorded videos on Mastodon, create an account for the bot in an appropriate instance. Choose either an instance your hosting yourself or one that was designed specifically for bots. Then, go to `Settings > Development`and create a new application. While doing so, select the `write:media` and `write:statuses` scopes and uncheck any others. Save these changes and copy the generated access token to the `mastodon_access_token` option. Finally, set the `mastodon_instance_url` option to the instance's URL.
 
 ## Configuration
 

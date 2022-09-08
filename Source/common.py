@@ -88,9 +88,11 @@ class CommonConfig():
 	plugins_path: str
 	use_master_plugin_registry: bool
 	plugins: Dict[str, bool]
-	java_arguments: List[str]
+	
 	show_java_console: bool
+	java_arguments: List[str]
 	show_cosmo_player_console: bool
+	cosmo_player_renderer: str
 
 	autoit_path: str
 	autoit_poll_frequency: int
@@ -118,6 +120,7 @@ class CommonConfig():
 	enable_fallback_encoding: bool
 	use_guessed_encoding_as_fallback: bool
 
+	ffmpeg_path: Optional[str]
 	ffmpeg_global_args: List[str]
 	language_names: Dict[str, str]
 
@@ -183,6 +186,8 @@ class CommonConfig():
 		self.user_scripts = container_to_lowercase(self.user_scripts)
 		self.plugins = container_to_lowercase(self.plugins)
 		self.compiled_autoit_scripts = container_to_lowercase(self.compiled_autoit_scripts)
+
+		self.cosmo_player_renderer = self.cosmo_player_renderer.upper()
 
 		def parse_domain_list(domain_list: List[str]) -> List[List[str]]:
 			""" Transforms a list of domain patterns into a list of each pattern's components. """
@@ -250,6 +255,11 @@ locale.setlocale(locale.LC_ALL, config.locale)
 
 if config.debug:
 	sqlite3.enable_callback_tracebacks(True)
+
+if config.ffmpeg_path is not None:
+	path = os.environ.get('PATH', '')
+	os.environ['PATH'] = f'{config.ffmpeg_path};{path}'
+	del path
 
 log = logging.getLogger('eternal wanderer')
 log.setLevel(logging.DEBUG if config.debug else logging.INFO)
@@ -928,6 +938,9 @@ class Browser():
 			os.environ['MOZ_FORCE_DISABLE_E10S'] = '1'
 		
 		# Disable DPI scaling to fix potential display issues in Firefox.
+		# See:
+		# - https://stackoverflow.com/a/37881453/18442724
+		# - https://ss64.com/nt/syntax-compatibility.html
 		os.environ['__COMPAT_LAYER'] = 'GDIDPISCALING DPIUNAWARE'
 
 		log.info(f'Creating the Firefox WebDriver using the Firefox executable at "{self.firefox_path}" and the WebDriver at "{self.webdriver_path}".')
@@ -1166,7 +1179,7 @@ class Browser():
 		
 		SETTINGS_REGISTRY_KEYS: Dict[str, Union[int, str]] = {
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\PANEL_MAXIMIZED': 0, # Minimize dashboard.
-			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\renderer': 'OPENGL', # OpenGL renderer.
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\renderer': config.cosmo_player_renderer, # Renderer (OPENGL or D3D).
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\showConsoleType': 2 if config.show_cosmo_player_console else 0, # Show or hide console on startup.
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\textureQuality': 1, # Best quality.
 		}

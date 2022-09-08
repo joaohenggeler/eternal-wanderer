@@ -6,6 +6,8 @@ import os
 import queue
 import re
 import sqlite3
+import subprocess
+import sys
 import time
 from argparse import ArgumentParser
 from collections import Counter, defaultdict
@@ -13,8 +15,7 @@ from contextlib import nullcontext
 from glob import iglob
 from math import ceil
 from queue import Queue
-from subprocess import PIPE, STDOUT
-from subprocess import Popen, TimeoutExpired
+from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, STDOUT, TimeoutExpired
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from threading import Thread, Timer
 from typing import BinaryIO, Dict, Iterator, List, Optional, Tuple, Union, cast
@@ -165,7 +166,7 @@ class RecordConfig(CommonConfig):
 		# See:
 		# - https://docs.microsoft.com/en-us/windows/win32/hidpi/setting-the-default-dpi-awareness-for-a-process
 		# - https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getsystemmetrics
-		user32.SetProcessDPIAware()		
+		user32.SetProcessDPIAware()
 		self.physical_screen_width = user32.GetSystemMetrics(SM_CXSCREEN)
 		self.physical_screen_height = user32.GetSystemMetrics(SM_CYSCREEN)
 
@@ -195,6 +196,12 @@ if __name__ == '__main__':
 
 	config = RecordConfig()
 	log = setup_logger('record')
+
+	try:
+		subprocess.run(['ffmpeg', '-version'], check=True, stdout=DEVNULL)
+	except CalledProcessError:
+		log.error('Could not find the ffmpeg executable in the PATH.')
+		sys.exit(1)
 
 	class Proxy(Thread):
 		""" A proxy thread that intercepts all HTTP/HTTPS requests made by Firefox and its plugins. Used to locate missing resources

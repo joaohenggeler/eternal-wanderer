@@ -471,9 +471,9 @@ if __name__ == '__main__':
 								url = unquote(url)
 								parts = urlparse(url)
 								is_valid = parts.scheme in ['http', 'https'] and parts.netloc != ''
-								is_wayback_machine = is_url_from_domain(parts, 'web.archive.org')
+								is_archive_org = is_url_from_domain(parts, 'archive.org')
 	
-								if is_valid and not is_wayback_machine:
+								if is_valid and not is_archive_org:
 
 									# Handle URLs with non-HTTP schemes (FTP, Gopher, etc). In these cases, the
 									# snapshot URL uses a different format.
