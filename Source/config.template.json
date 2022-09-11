@@ -216,6 +216,7 @@
 		},
 		
 		"show_java_console": false,
+		"add_java_to_path": true,
 		"java_arguments": ["-Dfile.encoding=UTF8", "-Duser.language=ja", "-Duser.country=JP"],
 		
 		"show_cosmo_player_console": false,
@@ -253,7 +254,7 @@
 		"enable_fallback_encoding": true,
 		"use_guessed_encoding_as_fallback": true,
 
-		"ffmpeg_path": "Data/FFmpeg",
+		"ffmpeg_path": "Data/FFmpeg/bin",
 		"ffmpeg_global_args": ["-loglevel", "warning", "-nostats"],
 
 		"language_names":
@@ -505,7 +506,7 @@
 		{
 			"f": "dshow",
 			"framerate": 60,
-			"rtbufsize": "100M",
+			"rtbufsize": "200M",
 			"guess_layout_max": 0
 		},
 

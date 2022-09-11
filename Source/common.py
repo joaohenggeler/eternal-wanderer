@@ -90,7 +90,9 @@ class CommonConfig():
 	plugins: Dict[str, bool]
 	
 	show_java_console: bool
+	add_java_to_path: bool
 	java_arguments: List[str]
+
 	show_cosmo_player_console: bool
 	cosmo_player_renderer: str
 
@@ -122,6 +124,7 @@ class CommonConfig():
 
 	ffmpeg_path: Optional[str]
 	ffmpeg_global_args: List[str]
+	
 	language_names: Dict[str, str]
 
 	# Determined at runtime.
@@ -180,6 +183,7 @@ class CommonConfig():
 		self.autoit_path = os.path.abspath(self.autoit_path)
 		self.recordings_path = os.path.abspath(self.recordings_path)
 		self.compilations_path = os.path.abspath(self.compilations_path)
+		self.ffmpeg_path = os.path.abspath(self.ffmpeg_path)
 
 		self.extensions_before_running = container_to_lowercase(self.extensions_before_running)
 		self.extensions_after_running = container_to_lowercase(self.extensions_after_running)
@@ -1029,6 +1033,10 @@ class Browser():
 
 		java_lib_path = os.path.join(java_jre_path, 'lib')
 		java_bin_path = os.path.join(java_jre_path, 'bin')
+
+		if config.add_java_to_path:
+			path = os.environ.get('PATH', '')
+			os.environ['PATH'] = f'{java_bin_path};{path}'
 
 		java_config_path = os.path.join(java_lib_path, 'deployment.config')
 		java_properties_path = os.path.join(java_lib_path, 'deployment.properties')

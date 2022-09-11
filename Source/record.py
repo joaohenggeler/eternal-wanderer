@@ -1064,9 +1064,10 @@ if __name__ == '__main__':
 						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, str(snapshot.OldestDatetime.year), str(snapshot.OldestDatetime.month).zfill(2), str(snapshot.OldestDatetime.day).zfill(2), media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
-						browser.close_all_windows()
+						# Closing all windows after using PyWinAuto can avoid runtime errors in older Windows versions.
 						browser.bring_to_front()
 						pywinauto.mouse.move(coords=(0, config.physical_screen_height // 2))
+						browser.close_all_windows()
 
 						plugin_input_repeater = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
 						cosmo_player_viewpoint_cycler = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()

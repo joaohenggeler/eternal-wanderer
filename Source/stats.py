@@ -99,8 +99,8 @@ if __name__ == '__main__':
 				if os.path.isfile(path):
 					total_recordings_size += os.path.getsize(path)
 
-			total_recordings_size = total_recordings_size / 10e9
-			total_disk_space, _, free_disk_space = (size / 10e9 for size in shutil.disk_usage('/'))
+			total_recordings_size = total_recordings_size / 10 ** 9
+			total_disk_space, _, free_disk_space = (size / 10 ** 9 for size in shutil.disk_usage('/'))
 			
 			print(f'- Recordings Disk Space: {total_recordings_size:.2f} of {total_disk_space:.2f} GB ({free_disk_space:.2f} free).')
 
