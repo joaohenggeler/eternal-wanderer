@@ -413,6 +413,9 @@ if __name__ == '__main__':
 		
 		from comtypes import COMError # type: ignore
 		from comtypes.client import CreateObject # type: ignore
+		
+		# We need to create a speech engine at least once before importing SpeechLib. Otherwise, we'd get an ImportError.
+		CreateObject('SAPI.SpVoice')
 		from comtypes.gen import SpeechLib # type: ignore
 
 		class TextToSpeech():
@@ -905,8 +908,11 @@ if __name__ == '__main__':
 
 						log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} with {snapshot.Points} points (last published = {days_since_last_published} days ago).')
 						
-						browser.bring_to_front()
-						pywinauto.mouse.move(coords=(0, config.physical_screen_height // 2))
+						try:
+							browser.bring_to_front()
+							pywinauto.mouse.move(coords=(0, config.physical_screen_height // 2))
+						except RuntimeError as error:
+							log.debug(f'Failed to focus on the browser window with the error: {repr(error)}')
 						
 						missing_urls: List[str] = []
 
@@ -1064,10 +1070,13 @@ if __name__ == '__main__':
 						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, str(snapshot.OldestDatetime.year), str(snapshot.OldestDatetime.month).zfill(2), str(snapshot.OldestDatetime.day).zfill(2), media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
-						# Closing all windows after using PyWinAuto can avoid runtime errors in older Windows versions.
-						browser.bring_to_front()
-						pywinauto.mouse.move(coords=(0, config.physical_screen_height // 2))
 						browser.close_all_windows()
+
+						try:
+							browser.bring_to_front()
+							pywinauto.mouse.move(coords=(0, config.physical_screen_height // 2))
+						except RuntimeError as error:
+							log.debug(f'Failed to focus on the browser window with the error: {repr(error)}')
 
 						plugin_input_repeater = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
 						cosmo_player_viewpoint_cycler = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
