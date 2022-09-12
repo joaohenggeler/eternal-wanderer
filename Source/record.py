@@ -56,7 +56,7 @@ class RecordConfig(CommonConfig):
 	proxy_queue_timeout: int
 	proxy_total_timeout: int
 	block_proxy_requests_outside_archive_org: bool
-	convert_realaudio_metadata_proxy_snapshots: bool
+	convert_realmedia_metadata_proxy_snapshots: bool
 	find_missing_proxy_snapshots_using_cdx: bool
 	max_missing_proxy_snapshot_path_components: Optional[int]
 	save_missing_proxy_snapshots_that_still_exist_online: bool 
@@ -1011,7 +1011,7 @@ if __name__ == '__main__':
 										
 										response_match = Proxy.RESPONSE_REGEX.fullmatch(message)
 										save_match = Proxy.SAVE_REGEX.fullmatch(message) if config.save_missing_proxy_snapshots_that_still_exist_online else None
-										realaudio_match = Proxy.REALAUDIO_REGEX.fullmatch(message) if config.convert_realaudio_metadata_proxy_snapshots else None
+										realaudio_match = Proxy.REALAUDIO_REGEX.fullmatch(message) if config.convert_realmedia_metadata_proxy_snapshots else None
 
 										if response_match is not None:
 											

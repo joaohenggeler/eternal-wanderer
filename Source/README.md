@@ -103,9 +103,15 @@ If you're hosting the bot in a remote Windows machine, there are some additional
 
 * If your machine doesn't have any audio output devices, then some components will crash or show error messages during recording. These include the ffmpeg audio capture device and the MIDI web plugin. You can solve this by installing the [VB-CABLE](https://vb-audio.com/Cable/index.htm) virtual audio device and selecting the speakers as your default output device in the Windows settings by going to `Devices > Sound settings (under Related settings) > Sound Control Panel (under Related settings) > Playback`.
 
+* Depending on the remote machine you're using to host the bot, it's possible that you won't be able to use the OpenGL renderer when viewing VRML worlds with the Cosmo Player. If that's the case, you should change the renderer to Direct3D by setting the `cosmo_player_renderer` option to `D3D`.
+
 * If you installed a Windows version without a product key, you should find a way to remove the activation watermark before recording (e.g. by activating Windows).
 
 * If you want Windows to automatically sign into your account after booting then run the command `netplwiz`, uncheck `Users must enter a user name and password to use this computer` in the User Accounts window, and enter your credentials after pressing ok.
+
+* It's recommended that you set your machine's time zone to UTC in the Windows settings by going to `Time & Language > Time zone (under Current data and time) > (UTC) Coordinated Universal Time` and pressing `Sync now`. This should make it easier to track the scheduled jobs executed by the recorder and publisher scripts.
+
+* It's recommended that you disable any automatic Windows updates to prevent any unwanted restarts while the bot is running. You can do this in the Services settings by going to the `Windows Update` service's properties, setting the startup type to `Disabled`, and then pressing `Stop`. Note that you should only do this after setting up the bot and confirming that it works properly. This is because some of the previous steps may require the Windows Update service. For example, if you tried to install the voice packages after disabling this service, it would fail with the error `The voice package couldn't be installed`.
 
 ## Scripts
 

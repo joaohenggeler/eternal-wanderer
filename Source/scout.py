@@ -36,13 +36,14 @@ class ScoutConfig(CommonConfig):
 
 	excluded_url_tags: List[str]
 	
+	store_all_words_and_tags: bool
+	
 	word_points: Dict[str, int]
 	tag_points: Dict[str, int]
 	standalone_media_points: int
 	
 	sensitive_words: Dict[str, bool] # Different from the config data type.
 	
-	store_all_words_and_tags: bool
 	detect_page_language: bool
 	language_model_path: str
 	tokenize_japanese_text: bool

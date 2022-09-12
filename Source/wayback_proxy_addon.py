@@ -82,7 +82,7 @@ def request(flow: http.HTTPFlow) -> None:
 	
 	extracted_realaudio_url = False
 
-	if config.convert_realaudio_metadata_proxy_snapshots:
+	if config.convert_realmedia_metadata_proxy_snapshots:
 		
 		parts = urlparse(wayback_parts.Url)
 		_, file_extension = os.path.splitext(parts.path)

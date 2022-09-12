@@ -98,7 +98,7 @@ class CommonConfig():
 
 	autoit_path: str
 	autoit_poll_frequency: int
-	compiled_autoit_scripts: Dict[str, bool]
+	autoit_scripts: Dict[str, bool]
 
 	recordings_path: str
 	max_recordings_per_directory: int
@@ -189,7 +189,7 @@ class CommonConfig():
 		self.extensions_after_running = container_to_lowercase(self.extensions_after_running)
 		self.user_scripts = container_to_lowercase(self.user_scripts)
 		self.plugins = container_to_lowercase(self.plugins)
-		self.compiled_autoit_scripts = container_to_lowercase(self.compiled_autoit_scripts)
+		self.autoit_scripts = container_to_lowercase(self.autoit_scripts)
 
 		self.cosmo_player_renderer = self.cosmo_player_renderer.upper()
 
@@ -991,7 +991,7 @@ class Browser():
 			
 			log.info(f'Running the compiled AutoIt scripts in "{config.autoit_path}" with a poll frequency of {config.autoit_poll_frequency} milliseconds.')
 
-			for filename, enabled in config.compiled_autoit_scripts.items():
+			for filename, enabled in config.autoit_scripts.items():
 
 				if enabled:
 					try:

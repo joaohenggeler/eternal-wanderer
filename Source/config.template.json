@@ -220,12 +220,12 @@
 		"java_arguments": ["-Dfile.encoding=UTF8", "-Duser.language=ja", "-Duser.country=JP"],
 		
 		"show_cosmo_player_console": false,
-		"cosmo_player_renderer": "D3D",
+		"cosmo_player_renderer": "OPENGL",
 
 		"autoit_path": "Data/AutoIt",
 		"autoit_poll_frequency": 20,
 
-		"compiled_autoit_scripts":
+		"autoit_scripts":
 		{
 			"close_authorware_popups.exe": true,
 			"close_java_popups.exe": true,
@@ -359,6 +359,8 @@
 
 		"excluded_url_tags": ["link"],
 
+		"store_all_words_and_tags": true,
+
 		"word_points":
 		{
 			"flash": 20,
@@ -394,7 +396,6 @@
 
 		"sensitive_words": ["b64:Ymxvd2pvYg==", "b64:Ymxvd2pvYnM=", "b64:Y3Vt", "b64:Y3Vtcw==", "b64:Y3Vtc2hvdA==", "b64:Y3Vtc2hvdHM=", "b64:Y3VudA==", "b64:Y3VudHM=", "b64:ZG9nZ3lzdHlsZQ==", "b64:ZmFn", "b64:ZmFnZ290", "b64:ZmFnZ290cw==", "b64:ZmFncw==", "b64:aGFuZGpvYg==", "b64:aGFuZGpvYnM=", "b64:aGVudGFp", "b64:aml6eg==", "b64:aml6emVk", "b64:aml6emVz", "b64:bWlsZg==", "b64:bWlsZnM=", "b64:bW90aGVyZnVja2Vy", "b64:bW90aGVyZnVja2Vycw==", "b64:bmlnZ2Vy", "b64:bmlnZ2Vycw==", "b64:bnVkZQ==", "b64:cGFlZG9waGlsZQ==", "b64:cGFlZG9waGlsZXM=", "b64:cGVkbw==", "b64:cGVkb3BoaWxl", "b64:cGVkb3BoaWxlcw==", "b64:cGVkb3M=", "b64:cHVzc2llcw==", "b64:cHVzc3k=", "b64:cmFwZQ==", "b64:cmFwZWQ=", "b64:cmFwZXM=", "b64:cmFwaXN0", "b64:cmFwaXN0cw==", "b64:c2hlbWFsZQ==", "b64:c2hlbWFsZXM=", "b64:c2x1dA==", "b64:c2x1dHM=", "b64:dGl0ZnVjaw==", "b64:dGl0ZnVja2Vk", "b64:dGl0ZnVja3M=", "b64:dGl0am9i", "b64:dGl0am9icw==", "b64:dGl0cw==", "b64:dGl0dHlmdWNr", "b64:dGl0dHlmdWNrZWQ=", "b64:dGl0dHlmdWNrcw==", "b64:dHJhbm5pZXM=", "b64:dHJhbm55", "b64:d2hvcmU=", "b64:d2hvcmVz"],
 
-		"store_all_words_and_tags": true,
 		"detect_page_language": true,
 		"language_model_path": "Data/lid.176.ftz",
 		"tokenize_japanese_text": true
@@ -451,7 +452,7 @@
 		"proxy_queue_timeout": 30,
 		"proxy_total_timeout": 600,
 		"block_proxy_requests_outside_archive_org": true,
-		"convert_realaudio_metadata_proxy_snapshots": true,
+		"convert_realmedia_metadata_proxy_snapshots": true,
 		"find_missing_proxy_snapshots_using_cdx": true,
 		"max_missing_proxy_snapshot_path_components": 2,
 		"save_missing_proxy_snapshots_that_still_exist_online": true,
@@ -507,7 +508,7 @@
 			"f": "dshow",
 			"framerate": 60,
 			"rtbufsize": "400M",
-			"thread_queue_size": 500
+			"thread_queue_size": 600
 		},
 
 		"ffmpeg_recording_output_args":
