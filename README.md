@@ -22,7 +22,7 @@ With over 682 billion web pages saved since 1996, the [Wayback Machine](https://
 
 ## Setup
 
-See the [setup page](Source/Setup.md) to learn how to configure and run this bot.
+See the [setup page](Source/README.md) to learn how to configure and run this bot.
 
 ## Special Thanks
 

@@ -245,6 +245,7 @@ if __name__ == '__main__':
 					proxy.task_done()
 					
 					proxy.process.kill()
+					time.sleep(5)
 					port = free_port()
 
 				except queue.Empty:

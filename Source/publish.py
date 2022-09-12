@@ -100,6 +100,8 @@ if __name__ == '__main__':
 			with a message whose content is generated using the remaining arguments. The text-to-speech file is added as a reply to the
 			main tweet. If this file is too long for Twitter's video duration limit, then it's split across multiple replies. """
 			
+			log.debug('Publishing to Twitter.')
+
 			media_id = None
 			post_id = None
 
@@ -187,6 +189,8 @@ if __name__ == '__main__':
 			main toot along with a message whose content is generated using the remaining arguments. The text-to-speech file is added
 			as a reply to the main toot. This function can optionally attempt to reduce both files' size before uploading them. If a
 			file exceeds the user-defined size limit, then it will be skipped. """
+
+			log.debug('Publishing to Mastodon.')
 
 			media_id = None
 			post_id = None

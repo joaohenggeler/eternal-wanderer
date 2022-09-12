@@ -1014,6 +1014,8 @@ class Browser():
 	def configure_shockwave_player(self) -> None:
 		""" Configures the Shockwave Player by setting the appropriate registry keys. """
 
+		log.info('Configuring the Shockwave Player.')
+
 		# The value we're changing here is the default one that is usually displayed as "(Default)",
 		# even though the subkey is actually an empty string.
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\allowfallback\\', 'y')
