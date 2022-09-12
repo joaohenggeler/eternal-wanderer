@@ -111,7 +111,7 @@ if __name__ == '__main__':
 
 				if id_type == 'snapshot':
 					cursor = db.execute('''
-										SELECT S.*, R.*, R.Id AS RecordingId
+										SELECT S.*, SI.IsSensitive, R.*, R.Id AS RecordingId
 										FROM Snapshot S
 										INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 										INNER JOIN Recording R ON S.Id = R.SnapshotId
@@ -125,7 +125,7 @@ if __name__ == '__main__':
 										''')
 				else:
 					cursor = db.execute('''
-										SELECT S.*, R.*, R.Id AS RecordingId
+										SELECT S.*, SI.IsSensitive, R.*, R.Id AS RecordingId
 										FROM Snapshot S
 										INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 										INNER JOIN Recording R ON S.Id = R.SnapshotId
