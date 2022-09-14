@@ -1033,15 +1033,20 @@ class Browser():
 		# - 2 = Always Use Hardware - OpenGL
 		# - 3 = Always Use Hardware - DirectX 5
 		# - 4 = Always Use Hardware - DirectX 7
-		# - 5 = Always Use Hardware - DirectX 9 (undocumented)
+		# - 5 = Always Use Hardware - DirectX 9
 		#
 		# These are REG_SZ and not REG_DWORD values.
 
 		renderer = {'auto': '0', 'software': '1', 'opengl': '2', 'directx 5': '3', 'directx 7': '4', 'directx 9': '5', 'directx': '5'}.get(config.shockwave_renderer)
 		assert renderer is not None, f'Unknown Shockwave renderer "{config.shockwave_renderer}".'
 
+		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Macromedia\\Shockwave 10\\renderer3dsetting\\', renderer)
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Macromedia\\Shockwave 10\\renderer3dsettingPerm\\', renderer)
+		
+		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\renderer3dsetting\\', renderer)
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\renderer3dsettingPerm\\', renderer)
+		
+		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\renderer3dsetting\\', renderer)
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\renderer3dsettingPerm\\', renderer)
 
 	def configure_java_plugin(self) -> None:

@@ -215,14 +215,14 @@
 			"npvlc.dll": true
 		},
 		
-		"shockwave_renderer": "opengl",
+		"shockwave_renderer": "Auto",
 		
 		"show_java_console": false,
 		"add_java_to_path": true,
 		"java_arguments": ["-Dfile.encoding=UTF8", "-Duser.language=ja", "-Duser.country=JP"],
 		
 		"show_cosmo_player_console": false,
-		"cosmo_player_renderer": "opengl",
+		"cosmo_player_renderer": "OpenGL",
 
 		"autoit_path": "Data/AutoIt",
 		"autoit_poll_frequency": 20,
@@ -405,7 +405,7 @@
 
 	"record":
 	{
-		"scheduler": {"day_of_week": "sun", "hour": 6, "minute": 30},
+		"scheduler": {"day_of_week": "sun", "hour": 3},
 		"num_snapshots_per_scheduled_batch": 56,
 
 		"ranking_offset": 1500,
@@ -637,7 +637,7 @@
 
 	"publish":
 	{
-		"scheduler": {"hour": "*/3"},
+		"scheduler": {"day_of_week": "mon-sat", "hour": "*/3"},
 		"num_recordings_per_scheduled_batch": 1,
 		
 		"enable_twitter": true,

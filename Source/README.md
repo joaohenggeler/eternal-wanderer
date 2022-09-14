@@ -103,7 +103,7 @@ If you're hosting the bot in a remote Windows machine, there are some additional
 
 * If your machine doesn't have any audio output devices, then some components will crash or show error messages during recording. These include the ffmpeg audio capture device and the MIDI web plugin. You can solve this by installing the [VB-CABLE](https://vb-audio.com/Cable/index.htm) virtual audio device and selecting the speakers as your default output device in the Windows settings by going to `Devices > Sound settings (under Related settings) > Sound Control Panel (under Related settings) > Playback`.
 
-* Depending on the remote machine you're using to host the bot, it's possible that you won't be able to use the OpenGL renderer when viewing VRML worlds with the Cosmo Player. If that's the case, you should change the renderer to DirectX by setting the `shockwave_renderer` and `cosmo_player_renderer` options to `DirectX`.
+* Depending on the remote machine you're using to host the bot, it's possible that you won't be able to use the OpenGL renderer when viewing VRML worlds with the Cosmo Player. If that's the case, you should change the renderer to DirectX by setting the `cosmo_player_renderer` option to `DirectX`. The Shockwave Player is able to choose the best available renderer so the `shockwave_renderer` option can be left to `Auto`.
 
 * If you installed a Windows version without a product key, you should find a way to remove the activation watermark before recording (e.g. by activating Windows).
 
