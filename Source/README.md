@@ -39,7 +39,7 @@ The following Python packages are used:
 
 * [Mastodon.py](https://github.com/halcy/Mastodon.py): to upload the recorded videos to Mastodon and publish toots.
 
-* [APScheduler](https://github.com/agronholm/apscheduler): to schedule both the video recordings and uploads.
+* [APScheduler](https://github.com/agronholm/apscheduler): to schedule the scouting, recording, and publishing scripts.
 
 * [fastText](https://github.com/facebookresearch/fastText): to detect a page's language from its text. Only used if the `detect_page_language` option is true.
 

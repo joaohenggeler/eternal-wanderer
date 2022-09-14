@@ -116,7 +116,7 @@ if __name__ == '__main__':
 				
 				max_title_length = max(config.twitter_max_post_length - len(body), 0)
 				title = title[:max_title_length]
-				text = f'{title}\n\n{body}'
+				text = f'{title}\n{body}'
 
 				status = twitter_api.update_status(text, media_ids=[media_id], possibly_sensitive=sensitive)
 				post_id = status.id
@@ -156,7 +156,7 @@ if __name__ == '__main__':
 								
 								max_title_length = max(config.twitter_max_post_length - len(tts_body), 0)
 								title = title[:max_title_length]
-								tts_text = f'{title}\n\n{tts_body}'
+								tts_text = f'{title}\n{tts_body}'
 
 								tts_status = twitter_api.update_status(tts_text, in_reply_to_status_id=last_post_id, media_ids=[tts_media.media_id], possibly_sensitive=sensitive)
 								last_post_id = tts_status.id
@@ -231,7 +231,7 @@ if __name__ == '__main__':
 
 					max_title_length = max(config.mastodon_max_post_length - len(body), 0)
 					title = title[:max_title_length]
-					text = f'{title}\n\n{body}'
+					text = f'{title}\n{body}'
 
 					status = mastodon_api.status_post(text, media_ids=[media_id], sensitive=sensitive)
 					post_id = status.id
@@ -256,7 +256,7 @@ if __name__ == '__main__':
 
 								max_title_length = max(config.mastodon_max_post_length - len(tts_body), 0)
 								title = title[:max_title_length]
-								tts_text = f'{title}\n\n{tts_body}'
+								tts_text = f'{title}\n{tts_body}'
 
 								tts_status = mastodon_api.status_post(tts_text, in_reply_to_id=status, media_ids=[tts_media.id], sensitive=sensitive)
 
@@ -359,7 +359,7 @@ if __name__ == '__main__':
 					display_metadata = snapshot.DisplayMetadata if config.show_standalone_media_metadata else None
 					plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsStandaloneMedia or snapshot.PageUsesPlugins else None
 					body_identifiers = [display_metadata, snapshot.ShortDate, snapshot.WaybackUrl, plugin_identifier]
-					body = '\n\n'.join(filter(None, body_identifiers))
+					body = '\n'.join(filter(None, body_identifiers))
 
 					# How the date is formatted depends on the current locale.
 					snapshot_type = 'media file' if snapshot.IsStandaloneMedia else 'web page'

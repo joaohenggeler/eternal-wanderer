@@ -17,7 +17,7 @@ if __name__ == '__main__':
 	parser = ArgumentParser(description='Compiles multiple snapshot recordings into a single video. This can be done for published recordings that haven\'t been compiled yet, or for any recordings given their database IDs. A short transition with a user-defined background color, duration, and sound effect is inserted between each recording.')
 	parser.add_argument('-published', nargs=2, metavar=('BEGIN_DATE', 'END_DATE'), help='Which published recordings to compile. Each date must use a format between "YYYY" and "YYYY-MM-DD HH:MM:SS" with different granularities. For example, "2022-07" and "2022-08-15" would compile all published recordings between July 1st (inclusive) and August 15th (exclusive), 2022. The selected recordings are stored in a database to prevent future compilations from showing repeated snapshots. This option cannot be used with -any.')
 	parser.add_argument('-any', nargs=2, metavar=('ID_TYPE', 'ID_LIST'), help='Which recordings to compile, regardless if they have been published or not. The ID_TYPE argument must be either "snapshot" or "recording" depending on the database IDs specified in ID_LIST. The ID_LIST argument specifies which of these IDs to include or exclude from the compilation. For example, "1,5-10,!7,!9-10" would result in the ID list [1, 5, 6, 8]. For ID ranges, if the first value is greater than the second then the range is reversed. For example, "3-1" would result in [3, 2, 1], meaning the recordings would be shown in reverse order. This option cannot be used with -published.')
-	parser.add_argument('-tts', action='store_true', dest='text_to_speech', help='Use the text-to-speech video files instead of the snapshot recordings.')
+	parser.add_argument('-tts', action='store_true', help='Use the text-to-speech video files instead of the snapshot recordings.')
 	parser.add_argument('-color', default='white', help='The background color for the transition. If omitted, this defaults to %(default)s. This may be a hexadecimal color code or a color name defined here: https://ffmpeg.org/ffmpeg-utils.html#Color')
 	parser.add_argument('-duration', type=int, default=2, help='How long the transition lasts for in seconds. If omitted, this defaults to %(default)s.')
 	parser.add_argument('-sfx', help='The path to the transition sound effect file. If omitted, no sound is added to the transition.')
@@ -147,11 +147,11 @@ if __name__ == '__main__':
 
 				assert snapshot.IsSensitive is not None, 'The IsSensitive column is not being computed properly.'
 
-				if args.text_to_speech and snapshot.IsStandaloneMedia:
+				if args.tts and snapshot.IsStandaloneMedia:
 					continue
 
 				total_recordings += 1
-				recording.CompilationSegmentFilePath = recording.TextToSpeechFilePath if args.text_to_speech else recording.UploadFilePath
+				recording.CompilationSegmentFilePath = recording.TextToSpeechFilePath if args.tts else recording.UploadFilePath
 
 				if recording.CompilationSegmentFilePath is not None and os.path.isfile(recording.CompilationSegmentFilePath):
 					snapshots_and_recordings.append((snapshot, recording))
@@ -182,7 +182,7 @@ if __name__ == '__main__':
 						audio_stream = ffmpeg.input(args.sfx, guess_layout_max=0) if args.sfx else None
 						input_streams: List[ffmpeg.Stream] = list(filter(None, [video_stream, audio_stream]))
 
-						ffmpeg_output_args = config.ffmpeg_text_to_speech_output_args if args.text_to_speech else config.ffmpeg_upload_output_args
+						ffmpeg_output_args = config.ffmpeg_text_to_speech_output_args if args.tts else config.ffmpeg_upload_output_args
 						ffmpeg_output_args['tune'] = 'stillimage'
 
 						# Remove the -shortest flags used when generating the text-to-speech file so they don't shorten the transition.
@@ -210,7 +210,7 @@ if __name__ == '__main__':
 					type_identifier = 'published' if args.published else f'any_{id_type}'
 					range_identifier = args.any[1] if args.any else f'{begin_date.replace("-", "_").replace(" ", "_").replace(":", "_")}_to_{end_date.replace("-", "_").replace(" ", "_").replace(":", "_")}'
 					total_identifier = f'with_{num_valid_recordings}_of_{total_recordings}'
-					text_to_speech_identifier = 'tts' if args.text_to_speech else None
+					text_to_speech_identifier = 'tts' if args.tts else None
 
 					compilation_identifiers = [id_identifier, type_identifier, range_identifier, total_identifier, text_to_speech_identifier]
 					compilation_path_prefix = os.path.join(config.compilations_path, '_'.join(filter(None, compilation_identifiers)))
@@ -266,7 +266,7 @@ if __name__ == '__main__':
 							else:
 								timestamps_file.write(f'Type: Any {id_type.title()} ({args.any[1]})\n')
 							
-							timestamps_file.write(f'Text-to-Speech: {"Yes" if args.text_to_speech else "No"}\n')
+							timestamps_file.write(f'Text-to-Speech: {"Yes" if args.tts else "No"}\n')
 							timestamps_file.write(f'Transition Color: {args.color}\n')
 							timestamps_file.write(f'Transition Duration: {args.duration}\n')
 							timestamps_file.write(f'Transition Sfx: {args.sfx}\n')

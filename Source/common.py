@@ -2007,6 +2007,13 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 				log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
 				last_modified_header = ':'.join([split_header[0], split_header[1][:2], split_header[1][2:]])
 
+			# Fix an issue where the time zone identifier is not separated from the time.
+			# E.g. https://web.archive.org/web/20060813091112if_/http://www.phone-books.net/
+			# Where the last modified time is "Sun, 13 Aug 2006 09:11:11GMT".
+			if last_modified_header.endswith('GMT') and not last_modified_header.endswith(' GMT'):
+				log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
+				last_modified_header = last_modified_header.removesuffix('GMT') + ' GMT'
+
 			last_modified_time = parsedate_to_datetime(last_modified_header).strftime(Snapshot.TIMESTAMP_FORMAT)
 
 	except requests.RequestException as error:

@@ -12,6 +12,7 @@ if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Approves snapshot recordings for publishing. This operation is optional and may be done if the publisher script was started with the "require_approval" option set to true.')
 	parser.add_argument('max_recordings', nargs='?', type=int, default=-1, help='How many recordings to approve. Omit or set to %(default)s to approve all recordings.')
+	parser.add_argument('-tts', action='store_true', help='Play the text-to-speech audio files after each recording.')
 	args = parser.parse_args()
 
 	config = PublishConfig()
@@ -76,8 +77,8 @@ if __name__ == '__main__':
 					input('Press enter to watch the recording.')
 					os.startfile(recording.UploadFilePath)
 
-					if recording.TextToSpeechFilePath is not None:
-						input('Press enter to listen to the text-to-speech file.')
+					if args.tts and recording.TextToSpeechFilePath is not None:
+						input('Press enter to listen to the text-to-speech audio file.')
 						os.startfile(recording.TextToSpeechFilePath)
 				
 				except FileNotFoundError:
