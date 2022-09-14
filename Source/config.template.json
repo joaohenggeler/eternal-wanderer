@@ -215,12 +215,14 @@
 			"npvlc.dll": true
 		},
 		
+		"shockwave_renderer": "opengl",
+		
 		"show_java_console": false,
 		"add_java_to_path": true,
 		"java_arguments": ["-Dfile.encoding=UTF8", "-Duser.language=ja", "-Duser.country=JP"],
 		
 		"show_cosmo_player_console": false,
-		"cosmo_player_renderer": "OPENGL",
+		"cosmo_player_renderer": "opengl",
 
 		"autoit_path": "Data/AutoIt",
 		"autoit_poll_frequency": 20,
@@ -507,8 +509,8 @@
 		{
 			"f": "dshow",
 			"framerate": 60,
-			"rtbufsize": "400M",
-			"thread_queue_size": 600
+			"rtbufsize": "500M",
+			"thread_queue_size": 1000
 		},
 
 		"ffmpeg_recording_output_args":

@@ -88,6 +88,8 @@ class CommonConfig():
 	plugins_path: str
 	use_master_plugin_registry: bool
 	plugins: Dict[str, bool]
+
+	shockwave_renderer: str
 	
 	show_java_console: bool
 	add_java_to_path: bool
@@ -191,7 +193,8 @@ class CommonConfig():
 		self.plugins = container_to_lowercase(self.plugins)
 		self.autoit_scripts = container_to_lowercase(self.autoit_scripts)
 
-		self.cosmo_player_renderer = self.cosmo_player_renderer.upper()
+		self.shockwave_renderer = self.shockwave_renderer.lower()
+		self.cosmo_player_renderer = self.cosmo_player_renderer.lower()
 
 		def parse_domain_list(domain_list: List[str]) -> List[List[str]]:
 			""" Transforms a list of domain patterns into a list of each pattern's components. """
@@ -1016,10 +1019,30 @@ class Browser():
 
 		log.info('Configuring the Shockwave Player.')
 
-		# The value we're changing here is the default one that is usually displayed as "(Default)",
-		# even though the subkey is actually an empty string.
+		# The values we're changing here are the default ones that are usually displayed as "(Default)",
+		# even though their actually empty strings.
+		
+		# Enable the legacy Shockwave 10 player that's included to play older movies.
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\allowfallback\\', 'y')
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\allowfallback\\', 'y')
+
+		# Shockwave Renderers:
+		#
+		# - 0 = Obey Content Settings
+		# - 1 = Always Use Software Renderer
+		# - 2 = Always Use Hardware - OpenGL
+		# - 3 = Always Use Hardware - DirectX 5
+		# - 4 = Always Use Hardware - DirectX 7
+		# - 5 = Always Use Hardware - DirectX 9 (undocumented)
+		#
+		# These are REG_SZ and not REG_DWORD values.
+
+		renderer = {'auto': '0', 'software': '1', 'opengl': '2', 'directx 5': '3', 'directx 7': '4', 'directx 9': '5', 'directx': '5'}.get(config.shockwave_renderer)
+		assert renderer is not None, f'Unknown Shockwave renderer "{config.shockwave_renderer}".'
+
+		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Macromedia\\Shockwave 10\\renderer3dsettingPerm\\', renderer)
+		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\renderer3dsettingPerm\\', renderer)
+		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\renderer3dsettingPerm\\', renderer)
 
 	def configure_java_plugin(self) -> None:
 		""" Configures the Java Plugin by generating the appropriate deployment files and passing any useful parameters to the JRE. """
@@ -1137,6 +1160,21 @@ class Browser():
 		path = os.environ.get('PATH', '')
 		os.environ['PATH'] = f'{cosmo_player_system32_path};{path}'
 
+		# Keep in mind that the temporary registry always operates on the 32-bit view of the registry.
+		# In other words, the following values will be redirected to the following registry keys:
+		#
+		# HKEY_LOCAL_MACHINE\SOFTWARE\Classes\WOW6432Node\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}
+		# HKEY_LOCAL_MACHINE\SOFTWARE\Classes\WOW6432Node\CLSID\{06646732-BCF3-11D0-9518-00C04FC2DD79}
+		# HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Classes\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}
+		# HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Classes\CLSID\{06646732-BCF3-11D0-9518-00C04FC2DD79}
+		# HKEY_CLASSES_ROOT\WOW6432Node\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}
+		# HKEY_CLASSES_ROOT\WOW6432Node\CLSID\{06646732-BCF3-11D0-9518-00C04FC2DD79}
+		#
+		# HKEY_CLASSES_ROOT\Filter\{06646731-BCF3-11D0-9518-00C04FC2DD79}
+		# HKEY_CLASSES_ROOT\Filter\{06646732-BCF3-11D0-9518-00C04FC2DD79}
+		#
+		# HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\COSMOSOFTWARE
+
 		REQUIRED_REGISTRY_KEYS: Dict[str, Union[int, str]] = {
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia AudioRenderer3',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\': os.path.join(cosmo_player_system32_path, 'cm12_dshow.dll'),
@@ -1172,24 +1210,19 @@ class Browser():
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\OPENGL\\UINAME': 'OpenGL Renderer',
 		}
 
-		# Keep in mind that the temporary registry always operates on the 32-bit view of the registry.
-		# In other words, the previous values will be redirected to the following registry keys:
+		# Cosmo Player Renderers:
 		#
-		# HKEY_LOCAL_MACHINE\SOFTWARE\Classes\WOW6432Node\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}
-		# HKEY_LOCAL_MACHINE\SOFTWARE\Classes\WOW6432Node\CLSID\{06646732-BCF3-11D0-9518-00C04FC2DD79}
-		# HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Classes\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}
-		# HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Classes\CLSID\{06646732-BCF3-11D0-9518-00C04FC2DD79}
-		# HKEY_CLASSES_ROOT\WOW6432Node\CLSID\{06646731-BCF3-11D0-9518-00C04FC2DD79}
-		# HKEY_CLASSES_ROOT\WOW6432Node\CLSID\{06646732-BCF3-11D0-9518-00C04FC2DD79}
-		#
-		# HKEY_CLASSES_ROOT\Filter\{06646731-BCF3-11D0-9518-00C04FC2DD79}
-		# HKEY_CLASSES_ROOT\Filter\{06646732-BCF3-11D0-9518-00C04FC2DD79}
-		#
-		# HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\COSMOSOFTWARE
-		
+		# - AUTO = Automatic Renderer Choice
+		# - D3D = Direct3D Renderer
+		# - NORENDER = NonRendering Renderer
+		# - OPENGL = OpenGL Renderer
+
+		renderer = {'auto': 'AUTO', 'directx': 'D3D', 'opengl': 'OPENGL'}.get(config.cosmo_player_renderer)
+		assert renderer is not None, f'Unknown Cosmo Player renderer "{config.cosmo_player_renderer}".'
+
 		SETTINGS_REGISTRY_KEYS: Dict[str, Union[int, str]] = {
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\PANEL_MAXIMIZED': 0, # Minimize dashboard.
-			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\renderer': config.cosmo_player_renderer, # Renderer (OPENGL or D3D).
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\renderer': renderer, # See above.
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\showConsoleType': 2 if config.show_cosmo_player_console else 0, # Show or hide console on startup.
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\textureQuality': 1, # Best quality.
 		}

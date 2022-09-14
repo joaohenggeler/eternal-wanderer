@@ -116,7 +116,7 @@ if __name__ == '__main__':
 				
 				max_title_length = max(config.twitter_max_post_length - len(body), 0)
 				title = title[:max_title_length]
-				text = f'{title}\n{body}'
+				text = f'{title}\n\n{body}'
 
 				status = twitter_api.update_status(text, media_ids=[media_id], possibly_sensitive=sensitive)
 				post_id = status.id
@@ -148,16 +148,20 @@ if __name__ == '__main__':
 							
 							for i, segment_path in enumerate(segment_file_paths):
 									
-								segment_media = twitter_api.chunked_upload(filename=segment_path, file_type='video/mp4', media_category='TweetVideo')
-								segment_text = 'Text-to-Speech' if len(segment_file_paths) == 1 else f'Text-to-Speech {i+1} of {len(segment_file_paths)}'
-								
-								if language is not None:
-									segment_text += f' ({language})'
-								
-								segment_status = twitter_api.update_status(segment_text, in_reply_to_status_id=last_post_id, media_ids=[segment_media.media_id], possibly_sensitive=sensitive)
-								last_post_id = segment_status.id
+								tts_media = twitter_api.chunked_upload(filename=segment_path, file_type='video/mp4', media_category='TweetVideo')
 
-								log.debug(f'Posted the text-to-speech segment #{segment_status.id} with the media #{segment_media.media_id} ({i+1} of {len(segment_file_paths)}).')
+								tts_body = 'Text-to-Speech' if len(segment_file_paths) == 1 else f'Text-to-Speech {i+1} of {len(segment_file_paths)}'	
+								if language is not None:
+									tts_body += f' ({language})'
+								
+								max_title_length = max(config.twitter_max_post_length - len(tts_body), 0)
+								title = title[:max_title_length]
+								tts_text = f'{title}\n\n{tts_body}'
+
+								tts_status = twitter_api.update_status(tts_text, in_reply_to_status_id=last_post_id, media_ids=[tts_media.media_id], possibly_sensitive=sensitive)
+								last_post_id = tts_status.id
+
+								log.debug(f'Posted the text-to-speech segment #{tts_status.id} with the media #{tts_media.media_id} ({i+1} of {len(segment_file_paths)}).')
 
 							log.info(f'Posted {len(segment_file_paths)} text-to-speech segments.')
 						else:
@@ -179,6 +183,7 @@ if __name__ == '__main__':
 	if config.enable_mastodon:
 		
 		try:
+			log.info('Initializing the Mastodon API interface.')
 			mastodon_api = Mastodon(access_token=config.mastodon_access_token, api_base_url=config.mastodon_instance_url)
 		except MastodonError as error:
 			log.error(f'Failed to initialize the Mastodon API interface with the error: {repr(error)}')
@@ -226,7 +231,7 @@ if __name__ == '__main__':
 
 					max_title_length = max(config.mastodon_max_post_length - len(body), 0)
 					title = title[:max_title_length]
-					text = f'{title}\n{body}'
+					text = f'{title}\n\n{body}'
 
 					status = mastodon_api.status_post(text, media_ids=[media_id], sensitive=sensitive)
 					post_id = status.id
@@ -245,9 +250,13 @@ if __name__ == '__main__':
 
 								tts_media = mastodon_api.media_post(tts_path, mime_type='video/mp4')
 								
-								tts_text = 'Text-to-Speech'
+								tts_body = 'Text-to-Speech'
 								if language is not None:
-									tts_text += f' ({language})'
+									tts_body += f' ({language})'
+
+								max_title_length = max(config.mastodon_max_post_length - len(tts_body), 0)
+								title = title[:max_title_length]
+								tts_text = f'{title}\n\n{tts_body}'
 
 								tts_status = mastodon_api.status_post(tts_text, in_reply_to_id=status, media_ids=[tts_media.id], sensitive=sensitive)
 
@@ -350,7 +359,7 @@ if __name__ == '__main__':
 					display_metadata = snapshot.DisplayMetadata if config.show_standalone_media_metadata else None
 					plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsStandaloneMedia or snapshot.PageUsesPlugins else None
 					body_identifiers = [display_metadata, snapshot.ShortDate, snapshot.WaybackUrl, plugin_identifier]
-					body = '\n'.join(filter(None, body_identifiers))
+					body = '\n\n'.join(filter(None, body_identifiers))
 
 					# How the date is formatted depends on the current locale.
 					snapshot_type = 'media file' if snapshot.IsStandaloneMedia else 'web page'
