@@ -105,6 +105,8 @@ If you're hosting the bot in a remote Windows machine, there are some additional
 
 * It's strongly recommended that you increase the `rtbufsize` and `thread_queue_size` parameters in the `ffmpeg_recording_input_args` option to the maximum supported values for the remote machine. Check how much RAM is free while displaying a page with plugins in the browser and set `rtbufsize` somewhere close to that value. If you see the errors `real-time buffer [screen-capture-recorder] [video input] too full or near too full` or `Thread message queue blocking; consider raising the thread_queue_size option` in the recorder log file, increase `rtbufsize` and `thread_queue_size`, respectively. If these values are too low, the final recording will stutter.
 
+* It's also recommended to increase the default `proxy_queue_timeout` option from 30 to 60 to allow VRML worlds to request all their assets correctly. Otherwise, they may be missing their textures and sounds in the final recording.
+
 * Depending on the remote machine you're using to host the bot, it's possible that you won't be able to use the OpenGL renderer when viewing VRML worlds with the Cosmo Player. If that's the case, you should change the renderer to DirectX by setting the `cosmo_player_renderer` option to `DirectX`. The Shockwave Player is able to choose the best available renderer so the `shockwave_renderer` option can be left to `Auto`.
 
 * Consider disabling any appearance settings that might reduce the remote machine's performance in the Windows settings by going to `System > About > Advanced system settings (under Related settings) > Settings... (under Performance) > Visual Effects` and selecting `Adjust for best performance`.

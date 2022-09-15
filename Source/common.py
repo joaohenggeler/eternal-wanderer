@@ -134,10 +134,13 @@ class CommonConfig():
 
 	# Constants.
 	MUTABLE_OPTIONS = [
-		'page_plugin_wait',
+		# For the recorder script.
 		'page_cache_wait',
 		'standalone_media_cache_wait',
 		
+		'plugin_load_wait',
+		'base_plugin_crash_timeout',
+
 		'viewport_scroll_percentage',
 		'base_wait_after_load',
 		'wait_after_load_per_plugin_instance',
@@ -150,8 +153,8 @@ class CommonConfig():
 		'standalone_media_height',
 		'standalone_media_background_color',
 		
-		'reload_plugin_media_before_recording', 
-		'base_plugin_crash_timeout', 
+		'reload_page_plugin_content',
+		'reload_standalone_media_plugin_content',
 		
 		'enable_plugin_input_repeater', 
 		'plugin_input_repeater_initial_wait',
@@ -164,6 +167,9 @@ class CommonConfig():
 
 		'min_video_duration',
 		'max_video_duration',
+
+		# For the publisher script.
+		'show_standalone_media_metadata',
 	]
 
 	def __init__(self):
@@ -1631,7 +1637,7 @@ class Browser():
 
 		self.driver.switch_to.default_content()
 	
-	def reload_plugin_media(self) -> None:
+	def reload_plugin_content(self) -> None:
 		""" Reloads any content embedded using the object, embed, or applet tags in the current web page and its frames. """
 
 		try:

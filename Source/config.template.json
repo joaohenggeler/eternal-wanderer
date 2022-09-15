@@ -465,9 +465,11 @@
 		"max_total_extra_missing_proxy_snapshot_tries": 150,
 		"cache_missing_proxy_responses": true,
 
-		"page_plugin_wait": 5,
 		"page_cache_wait": 20,
 		"standalone_media_cache_wait": 40,
+
+		"plugin_load_wait": 5,
+		"base_plugin_crash_timeout": 60,
 		
 		"viewport_scroll_percentage": 0.85,
 		"base_wait_after_load": 10,
@@ -482,8 +484,8 @@
 		"standalone_media_background_color": "#000000",
 
 		"fullscreen_browser": true,
-		"reload_plugin_media_before_recording": true,
-		"base_plugin_crash_timeout": 60,
+		"reload_page_plugin_content": true,
+		"reload_standalone_media_plugin_content": false,
 		
 		"enable_plugin_input_repeater": true,
 		"plugin_input_repeater_initial_wait": 15,

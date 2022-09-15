@@ -64,9 +64,11 @@ class RecordConfig(CommonConfig):
 	max_total_extra_missing_proxy_snapshot_tries: int
 	cache_missing_proxy_responses: bool
 
-	page_plugin_wait: int
 	page_cache_wait: int
 	standalone_media_cache_wait: int
+
+	plugin_load_wait: int
+	base_plugin_crash_timeout: int
 
 	viewport_scroll_percentage: float
 	base_wait_after_load: int
@@ -81,8 +83,8 @@ class RecordConfig(CommonConfig):
 	standalone_media_background_color: str
 
 	fullscreen_browser: bool
-	reload_plugin_media_before_recording: bool
-	base_plugin_crash_timeout: int
+	reload_page_plugin_content: bool
+	reload_standalone_media_plugin_content: bool
 	
 	enable_plugin_input_repeater: bool
 	plugin_input_repeater_initial_wait: int
@@ -928,7 +930,7 @@ if __name__ == '__main__':
 
 						# How much we wait before killing the plugins depends on how long we expect
 						# each phase (caching and recording) to last in the worst case scenario.
-						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.page_plugin_wait + cache_wait + proxy_wait
+						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.plugin_load_wait + cache_wait + proxy_wait
 
 						frame_text_list = []
 						realaudio_url = None
@@ -939,7 +941,7 @@ if __name__ == '__main__':
 							browser.go_to_wayback_url(content_url)
 
 							# Make sure the plugin instances had time to load.
-							time.sleep(config.page_plugin_wait)
+							time.sleep(config.plugin_load_wait)
 
 							# This may be less than the real value if we had to kill any plugin instances.
 							num_plugin_instances = browser.count_plugin_instances()
@@ -1085,7 +1087,7 @@ if __name__ == '__main__':
 						plugin_input_repeater: Union[PluginInputRepeater, ContextManager[None]] = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
 						cosmo_player_viewpoint_cycler: Union[CosmoPlayerViewpointCycler, ContextManager[None]] = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
 
-						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.page_plugin_wait + config.max_video_duration
+						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.max_video_duration
 						with PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout) as crash_timer:
 							
 							log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls_to_bottom} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
@@ -1093,8 +1095,8 @@ if __name__ == '__main__':
 
 							# Reloading the object, embed, and applet tags can yield good results when a page
 							# uses various plugins that can potentially start playing at different times.
-							if config.reload_plugin_media_before_recording:
-								browser.reload_plugin_media()
+							if (snapshot.IsStandaloneMedia and config.reload_standalone_media_plugin_content) or (not snapshot.IsStandaloneMedia and config.reload_page_plugin_content):
+								browser.reload_plugin_content()
 					
 							# Record the snapshot. The page should load faster now that its resources are cached.
 							with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
