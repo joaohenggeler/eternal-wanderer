@@ -1091,8 +1091,6 @@ if __name__ == '__main__':
 							log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls_to_bottom} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
 							browser.go_to_wayback_url(content_url)
 
-							time.sleep(config.page_plugin_wait)
-
 							# Reloading the object, embed, and applet tags can yield good results when a page
 							# uses various plugins that can potentially start playing at different times.
 							if config.reload_plugin_media_before_recording:
