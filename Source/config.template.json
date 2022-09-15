@@ -216,7 +216,7 @@
 		},
 		
 		"shockwave_renderer": "Auto",
-		
+
 		"show_java_console": false,
 		"add_java_to_path": true,
 		"java_arguments": ["-Dfile.encoding=UTF8", "-Duser.language=ja", "-Duser.country=JP"],
@@ -477,8 +477,8 @@
 		"base_standalone_media_wait_after_load": 2,
 
 		"standalone_media_fallback_duration": 45,
-		"standalone_media_width": "75%",
-		"standalone_media_height": "75%",
+		"standalone_media_width": "90%",
+		"standalone_media_height": "90%",
 		"standalone_media_background_color": "#000000",
 
 		"fullscreen_browser": true,
