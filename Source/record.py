@@ -367,17 +367,27 @@ if __name__ == '__main__':
 			self.failed = False
 			# Connecting a pipe to stdin is required to stop the recording by pressing Q.
 			# See: https://github.com/kkroening/ffmpeg-python/issues/162
-			self.process = self.stream.run_async(pipe_stdin=True)		
+			self.process = self.stream.run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)		
 
 		def stop(self) -> None:
 			""" Stops the ffmpeg screen capture process gracefully or kills it doesn't respond. """
 
 			try:
-				self.process.communicate(b'q', timeout=10)
+				output, error = self.process.communicate(b'q', timeout=10)
+				
+				for line in output.decode().splitlines():
+					log.info(f'FFmpeg output: {line}')
+				
+				for line in error.decode().splitlines():
+					log.warning(f'FFmpeg warning/error: {line}')
+			
 			except TimeoutExpired:
 				log.error('Failed to stop the recording gracefully.')
 				self.failed = True
 				self.process.kill()
+
+			except UnicodeDecodeError as error:
+				log.warning(f'Could not decode the ffmpeg output with the error: {repr(error)}')
 
 		def __enter__(self):
 			self.start()
@@ -902,9 +912,12 @@ if __name__ == '__main__':
 
 						log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} with {snapshot.Points} points (last published = {days_since_last_published} days ago).')
 						
-						browser.bring_to_front()
-						pywinauto.mouse.move((0, config.physical_screen_height // 2))
-						
+						try:
+							browser.bring_to_front()
+							pywinauto.mouse.move((0, config.physical_screen_height // 2))
+						except Exception as error:
+							log.error(f'Failed to focus on the browser window and move the mouse with the error: {repr(error)}')
+
 						missing_urls: List[str] = []
 
 						if config.enable_proxy:
@@ -1049,7 +1062,7 @@ if __name__ == '__main__':
 								width = round(rect.width() / config.width_dpi_scaling)
 								height = round(rect.height() / config.height_dpi_scaling)
 								
-								log.debug(f'Found a plugin instance with the size: {width}x{height}.')
+								log.debug(f'Found a plugin instance with a size of {width}x{height}.')
 
 						# Prepare the recording phase.
 
@@ -1061,8 +1074,12 @@ if __name__ == '__main__':
 						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, str(snapshot.OldestDatetime.year), str(snapshot.OldestDatetime.month).zfill(2), str(snapshot.OldestDatetime.day).zfill(2), media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
-						browser.bring_to_front()
-						pywinauto.mouse.move((0, config.physical_screen_height // 2))
+						try:
+							browser.bring_to_front()
+							pywinauto.mouse.move((0, config.physical_screen_height // 2))
+						except Exception as error:
+							log.error(f'Failed to focus on the browser window and move the mouse with the error: {repr(error)}')
+
 						browser.close_all_windows()
 
 						plugin_input_repeater: Union[PluginInputRepeater, ContextManager[None]] = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
