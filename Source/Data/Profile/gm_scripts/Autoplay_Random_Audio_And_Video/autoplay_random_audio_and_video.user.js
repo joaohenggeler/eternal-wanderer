@@ -167,8 +167,8 @@ function is_autoplaying(element)
 	const autoplay = attributes_map.get("autoplay");
 	const autostart = attributes_map.get("autostart");
 
-	// By default, the audio and video HTML5 tags do not start playing automatically. For the VLC plugin (i.e. the object and embed tags),
-	// any audio and video is played automatically by default.
+	// By default, the audio and video HTML5 tags do not start playing automatically.
+	// For the VLC plugin (i.e. the object and embed tags), any audio and video is played automatically by default.
 	const playing_by_default = ((autoplay == null && autostart == null) && (element.tagName === "OBJECT" || element.tagName === "EMBED"))
 							|| ((autoplay === "") && (element.tagName === "VIDEO" || element.tagName === "AUDIO"));
 
@@ -179,15 +179,15 @@ const tag_mime_types = new Map();
 tag_mime_types.set("audio", new RegExp("audio/.*", "i"));
 tag_mime_types.set("video", new RegExp("video/.*", "i"));
 
-const object_and_embed_tags = Array.from(document.querySelectorAll("object, embed"));
+const plugin_tags = Array.from(document.querySelectorAll("object, embed"));
 
 // For each type of tag (audio and video), make a random element start playing if there isn't one already doing so.
 // If that random element contains or is contained by an object or embed tag then these will also start playing.
 for(const [tag_name, mime_type_regex] of tag_mime_types)
 {
-	const object_and_embed_tags_with_mime_type = object_and_embed_tags.filter(element => object_embed_has_mime_type(element, mime_type_regex));
+	const plugin_tags_with_mime_type = plugin_tags.filter(element => object_embed_has_mime_type(element, mime_type_regex));
 	const regular_tags = Array.from(document.querySelectorAll(tag_name));
-	const tags = object_and_embed_tags_with_mime_type.concat(regular_tags);
+	const tags = plugin_tags_with_mime_type.concat(regular_tags);
 
 	const autoplaying = tags.some(is_autoplaying);
 	if(tags && tags.length && !autoplaying)
@@ -196,7 +196,7 @@ for(const [tag_name, mime_type_regex] of tag_mime_types)
 		const random_element = tags[random_index];
 		
 		// An element contains itself which works for our case since we want to iterate at least once below.
-		const elements_with_same_content = object_and_embed_tags_with_mime_type.filter(element => element.contains(random_element) || random_element.contains(element));
+		const elements_with_same_content = plugin_tags_with_mime_type.filter(element => element.contains(random_element) || random_element.contains(element));
 
 		// Take into account embed tags that are contained inside object tags (a common design pattern).
 		// In cases like these, we can assume that both tags are meant to be playing the same content.

@@ -95,7 +95,7 @@ if __name__ == '__main__':
 			log.error(f'Failed to initialize the Twitter API interface with the error: {repr(error)}')
 			sys.exit(1)
 
-		def publish_to_twitter(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, language: Optional[str]) -> Tuple[Optional[int], Optional[int]]:
+		def publish_to_twitter(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str) -> Tuple[Optional[int], Optional[int]]:
 			""" Publishes a snapshot recording and text-to-speech file to Twitter. The video recording is added to the main tweet along
 			with a message whose content is generated using the remaining arguments. The text-to-speech file is added as a reply to the
 			main tweet. If this file is too long for Twitter's video duration limit, then it's split across multiple replies. """
@@ -115,8 +115,7 @@ if __name__ == '__main__':
 					twitter_api.create_media_metadata(media_id, alt_text)
 				
 				max_title_length = max(config.twitter_max_post_length - len(body), 0)
-				title = title[:max_title_length]
-				text = f'{title}\n{body}'
+				text = f'{title[:max_title_length]}\n{body}'
 
 				status = twitter_api.update_status(text, media_ids=[media_id], possibly_sensitive=sensitive)
 				post_id = status.id
@@ -149,14 +148,12 @@ if __name__ == '__main__':
 							for i, segment_path in enumerate(segment_file_paths):
 									
 								tts_media = twitter_api.chunked_upload(filename=segment_path, file_type='video/mp4', media_category='TweetVideo')
-
-								tts_body = 'Text-to-Speech' if len(segment_file_paths) == 1 else f'Text-to-Speech {i+1} of {len(segment_file_paths)}'	
-								if language is not None:
-									tts_body += f' ({language})'
+	
+								if len(segment_file_paths) > 1:
+									tts_body += f'\n{i+1} of {len(segment_file_paths)}'
 								
 								max_title_length = max(config.twitter_max_post_length - len(tts_body), 0)
-								title = title[:max_title_length]
-								tts_text = f'{title}\n{tts_body}'
+								tts_text = f'{title[:max_title_length]}\n{tts_body}'
 
 								tts_status = twitter_api.update_status(tts_text, in_reply_to_status_id=last_post_id, media_ids=[tts_media.media_id], possibly_sensitive=sensitive)
 								last_post_id = tts_status.id
@@ -189,7 +186,7 @@ if __name__ == '__main__':
 			log.error(f'Failed to initialize the Mastodon API interface with the error: {repr(error)}')
 			sys.exit(1)
 
-		def publish_to_mastodon(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, language: Optional[str]) -> Tuple[Optional[int], Optional[int]]:
+		def publish_to_mastodon(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str) -> Tuple[Optional[int], Optional[int]]:
 			""" Publishes a snapshot recording and text-to-speech file to a given Mastodon instance. The video recording is added to the
 			main toot along with a message whose content is generated using the remaining arguments. The text-to-speech file is added
 			as a reply to the main toot. This function can optionally attempt to reduce both files' size before uploading them. If a
@@ -230,8 +227,7 @@ if __name__ == '__main__':
 					media_id = media.id
 
 					max_title_length = max(config.mastodon_max_post_length - len(body), 0)
-					title = title[:max_title_length]
-					text = f'{title}\n{body}'
+					text = f'{title[:max_title_length]}\n{body}'
 
 					status = mastodon_api.status_post(text, media_ids=[media_id], sensitive=sensitive)
 					post_id = status.id
@@ -249,14 +245,9 @@ if __name__ == '__main__':
 							if config.mastodon_max_file_size is None or tts_file_size <= config.mastodon_max_file_size:
 
 								tts_media = mastodon_api.media_post(tts_path, mime_type='video/mp4')
-								
-								tts_body = 'Text-to-Speech'
-								if language is not None:
-									tts_body += f' ({language})'
 
 								max_title_length = max(config.mastodon_max_post_length - len(tts_body), 0)
-								title = title[:max_title_length]
-								tts_text = f'{title}\n{tts_body}'
+								tts_text = f'{title[:max_title_length]}\n{tts_body}'
 
 								tts_status = mastodon_api.status_post(tts_text, in_reply_to_id=status, media_ids=[tts_media.id], sensitive=sensitive)
 
@@ -366,10 +357,14 @@ if __name__ == '__main__':
 					long_date = snapshot.OldestDatetime.strftime('%B %Y')
 					alt_text = f'The {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine.'
 					sensitive = config.flag_sensitive_snapshots and snapshot.IsSensitive
+					
 					language = config.language_names.get(snapshot.PageLanguage, snapshot.PageLanguage) if snapshot.PageLanguage is not None else None
-
-					twitter_media_id, twitter_post_id = publish_to_twitter(recording, title, body, alt_text, sensitive, language) if config.enable_twitter else (None, None)
-					mastodon_media_id, mastodon_post_id = publish_to_mastodon(recording, title, body, alt_text, sensitive, language) if config.enable_mastodon else (None, None)
+					tts_language = f'Text-to-Speech ({language})' if language is not None else 'Text-to-Speech'
+					tts_body_identifiers = [snapshot.ShortDate, tts_language]
+					tts_body = '\n'.join(filter(None, tts_body_identifiers))
+					
+					twitter_media_id, twitter_post_id = publish_to_twitter(recording, title, body, alt_text, sensitive, tts_body) if config.enable_twitter else (None, None)
+					mastodon_media_id, mastodon_post_id = publish_to_mastodon(recording, title, body, alt_text, sensitive, tts_body) if config.enable_mastodon else (None, None)
 
 					if config.delete_files_after_upload:
 						delete_file(recording.UploadFilePath)

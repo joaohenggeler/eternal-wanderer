@@ -33,7 +33,7 @@ from selenium.webdriver.common.utils import free_port # type: ignore
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
-from common import TEMPORARY_PATH_PREFIX, Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, clamp, container_to_lowercase, delete_file, get_current_timestamp, global_rate_limiter, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
+from common import TEMPORARY_PATH_PREFIX, Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, clamp, container_to_lowercase, delete_file, get_current_timestamp, global_rate_limiter, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered, xml_escape
 
 class RecordConfig(CommonConfig):
 	""" The configuration that applies to the recorder script. """
@@ -83,8 +83,7 @@ class RecordConfig(CommonConfig):
 	standalone_media_background_color: str
 
 	fullscreen_browser: bool
-	reload_page_plugin_content: bool
-	reload_standalone_media_plugin_content: bool
+	reload_plugin_content: bool
 	
 	enable_plugin_input_repeater: bool
 	plugin_input_repeater_initial_wait: int
@@ -367,8 +366,10 @@ if __name__ == '__main__':
 
 			log.debug(f'Recording with the ffmpeg arguments: {self.stream.get_args()}')
 			self.failed = False
+			
 			# Connecting a pipe to stdin is required to stop the recording by pressing Q.
 			# See: https://github.com/kkroening/ffmpeg-python/issues/162
+			# Connecting a pipe to stdout and stderr is useful to check for any ffmpeg error messages.
 			self.process = self.stream.run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)		
 
 		def stop(self) -> None:
@@ -584,7 +585,7 @@ if __name__ == '__main__':
 							pass
 
 				except Exception as error:
-					log.debug(f'Failed to send the input to the plugin windows with the error: {repr(error)}')
+					log.error(f'Failed to send the input to the plugin windows with the error: {repr(error)}')
 
 		def startup(self) -> None:
 			""" Starts the viewpoint cycler thread. """
@@ -624,7 +625,7 @@ if __name__ == '__main__':
 					for window in cosmo_player_windows:
 						window.send_keystrokes('{PGDN}')
 				except Exception as error:
-					log.debug(f'Failed to send the input to the Cosmo Player windows with the error: {repr(error)}')				
+					log.error(f'Failed to send the input to the Cosmo Player windows with the error: {repr(error)}')				
 
 	scheduler = BlockingScheduler()
 
@@ -961,7 +962,7 @@ if __name__ == '__main__':
 							if snapshot.IsStandaloneMedia:
 								scroll_height = 0
 								scroll_step = 0.0
-								num_scrolls_to_bottom = 0
+								num_scrolls = 0
 								wait_after_load = clamp(config.base_standalone_media_wait_after_load + media_duration, config.min_video_duration, config.max_video_duration)
 								wait_per_scroll = 0.0
 							else:
@@ -983,16 +984,16 @@ if __name__ == '__main__':
 								# in modern Mozilla and Chromium browsers.
 								# E.g. https://web.archive.org/web/20070122030542if_/http://www.youtube.com/index.php?v=6Gwn0ARKXgE
 								scroll_step = client_height * config.viewport_scroll_percentage
-								num_scrolls_to_bottom = ceil((scroll_height - client_height) / scroll_step)
+								num_scrolls = ceil((scroll_height - client_height) / scroll_step)
 
 								wait_after_load = config.base_wait_after_load + num_plugin_instances * config.wait_after_load_per_plugin_instance
 								wait_per_scroll = config.base_wait_per_scroll + num_plugin_instances * config.wait_after_scroll_per_plugin_instance
 
 								min_wait_after_load = max(config.min_video_duration, config.base_wait_after_load + min(num_plugin_instances, 1) * config.wait_after_load_per_plugin_instance)
-								max_wait_after_load = max(config.max_video_duration - num_scrolls_to_bottom * wait_per_scroll, 0)
+								max_wait_after_load = max(config.max_video_duration - num_scrolls * wait_per_scroll, 0)
 								wait_after_load = clamp(wait_after_load, min_wait_after_load, max_wait_after_load)
 						
-								max_wait_per_scroll = (max(config.max_video_duration - wait_after_load, 0) / num_scrolls_to_bottom) if num_scrolls_to_bottom > 0 else 0
+								max_wait_per_scroll = (max(config.max_video_duration - wait_after_load, 0) / num_scrolls) if num_scrolls > 0 else 0
 								wait_per_scroll = clamp(wait_per_scroll, 0, max_wait_per_scroll)
 
 							log.info(f'Waiting {cache_wait:.1f} seconds for the page to cache.')
@@ -1090,12 +1091,12 @@ if __name__ == '__main__':
 						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.max_video_duration
 						with PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout) as crash_timer:
 							
-							log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls_to_bottom} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
+							log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
 							browser.go_to_wayback_url(content_url)
 
 							# Reloading the object, embed, and applet tags can yield good results when a page
 							# uses various plugins that can potentially start playing at different times.
-							if (snapshot.IsStandaloneMedia and config.reload_standalone_media_plugin_content) or (not snapshot.IsStandaloneMedia and config.reload_page_plugin_content):
+							if config.reload_plugin_content:
 								browser.reload_plugin_content()
 					
 							# Record the snapshot. The page should load faster now that its resources are cached.
@@ -1103,9 +1104,11 @@ if __name__ == '__main__':
 							
 								time.sleep(wait_after_load)
 
-								for _ in range(num_scrolls_to_bottom):
+								for _ in range(num_scrolls):
+									
 									for _ in browser.traverse_frames():
 										driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
+									
 									time.sleep(wait_per_scroll)
 					
 						redirected = False
@@ -1243,7 +1246,7 @@ if __name__ == '__main__':
 							
 							# Add some context XML so the date is spoken correctly no matter the language.
 							# See: https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125665(v=vs.85)
-							title = f'Page Title: "{snapshot.PageTitle}"' if snapshot.PageTitle else 'Untitled Page'
+							title = xml_escape(f'Page Title: {snapshot.PageTitle}' if snapshot.PageTitle else 'Untitled Page')
 							year, month, day = snapshot.OldestDatetime.year, snapshot.OldestDatetime.month, snapshot.OldestDatetime.day
 							date = f'<context id="date_ymd">{year}/{month}/{day}</context>'
 							

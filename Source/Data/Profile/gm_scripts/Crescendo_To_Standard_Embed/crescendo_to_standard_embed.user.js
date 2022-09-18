@@ -93,9 +93,9 @@ function reload_object_embed(element)
 	}
 }
 
-const object_and_embed_tags = document.querySelectorAll("object[type='music/crescendo'], embed[type='music/crescendo']");
+const plugin_tags = document.querySelectorAll("object[type='music/crescendo'], embed[type='music/crescendo']");
 
-for(const element of object_and_embed_tags)
+for(const element of plugin_tags)
 {
 	// E.g. <embed type="music/crescendo" song="drummer1.mid" loop="true"> to <embed type="music/crescendo" song="drummer1.mid" src="drummer1.mid" loop="true">
 	// See: https://web.archive.org/web/20030812135126if_/http://www.liveupdate.com/cpauth.html

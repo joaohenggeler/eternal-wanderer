@@ -224,6 +224,8 @@
 		"show_cosmo_player_console": false,
 		"cosmo_player_renderer": "OpenGL",
 
+		"3dvia_renderer": "Auto",
+
 		"autoit_path": "Data/AutoIt",
 		"autoit_poll_frequency": 20,
 
@@ -484,8 +486,7 @@
 		"standalone_media_background_color": "#000000",
 
 		"fullscreen_browser": true,
-		"reload_page_plugin_content": true,
-		"reload_standalone_media_plugin_content": false,
+		"reload_plugin_content": true,
 		
 		"enable_plugin_input_repeater": true,
 		"plugin_input_repeater_initial_wait": 15,
@@ -497,7 +498,7 @@
 		"enable_cosmo_player_viewpoint_cycler": true,
 		"cosmo_player_viewpoint_wait_per_cycle": 8,
 
-		"min_video_duration": 2,
+		"min_video_duration": 3,
 		"max_video_duration": 138,
 		"keep_archive_copy": false,
 

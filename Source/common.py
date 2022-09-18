@@ -98,6 +98,8 @@ class CommonConfig():
 	show_cosmo_player_console: bool
 	cosmo_player_renderer: str
 
+	_3dvia_renderer: str
+
 	autoit_path: str
 	autoit_poll_frequency: int
 	autoit_scripts: Dict[str, bool]
@@ -153,8 +155,7 @@ class CommonConfig():
 		'standalone_media_height',
 		'standalone_media_background_color',
 		
-		'reload_page_plugin_content',
-		'reload_standalone_media_plugin_content',
+		'reload_plugin_content',
 		
 		'enable_plugin_input_repeater', 
 		'plugin_input_repeater_initial_wait',
@@ -201,6 +202,7 @@ class CommonConfig():
 
 		self.shockwave_renderer = self.shockwave_renderer.lower()
 		self.cosmo_player_renderer = self.cosmo_player_renderer.lower()
+		self._3dvia_renderer = getattr(self, '3dvia_renderer').lower()
 
 		def parse_domain_list(domain_list: List[str]) -> List[List[str]]:
 			""" Transforms a list of domain patterns into a list of each pattern's components. """
@@ -722,7 +724,7 @@ class Snapshot():
 		if self.MediaTitle and self.MediaAuthor:
 			self.DisplayMetadata = f'"{self.MediaTitle}" by "{self.MediaAuthor}"'
 		elif self.MediaTitle:
-			self.DisplayMetadata = self.MediaTitle
+			self.DisplayMetadata = f'"{self.MediaTitle}"'
 		elif self.MediaAuthor:
 			self.DisplayMetadata =  f'By "{self.MediaAuthor}"'
 		else:
@@ -921,6 +923,7 @@ class Browser():
 			self.configure_shockwave_player()
 			self.configure_java_plugin()
 			self.configure_cosmo_player()
+			self.configure_3dvia_player()
 		else:
 			os.environ['MOZ_PLUGIN_PATH'] = ''
 
@@ -1250,6 +1253,29 @@ class Browser():
 
 		except PermissionError:
 			log.error('Failed to set up the Cosmo Player since elevated privileges are required to temporarily set the necessary registry keys.')
+
+	def configure_3dvia_player(self) -> None:
+		""" Configures the 3DVIA Player by setting the appropriate registry keys. """
+
+		try:
+			# Prevent the update window from popping up every time a 3DVIA experience is loaded.
+			self.registry.set('HKEY_LOCAL_MACHINE\\SOFTWARE\\Virtools\\WebPlayer\\Config\\AutoUpdate', 0)
+
+			# 3DVIA Player Renderers:
+			#
+			# - 0 = Let the page decide
+			# - 1 = Force Hardware
+			# - 2 = Force Software
+
+			renderer = {'auto': 0, 'hardware': 1, 'software': 2}.get(config._3dvia_renderer)
+			assert renderer is not None, f'Unknown 3DVIA Player renderer "{config._3dvia_renderer}".'
+
+			self.registry.set('HKEY_LOCAL_MACHINE\\SOFTWARE\\Virtools\\WebPlayer\\Config\\ForceRenderMode', renderer)
+
+			# For future reference, the 3DVIA network settings are here: HKEY_CURRENT_USER\SOFTWARE\Virtools\Network
+
+		except PermissionError:
+			log.error('Failed to set up the 3DVIA Player since elevated privileges are required to temporarily set the necessary registry keys.')
 
 	def delete_user_level_java_properties(self) -> None:
 		""" Deletes the current user-level Java deployment properties file. """
@@ -1643,22 +1669,36 @@ class Browser():
 		try:
 			for _ in self.traverse_frames():
 				self.driver.execute_script(	'''
-											const SOURCE_ATTRIBUTES = ["data", "src", "target", "mrl", "filename", "code", "object"];
+											const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
 											
-											const object_tags = Array.from(document.getElementsByTagName("object"));
-											const embed_tags = Array.from(document.getElementsByTagName("embed"));
-											const applet_tags = Array.from(document.getElementsByTagName("applet"));
-
-											for(const element of object_tags.concat(embed_tags).concat(applet_tags))
+											const plugin_tags = document.querySelectorAll("object, embed, applet");
+											
+											for(const element of plugin_tags)
 											{
-												for(const source_attribute of SOURCE_ATTRIBUTES)
+												// If the element is using the VLC plugin and is currently being
+												// monitored so it doesn't play twice, then we need to ensure that
+												// the last known position matches with any changes we make here.
+												// See the Fix Vlc Embed user script for more details.
+												if("vlcLastPosition" in element.dataset)
 												{
-													if(element.hasAttribute(source_attribute)) element[source_attribute] += "";
-												}											
+													// Just changing the position doesn't make it start playing.
+													element.input.position = 0;
+													element.dataset.vlcLastPosition = element.input.position;
+												}
+												// Otherwise, if it's using a different plugin (Flash, MIDI, etc),
+												// if the Fix Vlc Embed user script is disabled, or if it's a VLC
+												// element that's supposed to loop, just reload it.
+												else
+												{
+													for(const source_attribute of SOURCE_ATTRIBUTES)
+													{
+														if(element.hasAttribute(source_attribute)) element[source_attribute] += "";
+													}
+												}
 											}
 											''')
 		except WebDriverException as error:
-			log.error(f'Failed to reload all plugin media with the error: {repr(error)}')
+			log.error(f'Failed to reload the plugin content with the error: {repr(error)}')
 
 	def toggle_fullscreen(self) -> None:
 		""" Toggles fullscreen Firefox. Does nothing if Firefox is running in headless mode. """
@@ -2124,6 +2164,12 @@ def delete_directory(path: str) -> bool:
 	except OSError:
 		success = False
 	return success
+
+def xml_escape(data: str) -> str:
+	""" Escapes a string containing XML data. """
+	for char, escaped in [('<', '&lt;'), ('>', '&gt;'), ('&', '&amp;'), ('\'', '&apos;'), ('"', '&quot;')]:
+		data = data.replace(char, escaped)
+	return data
 
 # Ignore the PyWinAuto warning about connecting to a 32-bit executable while using a 64-bit Python environment.
 warnings.simplefilter('ignore', category=UserWarning)

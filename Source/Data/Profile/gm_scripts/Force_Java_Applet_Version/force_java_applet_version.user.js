@@ -119,10 +119,9 @@ const applet_tags = Array.from(document.querySelectorAll("applet"));
 let object_and_embed_tags = Array.from(document.querySelectorAll("object, embed"));
 object_and_embed_tags = object_and_embed_tags.filter(object_embed_uses_java_plugin);
 
-const java_tags = applet_tags.concat(object_and_embed_tags);
-//const is_japanese_domain = is_current_domain_japanese();
+const plugin_tags = applet_tags.concat(object_and_embed_tags);
 
-for(const element of java_tags)
+for(const element of plugin_tags)
 {
 	// See: https://docs.oracle.com/javase/8/docs/technotes/guides/deploy/applet_dev_guide.html#JSDPG709
 	const attributes_map = new Map();

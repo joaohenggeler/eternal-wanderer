@@ -157,9 +157,9 @@ if(midplug_plugin)
 		}
 	}
 
-	const object_and_embed_tags = document.querySelectorAll("object, embed");
+	const plugin_tags = document.querySelectorAll("object, embed");
 	
-	for(const element of object_and_embed_tags)
+	for(const element of plugin_tags)
 	{
 		if(object_embed_uses_midplug_plugin(element))
 		{

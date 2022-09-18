@@ -93,75 +93,17 @@ function reload_object_embed(element)
 	}
 }
 
-const VLC_MIME_TYPES = new Map();
-const VLC_FILE_EXTENSIONS = new Map();
-
-function source_uses_vlc_plugin(source)
-{
-	let result = false;
-	
-	if(source)
-	{
-		const source_extension = source.split(".").pop();
-		if(source_extension !== source) result = VLC_FILE_EXTENSIONS.has(source_extension);
-	}
-
-	return result;
-}
-
-function object_embed_uses_vlc_plugin(element)
-{
-	let result = false;
-	const type = element.getAttribute("type");
-	
-	if(type) result = VLC_MIME_TYPES.has(type);
-
-	if(!result)
-	{
-		for(const source_attribute of SOURCE_ATTRIBUTES)
-		{
-			const source = element.getAttribute(source_attribute);
-			result = source_uses_vlc_plugin(source);
-			if(result) break;
-		}
-
-		const param_tags = element.querySelectorAll("param");
-		for(const param of param_tags)
-		{
-			const name = param.getAttribute("name");
-			const value = param.getAttribute("value");
-			if(SOURCE_ATTRIBUTES.some(source => name === source))
-			{
-				result = source_uses_vlc_plugin(value);
-				if(result) break;
-			}
-		}
-	}
-
-	return result;
-}
-
 const plugins = Array.from(navigator.plugins);
 const vlc_plugin = plugins.find(plugin => plugin.name.includes("VLC"));
 
 if(vlc_plugin)
 {
-	for(const mime_type of Array.from(vlc_plugin))
+	const plugin_tags = document.querySelectorAll("object, embed");
+
+	for(const element of plugin_tags)
 	{
-		if(mime_type.type) VLC_MIME_TYPES.set(mime_type.type, true);
-
-		const file_extensions = mime_type.suffixes.split(",");
-		for(const extension of file_extensions)
-		{
-			if(extension) VLC_FILE_EXTENSIONS.set(extension, true);
-		}
-	}
-
-	const object_and_embed_tags = document.querySelectorAll("object, embed");
-
-	for(const element of object_and_embed_tags)
-	{
-		if(object_embed_uses_vlc_plugin(element))
+		// Vetinari is the codename for VLC 3.x. Note that the web plugin was removed in VLC 4.x.
+		if(typeof(element.VersionInfo) === "string" && element.VersionInfo.includes("Vetinari"))
 		{
 			const attributes_map = new Map();
 			
@@ -198,13 +140,13 @@ if(vlc_plugin)
 				const vlc = event.currentTarget;
 				// If the user wants to restart the audio, then we no longer need to worry about
 				// preventing it from looping twice (see below).
-				if("intervalId" in vlc.dataset)
+				if("vlcIntervalId" in vlc.dataset)
 				{
-					clearInterval(Number(vlc.dataset.intervalId));
-					delete vlc.dataset.lastPosition;
-					delete vlc.dataset.intervalId;
+					clearInterval(Number(vlc.dataset.vlcIntervalId));
+					delete vlc.dataset.vlcLastPosition;
+					delete vlc.dataset.vlcIntervalId;
 				}
-				vlc.input.position = 0;
+				vlc.playlist.stop();
 				vlc.playlist.play();
 			});
 
@@ -228,22 +170,22 @@ if(vlc_plugin)
 			const loop = attributes_map.get("loop");
 			if(loop == null || loop === "false" || loop === "0")
 			{
-				element.dataset.lastPosition = "-1";
-				element.dataset.intervalId = setInterval(function(vlc)
+				element.dataset.vlcLastPosition = "-1";
+				element.dataset.vlcIntervalId = setInterval(function(vlc)
 				{
 					// Check if we've looped back around.
-					if(vlc.input.position < Number(vlc.dataset.lastPosition))
+					if(vlc.input.position < Number(vlc.dataset.vlcLastPosition))
 					{
+						// Stopping sets the position to -1.
 						vlc.playlist.stop();
-						vlc.input.position = -1;
 						if(LOG) console.log("Fix Vlc Embed - Stopped:", vlc);
-						clearInterval(Number(vlc.dataset.intervalId));
-						delete vlc.dataset.lastPosition;
-						delete vlc.dataset.intervalId;
+						clearInterval(Number(vlc.dataset.vlcIntervalId));
+						delete vlc.dataset.vlcLastPosition;
+						delete vlc.dataset.vlcIntervalId;
 					}
 					else
 					{
-						vlc.dataset.lastPosition = vlc.input.position;
+						vlc.dataset.vlcLastPosition = vlc.input.position;
 					}
 				}, 0, element);
 			}

@@ -5,6 +5,13 @@
 		<Include>*</Include>
 	</Script>
 	
+	<Script basedir="Add_Stylesheets_To_Wayback_Machine_Snapshots" checkRemoteUpdates="0" description="Adds one of two stylesheets to a Wayback Machine snapshot's page depending on its timestamp." enabled="true" filename="add_stylesheets_to_wayback_machine_snapshots.user.js" installTime="1654470000000" modified="1654470000000" name="Add Stylesheets To Wayback Machine Snapshots" namespace="" noframes="false" runAt="document-start" updateMetaStatus="unknown" uuid="16b9955c-9b07-4ba3-b2ef-215c39cb243c" version="1.0.0">
+		<Grant>GM_getResourceURL</Grant>
+		<Match>*://web.archive.org/web/*</Match>
+		<Resource name="CSS_98" filename="98.css" mimetype="text/css"/>
+		<Resource name="CSS_7" filename="7.css" mimetype="text/css"/>
+	</Script>
+
 	<Script basedir="Crescendo_To_Standard_Embed" checkRemoteUpdates="0" description="Converts non-standard Crescendo or LiveUpdate embed tags to standard ones." enabled="true" filename="crescendo_to_standard_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Crescendo To Standard Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="f242e428-d347-44a4-b2b2-ea6b89726f95" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
@@ -15,12 +22,12 @@
 		<Include>*</Include>
 	</Script>
 	
-	<Script basedir="Fix_Vlc_Embed" checkRemoteUpdates="0" description="Fixes an issue where a video meant to be played by the VLC plugin would be displayed in the wrong position on the page. Also fixes an issue where embedded audio that isn't supposed to loop is played twice by VLC. The first fix removes the video's controls so the script allows you to toggle pause by clicking on it. Videos can also be played from the beginning by right-clicking on them." enabled="true" filename="fix_vlc_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Fix Vlc Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="68eabf0f-f06e-44bb-b234-7a7c01a6e054" version="1.0.0">
+	<Script basedir="Autoplay_Random_Audio_And_Video" checkRemoteUpdates="0" description="Makes a random audio and video element start playing as soon as possible. This includes both the audio and video tags as well as any object and embed tags that specify audio and video MIME types." enabled="true" filename="autoplay_random_audio_and_video.user.js" installTime="1654470000000" modified="1654470000000" name="Autoplay Random Audio And Video" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="0302bf29-aa41-46d7-a4d9-15659cb98124" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
 	
-	<Script basedir="Autoplay_Random_Audio_And_Video" checkRemoteUpdates="0" description="Makes a random audio and video element start playing as soon as possible. This includes both the audio and video tags as well as any object and embed tags that specify audio and video MIME types." enabled="true" filename="autoplay_random_audio_and_video.user.js" installTime="1654470000000" modified="1654470000000" name="Autoplay Random Audio And Video" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="0302bf29-aa41-46d7-a4d9-15659cb98124" version="1.0.0">
+	<Script basedir="Fix_Vlc_Embed" checkRemoteUpdates="0" description="Fixes an issue where a video meant to be played by the VLC plugin would be displayed in the wrong position on the page. Also fixes an issue where embedded audio that isn't supposed to loop is played twice by VLC. The first fix removes the video's controls so the script allows you to toggle pause by clicking on it. Videos can also be played from the beginning by right-clicking on them." enabled="true" filename="fix_vlc_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Fix Vlc Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="68eabf0f-f06e-44bb-b234-7a7c01a6e054" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
@@ -35,11 +42,4 @@
 		<Include>*</Include>
 	</Script>
 	
-	<Script basedir="Add_Stylesheets_To_Wayback_Machine_Snapshots" checkRemoteUpdates="0" description="Adds one of two stylesheets to a Wayback Machine snapshot's page depending on its timestamp." enabled="true" filename="add_stylesheets_to_wayback_machine_snapshots.user.js" installTime="1654470000000" modified="1654470000000" name="Add Stylesheets To Wayback Machine Snapshots" namespace="" noframes="false" runAt="document-start" updateMetaStatus="unknown" uuid="16b9955c-9b07-4ba3-b2ef-215c39cb243c" version="1.0.0">
-		<Grant>GM_getResourceURL</Grant>
-		<Match>*://web.archive.org/web/*</Match>
-		<Resource name="CSS_98" filename="98.css" mimetype="text/css"/>
-		<Resource name="CSS_7" filename="7.css" mimetype="text/css"/>
-	</Script>
-
 </UserScriptConfig>
