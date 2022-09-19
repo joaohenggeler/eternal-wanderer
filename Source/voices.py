@@ -4,16 +4,13 @@ import subprocess
 import time
 from argparse import ArgumentParser
 
-from comtypes import COMError # type: ignore
-from comtypes.client import CreateObject # type: ignore
-
 from record import RecordConfig
 
 if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Lists and exports the voices used by the Microsoft Speech API.')
 	parser.add_argument('-list', action='store_true', help='List every voice visible to the Microsoft Speech API.')
-	parser.add_argument('-speak', action='store_true', help='Test each voice while they are being listed. Requires the -list option.')
+	parser.add_argument('-speak', metavar='VOICE', help='Test a voice while they are being listed. Use "all" to test every voice or a specific pattern (name, language, etc) to match the voice\'s description. For example, "spanish (mexico)" would test all Spanish (Mexico) voices. Requires the -list option.')
 	parser.add_argument('-registry', action='store_true', help='Export every installed voice registry key to a .REG file.')
 	args = parser.parse_args()
 
@@ -22,6 +19,9 @@ if __name__ == '__main__':
 
 	if args.speak and not args.list:
 		parser.error('The -speak option requires -list.')
+
+	from comtypes import COMError # type: ignore
+	from comtypes.client import CreateObject # type: ignore
 
 	config = RecordConfig()
 
@@ -58,7 +58,7 @@ if __name__ == '__main__':
 			info = f'[{i+1} of {len(voice_list)}] {name} / {language} / {gender} / {age} / {vendor} / {description}'
 			print(info)
 
-			if args.speak:
+			if args.speak == 'all' or args.speak.lower() in description.lower():
 				try:
 					engine.Voice = voice
 					engine.Speak(info)

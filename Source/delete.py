@@ -7,14 +7,14 @@ from argparse import ArgumentParser
 from glob import iglob
 from typing import List, Optional, Tuple
 
-from common import TEMPORARY_PATH_PREFIX, Database, Recording, TemporaryRegistry, delete_directory, delete_file
+from common import CommonConfig, Database, Recording, TemporaryRegistry, delete_directory, delete_file
 
 if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Deletes all video files belonging to unapproved and/or compiled recordings.')
 	parser.add_argument('-unapproved', action='store_true', help='Delete unapproved recordings (rejected or to be recorded again).')
 	parser.add_argument('-compiled', action='store_true', help='Delete published recordings that are part of a compilation.')
-	parser.add_argument('-temporary', action='store_true', help=f'Delete any temporary files or directories with the "{TEMPORARY_PATH_PREFIX}" prefix.')
+	parser.add_argument('-temporary', action='store_true', help=f'Delete any temporary files or directories with the "{CommonConfig.TEMPORARY_PATH_PREFIX}" prefix.')
 	parser.add_argument('-registry', action='store_true', help=f'Delete any leftover registry keys used by plugins. This option requires running the script with elevated privileges.')
 	args = parser.parse_args()
 
@@ -73,7 +73,7 @@ if __name__ == '__main__':
 				total_temporary = 0
 				num_temporary_deleted = 0
 				
-				temporary_search_path = os.path.join(tempfile.gettempdir(), TEMPORARY_PATH_PREFIX + '*')
+				temporary_search_path = os.path.join(tempfile.gettempdir(), CommonConfig.TEMPORARY_PATH_PREFIX + '*')
 				for i, path in enumerate(iglob(temporary_search_path)):
 					
 					total_temporary += 1

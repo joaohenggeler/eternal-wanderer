@@ -33,7 +33,7 @@ from selenium.webdriver.common.utils import free_port # type: ignore
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
-from common import TEMPORARY_PATH_PREFIX, Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, clamp, container_to_lowercase, delete_file, get_current_timestamp, global_rate_limiter, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
+from common import Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, clamp, container_to_lowercase, delete_file, get_current_timestamp, global_rate_limiter, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
 
 class RecordConfig(CommonConfig):
 	""" The configuration that applies to the recorder script. """
@@ -453,7 +453,7 @@ if __name__ == '__main__':
 				self.stream = CreateObject('SAPI.SpFileStream')
 				
 				# We have to close the temporary file so SpFileStream.Open() doesn't fail.
-				self.temporary_file = NamedTemporaryFile(mode='wb', prefix=TEMPORARY_PATH_PREFIX, suffix='.wav', delete=False)
+				self.temporary_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.wav', delete=False)
 				self.temporary_file.close()
 
 				try:
@@ -646,11 +646,11 @@ if __name__ == '__main__':
 				log.info('Initializing text-to-speech.')
 				text_to_speech = TextToSpeech()
 
-			standalone_media_page_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=TEMPORARY_PATH_PREFIX, suffix='.html', delete=False)
+			standalone_media_page_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.html', delete=False)
 			standalone_media_page_url = f'file:///{standalone_media_page_file.name}'
 			log.debug(f'Created the temporary standalone media page file "{standalone_media_page_file.name}".')
 
-			standalone_media_download_directory = TemporaryDirectory(prefix=TEMPORARY_PATH_PREFIX, suffix='.media')
+			standalone_media_download_directory = TemporaryDirectory(prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.media')
 			standalone_media_download_search_path = os.path.join(standalone_media_download_directory.name, '*')
 			log.debug(f'Created the temporary standalone media download directory "{standalone_media_download_directory.name}".')
 

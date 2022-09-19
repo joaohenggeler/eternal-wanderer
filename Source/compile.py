@@ -9,7 +9,7 @@ from typing import List, cast
 
 import ffmpeg # type: ignore
 
-from common import TEMPORARY_PATH_PREFIX, Database, Recording, Snapshot, delete_file, get_current_timestamp
+from common import CommonConfig, Database, Recording, Snapshot, delete_file, get_current_timestamp
 from record import RecordConfig
 
 if __name__ == '__main__':
@@ -166,8 +166,8 @@ if __name__ == '__main__':
 			if snapshots_and_recordings:
 
 				try:
-					transition_file = NamedTemporaryFile(mode='wb', prefix=TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
-					concat_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=TEMPORARY_PATH_PREFIX, suffix='.txt', delete=False)
+					transition_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
+					concat_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.txt', delete=False)
 
 					try:
 						template_recording = snapshots_and_recordings[0][1]

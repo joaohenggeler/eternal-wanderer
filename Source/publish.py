@@ -17,7 +17,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
 from mastodon import Mastodon, MastodonError # type: ignore
 from tweepy.errors import TweepyException # type: ignore
 
-from common import TEMPORARY_PATH_PREFIX, CommonConfig, Database, Recording, Snapshot, container_to_lowercase, delete_file, get_current_timestamp, setup_logger, was_exit_command_entered
+from common import CommonConfig, Database, Recording, Snapshot, container_to_lowercase, delete_file, get_current_timestamp, setup_logger, was_exit_command_entered
 
 class PublishConfig(CommonConfig):
 	""" The configuration that applies to the publisher script. """
@@ -129,7 +129,7 @@ if __name__ == '__main__':
 				if config.reply_with_text_to_speech and recording.TextToSpeechFilename is not None:
 
 					temporary_path = tempfile.gettempdir()
-					segment_path_format = os.path.join(temporary_path, TEMPORARY_PATH_PREFIX + '%04d.' + recording.TextToSpeechFilename)
+					segment_path_format = os.path.join(temporary_path, CommonConfig.TEMPORARY_PATH_PREFIX + '%04d.' + recording.TextToSpeechFilename)
 
 					stream = ffmpeg.input(recording.TextToSpeechFilePath)
 					stream = stream.output(segment_path_format, c='copy', f='segment', segment_time=config.twitter_text_to_speech_segment_duration, reset_timestamps=1)
@@ -202,7 +202,7 @@ if __name__ == '__main__':
 				""" Runs a video file through ffmpeg, potentially reducing its size before uploading it to the Mastodon instance. """
 				
 				# Closing the file right away makes it easier to delete it later.
-				output_file = NamedTemporaryFile(mode='wb', prefix=TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
+				output_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
 				output_file.close()
 
 				stream = ffmpeg.input(input_path)

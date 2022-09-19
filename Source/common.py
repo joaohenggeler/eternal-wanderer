@@ -46,8 +46,6 @@ from selenium.webdriver.support.ui import WebDriverWait # type: ignore
 from waybackpy import WaybackMachineCDXServerAPI as Cdx
 from waybackpy.cdx_snapshot import CDXSnapshot
 
-TEMPORARY_PATH_PREFIX = 'wanderer.'
-
 def container_to_lowercase(container: Union[list, dict]) -> Union[list, dict]:
 	""" Converts the elements of a list or keys of a dictionary to lowercase. """
 
@@ -135,6 +133,8 @@ class CommonConfig():
 	default_options: dict
 
 	# Constants.
+	TEMPORARY_PATH_PREFIX = 'wanderer.'
+
 	MUTABLE_OPTIONS = [
 		# For the recorder script.
 		'page_cache_wait',
