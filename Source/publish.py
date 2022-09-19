@@ -46,6 +46,7 @@ class PublishConfig(CommonConfig):
 	twitter_max_post_length: int
 	twitter_text_to_speech_segment_duration: int
 	twitter_max_text_to_speech_segments: Optional[int]
+	twitter_text_to_speech_upload_wait: int
 	
 	mastodon_instance_url: str
 	mastodon_access_token: str
@@ -146,7 +147,7 @@ if __name__ == '__main__':
 						if config.twitter_max_text_to_speech_segments is None or len(segment_file_paths) <= config.twitter_max_text_to_speech_segments:
 							
 							for i, segment_path in enumerate(segment_file_paths):
-									
+
 								tts_media = twitter_api.chunked_upload(filename=segment_path, file_type='video/mp4', media_category='TweetVideo')
 	
 								if len(segment_file_paths) > 1:

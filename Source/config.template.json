@@ -665,7 +665,7 @@
 
 		"twitter_max_post_length": 280,
 		"twitter_text_to_speech_segment_duration": 138,
-		"twitter_max_text_to_speech_segments": 13,
+		"twitter_max_text_to_speech_segments": 5,
 
 		"mastodon_instance_url": "<Instance URL>",
 		"mastodon_access_token": "<Access Token>",

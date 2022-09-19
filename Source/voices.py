@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
 import subprocess
+import time
 from argparse import ArgumentParser
 
+from comtypes import COMError # type: ignore
 from comtypes.client import CreateObject # type: ignore
 
 from record import RecordConfig
@@ -11,11 +13,15 @@ if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Lists and exports the voices used by the Microsoft Speech API.')
 	parser.add_argument('-list', action='store_true', help='List every voice visible to the Microsoft Speech API.')
+	parser.add_argument('-speak', action='store_true', help='Test each voice while they are being listed. Requires the -list option.')
 	parser.add_argument('-registry', action='store_true', help='Export every installed voice registry key to a .REG file.')
 	args = parser.parse_args()
 
 	if not any(vars(args).values()):
 		parser.error('No arguments provided.')
+
+	if args.speak and not args.list:
+		parser.error('The -speak option requires -list.')
 
 	config = RecordConfig()
 
@@ -49,7 +55,17 @@ if __name__ == '__main__':
 			vendor = voice.GetAttribute('Vendor')
 			description = voice.GetDescription()
 			
-			print(f'[{i+1} of {len(voice_list)}] {name} / {language} / {gender} / {age} / {vendor} / {description}')
+			info = f'[{i+1} of {len(voice_list)}] {name} / {language} / {gender} / {age} / {vendor} / {description}'
+			print(info)
+
+			if args.speak:
+				try:
+					engine.Voice = voice
+					engine.Speak(info)
+				except COMError as error:
+					print(f'Failed to test the voice "{name}" with the error: {repr(error)}')
+				finally:
+					time.sleep(1)
 
 		print()
 

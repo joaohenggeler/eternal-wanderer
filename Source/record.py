@@ -33,7 +33,7 @@ from selenium.webdriver.common.utils import free_port # type: ignore
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
-from common import TEMPORARY_PATH_PREFIX, Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, clamp, container_to_lowercase, delete_file, get_current_timestamp, global_rate_limiter, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered, xml_escape
+from common import TEMPORARY_PATH_PREFIX, Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, clamp, container_to_lowercase, delete_file, get_current_timestamp, global_rate_limiter, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
 
 class RecordConfig(CommonConfig):
 	""" The configuration that applies to the recorder script. """
@@ -489,7 +489,7 @@ if __name__ == '__main__':
 					if voice is not None:
 						self.language_to_voice[language] = voice
 
-			def generate_text_to_speech_file(self, intro: str, text: str, language: Optional[str], output_path_prefix: str) -> Optional[str]:
+			def generate_text_to_speech_file(self, title: str, date_xml: str, text: str, language: Optional[str], output_path_prefix: str) -> Optional[str]:
 				""" Generates a video file that contains the text-to-speech in the audio track and a blank screen on the video one.
 				The voice used by the Speech API is specified in the configuration file and depends on the page's language.
 				The correct voice packages have been installed on Windows, otherwise a default voice is used instead. """
@@ -503,7 +503,8 @@ if __name__ == '__main__':
 					self.stream.Open(self.temporary_file.name, SpeechLib.SSFMCreateForWrite)
 					self.engine.AudioOutputStream = self.stream
 					self.engine.Voice = self.language_to_voice[language]
-					self.engine.Speak(intro, SpeechLib.SVSFPurgeBeforeSpeak | SpeechLib.SVSFIsXML)
+					self.engine.Speak(title, SpeechLib.SVSFPurgeBeforeSpeak | SpeechLib.SVSFIsNotXML)
+					self.engine.Speak(date_xml, SpeechLib.SVSFPurgeBeforeSpeak | SpeechLib.SVSFIsXML)
 					self.engine.Speak(text, SpeechLib.SVSFPurgeBeforeSpeak | SpeechLib.SVSFIsNotXML)
 					self.stream.Close()
 
@@ -1246,13 +1247,12 @@ if __name__ == '__main__':
 							
 							# Add some context XML so the date is spoken correctly no matter the language.
 							# See: https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125665(v=vs.85)
-							title = xml_escape(f'Page Title: {snapshot.PageTitle}' if snapshot.PageTitle else 'Untitled Page')
+							title = f'Page Title: {snapshot.PageTitle}' if snapshot.PageTitle else 'Untitled Page'
 							year, month, day = snapshot.OldestDatetime.year, snapshot.OldestDatetime.month, snapshot.OldestDatetime.day
-							date = f'<context id="date_ymd">{year}/{month}/{day}</context>'
-							
-							page_intro = f'{title} ({date})'
-							page_text = '.\n'.join(frame_text_list)
-							text_to_speech_file_path = text_to_speech.generate_text_to_speech_file(page_intro, page_text, snapshot.PageLanguage, recording_path_prefix)
+							date_xml = f'<context id="date_ymd">{year}/{month}/{day}</context>'
+							text = '.\n'.join(frame_text_list)
+
+							text_to_speech_file_path = text_to_speech.generate_text_to_speech_file(title, date_xml, text, snapshot.PageLanguage, recording_path_prefix)
 
 							if text_to_speech_file_path is not None:
 								log.info(f'Saved the text-to-speech file to "{text_to_speech_file_path}".')

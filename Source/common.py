@@ -1685,15 +1685,10 @@ class Browser():
 													element.input.position = 0;
 													element.dataset.vlcLastPosition = element.input.position;
 												}
-												// Otherwise, if it's using a different plugin (Flash, MIDI, etc),
-												// if the Fix Vlc Embed user script is disabled, or if it's a VLC
-												// element that's supposed to loop, just reload it.
-												else
+
+												for(const source_attribute of SOURCE_ATTRIBUTES)
 												{
-													for(const source_attribute of SOURCE_ATTRIBUTES)
-													{
-														if(element.hasAttribute(source_attribute)) element[source_attribute] += "";
-													}
+													if(element.hasAttribute(source_attribute)) element[source_attribute] += "";
 												}
 											}
 											''')
@@ -2164,12 +2159,6 @@ def delete_directory(path: str) -> bool:
 	except OSError:
 		success = False
 	return success
-
-def xml_escape(data: str) -> str:
-	""" Escapes a string containing XML data. """
-	for char, escaped in [('<', '&lt;'), ('>', '&gt;'), ('&', '&amp;'), ('\'', '&apos;'), ('"', '&quot;')]:
-		data = data.replace(char, escaped)
-	return data
 
 # Ignore the PyWinAuto warning about connecting to a 32-bit executable while using a 64-bit Python environment.
 warnings.simplefilter('ignore', category=UserWarning)
