@@ -64,9 +64,9 @@ if __name__ == '__main__':
 			print()
 
 			queries = [
-				('Last Created', 'SELECT *, R.Id AS RecordingId, R.CreationTime AS LastTime FROM Snapshot S INNER JOIN Recording R ON S.Id = R.SnapshotId ORDER BY CreationTime DESC LIMIT 1;'),
-				('Last Published (Twitter)', 'SELECT *, R.Id AS RecordingId, R.PublishTime AS LastTime FROM Snapshot S INNER JOIN Recording R ON S.Id = R.SnapshotId WHERE TwitterPostId IS NOT NULL ORDER BY PublishTime DESC LIMIT 1;'),
-				('Last Published (Mastodon)', 'SELECT *, R.Id AS RecordingId, R.PublishTime AS LastTime FROM Snapshot S INNER JOIN Recording R ON S.Id = R.SnapshotId WHERE MastodonPostId IS NOT NULL ORDER BY PublishTime DESC LIMIT 1;'),
+				('Last Created', 'SELECT S.*, R.*, R.Id AS RecordingId, R.CreationTime AS LastTime FROM Snapshot S INNER JOIN Recording R ON S.Id = R.SnapshotId ORDER BY CreationTime DESC LIMIT 1;'),
+				('Last Published (Twitter)', 'SELECT S.*, R.*, R.Id AS RecordingId, R.PublishTime AS LastTime FROM Snapshot S INNER JOIN Recording R ON S.Id = R.SnapshotId WHERE TwitterStatusId IS NOT NULL ORDER BY PublishTime DESC LIMIT 1;'),
+				('Last Published (Mastodon)', 'SELECT S.*, R.*, R.Id AS RecordingId, R.PublishTime AS LastTime FROM Snapshot S INNER JOIN Recording R ON S.Id = R.SnapshotId WHERE MastodonStatusId IS NOT NULL ORDER BY PublishTime DESC LIMIT 1;'),
 			]
 
 			for name, query in queries:
@@ -82,8 +82,8 @@ if __name__ == '__main__':
 					recording = Recording(**row, Id=row['RecordingId'])
 
 					last_time = row['LastTime']
-					twitter_url = f'https://twitter.com/waybackwanderer/status/{recording.TwitterPostId}' if recording.TwitterPostId is not None else '-'
-					mastodon_url = f'https://botsin.space/web/@eternalwanderer/{recording.MastodonPostId}' if recording.MastodonPostId is not None else '-'
+					twitter_url = f'https://twitter.com/waybackwanderer/status/{recording.TwitterStatusId}' if recording.TwitterStatusId is not None else '-'
+					mastodon_url = f'https://botsin.space/web/@eternalwanderer/{recording.MastodonStatusId}' if recording.MastodonStatusId is not None else '-'
 
 					print(f'- {name}: {last_time}')
 					print(f'-> Snapshot: {snapshot}')

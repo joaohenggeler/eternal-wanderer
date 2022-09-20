@@ -12,6 +12,7 @@ import time
 from argparse import ArgumentParser
 from collections import Counter, defaultdict
 from contextlib import nullcontext
+from datetime import datetime
 from glob import iglob
 from math import ceil
 from queue import Queue
@@ -489,10 +490,15 @@ if __name__ == '__main__':
 					if voice is not None:
 						self.language_to_voice[language] = voice
 
-			def generate_text_to_speech_file(self, title: str, date_xml: str, text: str, language: Optional[str], output_path_prefix: str) -> Optional[str]:
+			def generate_text_to_speech_file(self, title: Optional[str], date: datetime, text: str, language: Optional[str], output_path_prefix: str) -> Optional[str]:
 				""" Generates a video file that contains the text-to-speech in the audio track and a blank screen on the video one.
 				The voice used by the Speech API is specified in the configuration file and depends on the page's language.
 				The correct voice packages have been installed on Windows, otherwise a default voice is used instead. """
+				
+				# Add some context XML so the date is spoken correctly no matter the language.
+				# See: https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125665(v=vs.85)
+				title = title or 'Untitled Page'
+				date_xml = f'<context id="date_ymd">{date.year}/{date.month}/{date.day}</context>'
 				
 				output_path: Optional[str] = output_path_prefix + (f'.tts.{language}.mp4' if language is not None else '.tts.mp4')
 
@@ -1092,25 +1098,28 @@ if __name__ == '__main__':
 						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.max_video_duration
 						with PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout) as crash_timer:
 							
+							# Record the snapshot. The page should load faster now that its resources are cached.
+							
 							log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
 							browser.go_to_wayback_url(content_url)
-
-							# Reloading the object, embed, and applet tags can yield good results when a page
-							# uses various plugins that can potentially start playing at different times.
-							if config.reload_plugin_content:
-								browser.reload_plugin_content()
-					
-							# Record the snapshot. The page should load faster now that its resources are cached.
-							with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
 							
-								time.sleep(wait_after_load)
+							with plugin_input_repeater, cosmo_player_viewpoint_cycler:
 
-								for _ in range(num_scrolls):
-									
-									for _ in browser.traverse_frames():
-										driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
-									
-									time.sleep(wait_per_scroll)
+								# Reloading the object, embed, and applet tags can yield good results when a page
+								# uses various plugins that can potentially start playing at different times.
+								if config.reload_plugin_content:
+									browser.reload_plugin_content()
+
+								with ScreenCapture(recording_path_prefix) as capture:
+							
+									time.sleep(wait_after_load)
+
+									for _ in range(num_scrolls):
+										
+										for _ in browser.traverse_frames():
+											driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
+										
+										time.sleep(wait_per_scroll)
 					
 						redirected = False
 						if not snapshot.IsStandaloneMedia:
@@ -1245,14 +1254,8 @@ if __name__ == '__main__':
 							
 							browser.go_to_blank_page_with_text('\N{Speech Balloon} Generating Text-to-Speech \N{Speech Balloon}', str(snapshot))
 							
-							# Add some context XML so the date is spoken correctly no matter the language.
-							# See: https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125665(v=vs.85)
-							title = f'Page Title: {snapshot.PageTitle}' if snapshot.PageTitle else 'Untitled Page'
-							year, month, day = snapshot.OldestDatetime.year, snapshot.OldestDatetime.month, snapshot.OldestDatetime.day
-							date_xml = f'<context id="date_ymd">{year}/{month}/{day}</context>'
-							text = '.\n'.join(frame_text_list)
-
-							text_to_speech_file_path = text_to_speech.generate_text_to_speech_file(title, date_xml, text, snapshot.PageLanguage, recording_path_prefix)
+							page_text = '.\n'.join(frame_text_list)
+							text_to_speech_file_path = text_to_speech.generate_text_to_speech_file(snapshot.PageTitle, snapshot.OldestDatetime, page_text, snapshot.PageLanguage, recording_path_prefix)
 
 							if text_to_speech_file_path is not None:
 								log.info(f'Saved the text-to-speech file to "{text_to_speech_file_path}".')

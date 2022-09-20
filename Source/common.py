@@ -565,9 +565,9 @@ class Database():
 									CreationTime TIMESTAMP NOT NULL,
 									PublishTime TIMESTAMP,
 									TwitterMediaId INTEGER,
-									TwitterPostId INTEGER,
+									TwitterStatusId INTEGER,
 									MastodonMediaId INTEGER,
-									MastodonPostId INTEGER,
+									MastodonStatusId INTEGER,
 
 									FOREIGN KEY (SnapshotId) REFERENCES Snapshot (Id)
 								);
@@ -758,9 +758,9 @@ class Recording():
 	CreationTime: str
 	PublishTime: Optional[str]
 	TwitterMediaId: Optional[int]
-	TwitterPostId: Optional[int]
+	TwitterStatusId: Optional[int]
 	MastodonMediaId: Optional[int]
-	MastodonPostId: Optional[int]
+	MastodonStatusId: Optional[int]
 
 	# Determined at runtime.
 	UploadFilePath: str

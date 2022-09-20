@@ -303,7 +303,7 @@
 	"scout":
 	{
 		"scheduler": {"day_of_week": "mon-sat", "hour": 0},
-		"num_snapshots_per_scheduled_batch": 500,
+		"num_snapshots_per_scheduled_batch": 1000,
 
 		"extension_filter": ["greasemonkey-3.17-fx.xpi"],
 		"user_script_filter": ["Disable Alert Confirm Prompt"],
@@ -661,7 +661,7 @@
 		"twitter_access_token_secret": "<Access Token Secret>",
 		
 		"twitter_max_retries": 10,
-		"twitter_retry_wait": 60,
+		"twitter_retry_wait": 30,
 
 		"twitter_max_post_length": 280,
 		"twitter_text_to_speech_segment_duration": 138,
@@ -669,6 +669,9 @@
 
 		"mastodon_instance_url": "<Instance URL>",
 		"mastodon_access_token": "<Access Token>",
+
+		"mastodon_max_retries": 10,
+		"mastodon_retry_wait": 30,
 
 		"mastodon_max_post_length": 500,
 		"mastodon_max_file_size": 40,

@@ -63,7 +63,7 @@ if __name__ == '__main__':
 					engine.Voice = voice
 					engine.Speak(info)
 				except COMError as error:
-					print(f'Failed to test the voice "{name}" with the error: {repr(error)}')
+					print(f'Failed to test the voice "{description}" with the error: {repr(error)}')
 				finally:
 					time.sleep(1)
 
