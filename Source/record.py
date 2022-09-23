@@ -56,14 +56,14 @@ class RecordConfig(CommonConfig):
 	proxy_port: Optional[int]
 	proxy_queue_timeout: int
 	proxy_total_timeout: int
-	block_proxy_requests_outside_archive_org: bool
-	convert_realmedia_metadata_proxy_snapshots: bool
-	find_missing_proxy_snapshots_using_cdx: bool
-	max_missing_proxy_snapshot_path_components: Optional[int]
-	save_missing_proxy_snapshots_that_still_exist_online: bool 
-	max_consecutive_extra_missing_proxy_snapshot_tries: int
-	max_total_extra_missing_proxy_snapshot_tries: int
-	cache_missing_proxy_responses: bool
+	proxy_block_requests_outside_internet_archive: bool
+	proxy_convert_realmedia_metadata_snapshots: bool
+	proxy_find_missing_snapshots_using_cdx: bool
+	proxy_max_cdx_path_components: Optional[int]
+	proxy_save_missing_snapshots_that_still_exist_online: bool 
+	proxy_max_consecutive_save_tries: int
+	proxy_max_total_save_tries: int
+	proxy_cache_missing_responses: bool
 
 	page_cache_wait: int
 	standalone_media_cache_wait: int
@@ -84,20 +84,20 @@ class RecordConfig(CommonConfig):
 	standalone_media_background_color: str
 
 	fullscreen_browser: bool
-	reload_plugin_content: bool
+	sync_plugin_content: bool
 	
 	enable_plugin_input_repeater: bool
 	plugin_input_repeater_initial_wait: int
 	plugin_input_repeater_wait_per_cycle: int
-	min_plugin_input_repeater_window_size: int
+	plugin_input_repeater_min_window_size: int
 	plugin_input_repeater_keystrokes: str
-	plugin_input_repeater_debug_highlight: bool
+	plugin_input_repeater_debug: bool
 
 	enable_cosmo_player_viewpoint_cycler: bool
 	cosmo_player_viewpoint_wait_per_cycle: int
 
-	min_video_duration: int
-	max_video_duration: int
+	min_duration: int
+	max_duration: int
 	keep_archive_copy: bool
 	screen_capture_recorder_settings: Dict[str, Optional[int]]
 	
@@ -134,8 +134,8 @@ class RecordConfig(CommonConfig):
 		self.allowed_standalone_media_extensions = {extension: True for extension in container_to_lowercase(self.allowed_standalone_media_extensions)}
 		self.nondownloadable_standalone_media_extensions = {extension: True for extension in container_to_lowercase(self.nondownloadable_standalone_media_extensions)}
 
-		if self.max_missing_proxy_snapshot_path_components is not None:
-			self.max_missing_proxy_snapshot_path_components = max(self.max_missing_proxy_snapshot_path_components, 1)
+		if self.proxy_max_cdx_path_components is not None:
+			self.proxy_max_cdx_path_components = max(self.proxy_max_cdx_path_components, 1)
 
 		self.screen_capture_recorder_settings = container_to_lowercase(self.screen_capture_recorder_settings)
 		
@@ -356,7 +356,7 @@ if __name__ == '__main__':
 			self.upload_recording_path = output_path_prefix + '.mp4'
 			self.archive_recording_path = output_path_prefix + '.mkv'
 
-			stream = ffmpeg.input(config.ffmpeg_recording_input_name, t=config.max_video_duration, **config.ffmpeg_recording_input_args)
+			stream = ffmpeg.input(config.ffmpeg_recording_input_name, t=config.max_duration, **config.ffmpeg_recording_input_args)
 			stream = stream.output(self.raw_recording_path, **config.ffmpeg_recording_output_args)
 			stream = stream.global_args(*config.ffmpeg_global_args)
 			stream = stream.overwrite_output()
@@ -490,14 +490,13 @@ if __name__ == '__main__':
 					if voice is not None:
 						self.language_to_voice[language] = voice
 
-			def generate_text_to_speech_file(self, title: Optional[str], date: datetime, text: str, language: Optional[str], output_path_prefix: str) -> Optional[str]:
+			def generate_text_to_speech_file(self, title: str, date: datetime, text: str, language: Optional[str], output_path_prefix: str) -> Optional[str]:
 				""" Generates a video file that contains the text-to-speech in the audio track and a blank screen on the video one.
 				The voice used by the Speech API is specified in the configuration file and depends on the page's language.
 				The correct voice packages have been installed on Windows, otherwise a default voice is used instead. """
 				
 				# Add some context XML so the date is spoken correctly no matter the language.
 				# See: https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125665(v=vs.85)
-				title = title or 'Untitled Page'
 				date_xml = f'<context id="date_ymd">{date.year}/{date.month}/{date.day}</context>'
 				
 				output_path: Optional[str] = output_path_prefix + (f'.tts.{language}.mp4' if language is not None else '.tts.mp4')
@@ -568,11 +567,6 @@ if __name__ == '__main__':
 
 				try:
 					plugin_windows = self.firefox_window.children(class_name='GeckoPluginWindow')
-					
-					if config.debug and config.plugin_input_repeater_debug_highlight:
-						for window in plugin_windows:
-							window.draw_outline(next(self.debug_highlight_colors))
-
 					plugin_windows += self.firefox_window.children(class_name='ImlWinCls')
 					plugin_windows += self.firefox_window.children(class_name='ImlWinClsSw10')
 					plugin_windows += self.firefox_window.children(class_name='SunAwtCanvas')
@@ -583,8 +577,14 @@ if __name__ == '__main__':
 							rect = window.rectangle()
 							width = round(rect.width() / config.width_dpi_scaling)
 							height = round(rect.height() / config.height_dpi_scaling)
-							
-							if width >= config.min_plugin_input_repeater_window_size and height >= config.min_plugin_input_repeater_window_size:
+							interactable = width >= config.plugin_input_repeater_min_window_size and height >= config.plugin_input_repeater_min_window_size
+
+							if config.debug and config.plugin_input_repeater_debug:
+								color = 'green' if interactable else 'red'
+								window.draw_outline(color)
+								window.debug_message(f'{width}x{height}')
+
+							if interactable:
 								window.click()
 								window.send_keystrokes(config.plugin_input_repeater_keystrokes)
 
@@ -970,7 +970,7 @@ if __name__ == '__main__':
 								scroll_height = 0
 								scroll_step = 0.0
 								num_scrolls = 0
-								wait_after_load = clamp(config.base_standalone_media_wait_after_load + media_duration, config.min_video_duration, config.max_video_duration)
+								wait_after_load = clamp(config.base_standalone_media_wait_after_load + media_duration, config.min_duration, config.max_duration)
 								wait_per_scroll = 0.0
 							else:
 								scroll_height = 0
@@ -996,11 +996,11 @@ if __name__ == '__main__':
 								wait_after_load = config.base_wait_after_load + num_plugin_instances * config.wait_after_load_per_plugin_instance
 								wait_per_scroll = config.base_wait_per_scroll + num_plugin_instances * config.wait_after_scroll_per_plugin_instance
 
-								min_wait_after_load = max(config.min_video_duration, config.base_wait_after_load + min(num_plugin_instances, 1) * config.wait_after_load_per_plugin_instance)
-								max_wait_after_load = max(config.max_video_duration - num_scrolls * wait_per_scroll, 0)
+								min_wait_after_load = max(config.min_duration, config.base_wait_after_load + min(num_plugin_instances, 1) * config.wait_after_load_per_plugin_instance)
+								max_wait_after_load = max(config.max_duration - num_scrolls * wait_per_scroll, 0)
 								wait_after_load = clamp(wait_after_load, min_wait_after_load, max_wait_after_load)
 						
-								max_wait_per_scroll = (max(config.max_video_duration - wait_after_load, 0) / num_scrolls) if num_scrolls > 0 else 0
+								max_wait_per_scroll = (max(config.max_duration - wait_after_load, 0) / num_scrolls) if num_scrolls > 0 else 0
 								wait_per_scroll = clamp(wait_per_scroll, 0, max_wait_per_scroll)
 
 							log.info(f'Waiting {cache_wait:.1f} seconds for the page to cache.')
@@ -1026,8 +1026,8 @@ if __name__ == '__main__':
 										log.debug(message)
 										
 										response_match = Proxy.RESPONSE_REGEX.fullmatch(message)
-										save_match = Proxy.SAVE_REGEX.fullmatch(message) if config.save_missing_proxy_snapshots_that_still_exist_online else None
-										realaudio_match = Proxy.REALAUDIO_REGEX.fullmatch(message) if config.convert_realmedia_metadata_proxy_snapshots else None
+										save_match = Proxy.SAVE_REGEX.fullmatch(message) if config.proxy_save_missing_snapshots_that_still_exist_online else None
+										realaudio_match = Proxy.REALAUDIO_REGEX.fullmatch(message) if config.proxy_convert_realmedia_metadata_snapshots else None
 
 										if response_match is not None:
 											
@@ -1056,7 +1056,7 @@ if __name__ == '__main__':
 						if snapshot.IsStandaloneMedia and realaudio_url is not None:
 							log.info(f'Regenerating the standalone media page for the RealAudio file "{realaudio_url}".')
 							media_duration, media_title, media_author, success = generate_standalone_media_page(realaudio_url)
-							wait_after_load = clamp(config.base_standalone_media_wait_after_load + media_duration, config.min_video_duration, config.max_video_duration)
+							wait_after_load = clamp(config.base_standalone_media_wait_after_load + media_duration, config.min_duration, config.max_duration)
 
 							if not success:
 								log.error(f'Failed to download the RealAudio file.')
@@ -1095,31 +1095,30 @@ if __name__ == '__main__':
 						plugin_input_repeater: Union[PluginInputRepeater, ContextManager[None]] = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
 						cosmo_player_viewpoint_cycler: Union[CosmoPlayerViewpointCycler, ContextManager[None]] = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
 
-						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.max_video_duration
+						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.max_duration
 						with PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout) as crash_timer:
 							
 							# Record the snapshot. The page should load faster now that its resources are cached.
 							
 							log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
 							browser.go_to_wayback_url(content_url)
-							
-							with plugin_input_repeater, cosmo_player_viewpoint_cycler:
 
-								# Reloading the object, embed, and applet tags can yield good results when a page
-								# uses various plugins that can potentially start playing at different times.
-								if config.reload_plugin_content:
+							if config.sync_plugin_content:
+								browser.unload_plugin_content()
+
+							with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
+							
+								if config.sync_plugin_content:
 									browser.reload_plugin_content()
 
-								with ScreenCapture(recording_path_prefix) as capture:
-							
-									time.sleep(wait_after_load)
+								time.sleep(wait_after_load)
 
-									for _ in range(num_scrolls):
-										
-										for _ in browser.traverse_frames():
-											driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
-										
-										time.sleep(wait_per_scroll)
+								for _ in range(num_scrolls):
+									
+									for _ in browser.traverse_frames():
+										driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
+									
+									time.sleep(wait_per_scroll)
 					
 						redirected = False
 						if not snapshot.IsStandaloneMedia:
@@ -1141,7 +1140,7 @@ if __name__ == '__main__':
 							log.info(f'Saved the recording to "{capture.upload_recording_path}".')
 							state = Snapshot.RECORDED
 
-						if config.save_missing_proxy_snapshots_that_still_exist_online:
+						if config.proxy_save_missing_snapshots_that_still_exist_online:
 
 							if missing_urls:
 								log.info(f'Locating files based on {len(missing_urls)} missing URLs.')
@@ -1172,9 +1171,9 @@ if __name__ == '__main__':
 								extension = match.group('extension')
 
 								num_consecutive_misses = 0
-								for num in range(config.max_total_extra_missing_proxy_snapshot_tries):
+								for num in range(config.proxy_max_total_save_tries):
 
-									if num_consecutive_misses >= config.max_consecutive_extra_missing_proxy_snapshot_tries:
+									if num_consecutive_misses >= config.proxy_max_consecutive_save_tries:
 										break
 
 									# Increment the value between the filename and extension.
@@ -1200,7 +1199,7 @@ if __name__ == '__main__':
 									# Avoid getting stuck in an infinite loop because the original
 									# domain is parked, meaning there's potentially a valid response
 									# for every possible consecutive number.
-									log.warning(f'Stopping the search for more missing URLs after {config.max_total_extra_missing_proxy_snapshot_tries} tries.')
+									log.warning(f'Stopping the search for more missing URLs after {config.proxy_max_total_save_tries} tries.')
 
 							missing_urls = list(extra_missing_urls)
 							saved_urls = []
@@ -1255,7 +1254,7 @@ if __name__ == '__main__':
 							browser.go_to_blank_page_with_text('\N{Speech Balloon} Generating Text-to-Speech \N{Speech Balloon}', str(snapshot))
 							
 							page_text = '.\n'.join(frame_text_list)
-							text_to_speech_file_path = text_to_speech.generate_text_to_speech_file(snapshot.PageTitle, snapshot.OldestDatetime, page_text, snapshot.PageLanguage, recording_path_prefix)
+							text_to_speech_file_path = text_to_speech.generate_text_to_speech_file(snapshot.DisplayTitle, snapshot.OldestDatetime, page_text, snapshot.PageLanguage, recording_path_prefix)
 
 							if text_to_speech_file_path is not None:
 								log.info(f'Saved the text-to-speech file to "{text_to_speech_file_path}".')
@@ -1303,7 +1302,7 @@ if __name__ == '__main__':
 							log.info(f'Detected {num_plugin_instances} plugin instances while no embed tags were found during scouting.')
 							db.execute('UPDATE Snapshot SET PageUsesPlugins = :page_uses_plugins WHERE Id = :id;', {'page_uses_plugins': True, 'id': snapshot.Id})
 
-						if config.save_missing_proxy_snapshots_that_still_exist_online:
+						if config.proxy_save_missing_snapshots_that_still_exist_online:
 							db.executemany(	'''
 											INSERT INTO SavedUrl (SnapshotId, RecordingId, Url, Timestamp, Failed)
 											VALUES (:snapshot_id, :recording_id, :url, :timestamp, :failed)
@@ -1324,6 +1323,11 @@ if __name__ == '__main__':
 		except KeyboardInterrupt:
 			log.warning('Detected a keyboard interrupt when these should not be used to terminate the recorder due to a bug when using both Windows and the Firefox WebDriver.')
 		finally:
+			raw_search_path = os.path.join(config.recordings_path, '**', '*.raw.mkv')
+			for path in iglob(raw_search_path, recursive=True):
+				log.info(f'Deleting the temporary raw recording file "{path}".')
+				delete_file(path)
+
 			standalone_media_page_file.close()
 			delete_file(standalone_media_page_file.name)
 			

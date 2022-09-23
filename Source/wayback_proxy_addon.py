@@ -60,7 +60,7 @@ def request(flow: http.HTTPFlow) -> None:
 	
 	request = flow.request
 
-	if config.block_proxy_requests_outside_archive_org and not is_url_from_domain(request.url, 'archive.org'):
+	if config.proxy_block_requests_outside_internet_archive and not is_url_from_domain(request.url, 'archive.org'):
 		flow.kill()
 		return
 
@@ -82,7 +82,7 @@ def request(flow: http.HTTPFlow) -> None:
 	
 	extracted_realaudio_url = False
 
-	if config.convert_realmedia_metadata_proxy_snapshots:
+	if config.proxy_convert_realmedia_metadata_snapshots:
 		
 		parts = urlparse(wayback_parts.Url)
 		_, file_extension = os.path.splitext(parts.path)
@@ -132,7 +132,7 @@ def request(flow: http.HTTPFlow) -> None:
 			except (requests.RequestException, UnicodeError):
 				pass
 
-	if config.find_missing_proxy_snapshots_using_cdx or config.save_missing_proxy_snapshots_that_still_exist_online:
+	if config.proxy_find_missing_snapshots_using_cdx or config.proxy_save_missing_snapshots_that_still_exist_online:
 		try:
 			# E.g.
 			# - https://web.archive.org/web/20020120142510if_/http://example.com/, allow_redirects=False -> 200
@@ -156,7 +156,7 @@ def request(flow: http.HTTPFlow) -> None:
 
 	cdx_mark = None
 
-	if config.find_missing_proxy_snapshots_using_cdx and wayback_response is not None:
+	if config.proxy_find_missing_snapshots_using_cdx and wayback_response is not None:
 
 		if not found_snapshot:
 			
@@ -165,8 +165,8 @@ def request(flow: http.HTTPFlow) -> None:
 			split_path = parts.path.split('/')
 
 			# E.g. "http://www.example.com/path1/path2/file.ext" -> "/path2/file.ext" (2 components).
-			if config.max_missing_proxy_snapshot_path_components is not None:
-				path = '/'.join(split_path[-config.max_missing_proxy_snapshot_path_components:])
+			if config.proxy_max_cdx_path_components is not None:
+				path = '/'.join(split_path[-config.proxy_max_cdx_path_components:])
 			else:
 				path = parts.path
 
@@ -228,7 +228,7 @@ def request(flow: http.HTTPFlow) -> None:
 				cdx_mark = 'NO CDX'
 
 	redirect_to_original = False
-	if config.save_missing_proxy_snapshots_that_still_exist_online and wayback_response is not None:
+	if config.proxy_save_missing_snapshots_that_still_exist_online and wayback_response is not None:
 
 		if not found_snapshot and is_url_available(wayback_parts.Url):
 			
@@ -304,7 +304,7 @@ def response(flow: http.HTTPFlow) -> None:
 	with lock:
 		print(f'[RESPONSE] [{response.status_code}] [{mark}] [{content_type}] [{request.url}] [{flow.id}]')
 
-	if config.cache_missing_proxy_responses and response.status_code in [404, 410]:
+	if config.proxy_cache_missing_responses and response.status_code in [404, 410]:
 		response.headers['cache-control'] = 'public; max-age=3600'
 
 	if config.debug:

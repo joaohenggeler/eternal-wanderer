@@ -89,12 +89,14 @@ class CommonConfig():
 
 	shockwave_renderer: str
 	
-	show_java_console: bool
-	add_java_to_path: bool
+	java_show_console: bool
+	java_add_to_path: bool
 	java_arguments: List[str]
 
-	show_cosmo_player_console: bool
+	cosmo_player_show_console: bool
 	cosmo_player_renderer: str
+	cosmo_player_high_quality: bool
+	cosmo_player_animate_transitions: bool
 
 	_3dvia_renderer: str
 
@@ -155,19 +157,19 @@ class CommonConfig():
 		'standalone_media_height',
 		'standalone_media_background_color',
 		
-		'reload_plugin_content',
+		'sync_plugin_content',
 		
 		'enable_plugin_input_repeater', 
 		'plugin_input_repeater_initial_wait',
 		'plugin_input_repeater_wait_per_cycle',
-		'min_plugin_input_repeater_window_size',
+		'plugin_input_repeater_min_window_size',
 		'plugin_input_repeater_keystrokes',
 		
 		'enable_cosmo_player_viewpoint_cycler',
 		'cosmo_player_viewpoint_wait_per_cycle',
 
-		'min_video_duration',
-		'max_video_duration',
+		'min_duration',
+		'max_duration',
 
 		# For the publisher script.
 		'show_standalone_media_metadata',
@@ -1073,7 +1075,7 @@ class Browser():
 		java_lib_path = os.path.join(java_jre_path, 'lib')
 		java_bin_path = os.path.join(java_jre_path, 'bin')
 
-		if config.add_java_to_path:
+		if config.java_add_to_path:
 			path = os.environ.get('PATH', '')
 			os.environ['PATH'] = f'{java_bin_path};{path}'
 
@@ -1116,7 +1118,7 @@ class Browser():
 		content = content.replace('{jre_version}', java_version)
 		content = content.replace('{security_level}', 'LOW' if java_product <= '1.7.0_17' else 'MEDIUM')
 		content = content.replace('{exception_sites_path}', escape_java_deployment_properties_path(java_exception_sites_path))
-		content = content.replace('{console_startup}', 'SHOW' if config.show_java_console else 'NEVER')
+		content = content.replace('{console_startup}', 'SHOW' if config.java_show_console else 'NEVER')
 
 		with open(java_properties_path, 'w', encoding='utf-8') as file:
 			file.write(content)
@@ -1237,8 +1239,13 @@ class Browser():
 		SETTINGS_REGISTRY_KEYS: Dict[str, Union[int, str]] = {
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\PANEL_MAXIMIZED': 0, # Minimize dashboard.
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\renderer': renderer, # See above.
-			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\showConsoleType': 2 if config.show_cosmo_player_console else 0, # Show or hide console on startup.
-			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\textureQuality': 1, # Best quality.
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\showConsoleType': 2 if config.cosmo_player_show_console else 0, # Console on startup (hide = 0, show = 2).
+			
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\textureQuality': 1 if config.cosmo_player_high_quality else 2, # Texture quality (auto = 0, best = 1, fastest = 2).
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\transparency': 1 if config.cosmo_player_high_quality else 0, # Nice transparency (off = 0, on = 1).
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\twoPassTextures': 1 if config.cosmo_player_high_quality else 0, # Enable specular and emissive color shine-through on textured objects (off = 0, on = 1).
+		
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\animate': 1 if config.cosmo_player_animate_transitions else 0, # Animate transitions between viewpoints (off = 0, on = 1). 
 		}
 
 		try:
@@ -1256,6 +1263,8 @@ class Browser():
 
 	def configure_3dvia_player(self) -> None:
 		""" Configures the 3DVIA Player by setting the appropriate registry keys. """
+
+		log.info('Configuring the 3DVIA Player.')
 
 		try:
 			# Prevent the update window from popping up every time a 3DVIA experience is loaded.
@@ -1321,11 +1330,6 @@ class Browser():
 		temporary_search_path = os.path.join(temporary_path, 'tmpaddon-*')
 		for path in iglob(temporary_search_path):
 			log.info(f'Deleting the temporary file "{path}".')
-			delete_file(path)
-
-		temporary_search_path = os.path.join(config.recordings_path, '**', '*.raw.mkv')
-		for path in iglob(temporary_search_path, recursive=True):
-			log.info(f'Deleting the temporary raw recording file "{path}".')
 			delete_file(path)
 
 		if self.use_plugins:
@@ -1663,23 +1667,27 @@ class Browser():
 
 		self.driver.switch_to.default_content()
 	
-	def reload_plugin_content(self) -> None:
-		""" Reloads any content embedded using the object, embed, or applet tags in the current web page and its frames. """
+	def unload_plugin_content(self) -> None:
+		""" Unloads any content embedded using the object/embed/applet tags in the current web page and its frames.
+		This function should not be called more than once if any of this content is being played by the VLC plugin. """
 
 		try:
 			for _ in self.traverse_frames():
 				self.driver.execute_script(	'''
 											const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
-											
+
 											const plugin_tags = document.querySelectorAll("object, embed, applet");
-											
+
 											for(const element of plugin_tags)
 											{
 												// If the element is using the VLC plugin and is currently being
 												// monitored so it doesn't play twice, then we need to ensure that
 												// the last known position matches with any changes we make here.
 												// See the Fix Vlc Embed user script for more details.
-												if("vlcLastPosition" in element.dataset)
+												//
+												// Note also that the NPObject wrapper (i.e. element.input) is
+												// undefined after the content is unloaded.
+												if("vlcLastPosition" in element.dataset && element.input)
 												{
 													// Just changing the position doesn't make it start playing.
 													element.input.position = 0;
@@ -1688,6 +1696,51 @@ class Browser():
 
 												for(const source_attribute of SOURCE_ATTRIBUTES)
 												{
+													const source = element.getAttribute(source_attribute);
+													if(source)
+													{
+														// Clearing the source attribute directly is what unloads
+														// the content.
+														element.setAttribute("eternal-wanderer-" + source_attribute, source);
+														element[source_attribute] = "";
+													}
+												}
+											}
+											''')
+		except WebDriverException as error:
+			log.error(f'Failed to unload the plugin content with the error: {repr(error)}')
+
+	def reload_plugin_content(self) -> None:
+		""" Reloads any content embedded using the object/embed/applet tags in the current web page and its frames.
+		This function should not be called more than once if any of this content is being played by the VLC plugin. """
+
+		try:
+			for _ in self.traverse_frames():
+				self.driver.execute_script(	'''
+											const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
+
+											const plugin_tags = document.querySelectorAll("object, embed, applet");
+
+											for(const element of plugin_tags)
+											{
+												// See the comments in unload_plugin_content().
+												if("vlcLastPosition" in element.dataset && element.input)
+												{
+													element.input.position = 0;
+													element.dataset.vlcLastPosition = element.input.position;
+												}
+
+												for(const source_attribute of SOURCE_ATTRIBUTES)
+												{
+													const source = element.getAttribute("eternal-wanderer-" + source_attribute);
+													if(source)
+													{
+														element.setAttribute(source_attribute, source);
+														element.removeAttribute("eternal-wanderer-" + source_attribute);
+													}
+
+													// This extra check is for cases when the content wasn't unloaded
+													// (i.e. unload_plugin_content() wasn't called).
 													if(element.hasAttribute(source_attribute)) element[source_attribute] += "";
 												}
 											}

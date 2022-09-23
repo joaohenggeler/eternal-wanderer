@@ -43,7 +43,7 @@ class PublishConfig(CommonConfig):
 	twitter_max_retries: int
 	twitter_retry_wait: int
 
-	twitter_max_post_length: int
+	twitter_max_status_length: int
 	twitter_text_to_speech_segment_duration: int
 	twitter_max_text_to_speech_segments: Optional[int]
 	twitter_text_to_speech_upload_wait: int
@@ -54,7 +54,7 @@ class PublishConfig(CommonConfig):
 	mastodon_max_retries: int
 	mastodon_retry_wait: int
 
-	mastodon_max_post_length: int
+	mastodon_max_status_length: int
 	mastodon_max_file_size: Optional[int]
 
 	mastodon_enable_ffmpeg: bool
@@ -118,13 +118,13 @@ if __name__ == '__main__':
 				if False:
 					twitter_api.create_media_metadata(media_id, alt_text)
 				
-				max_title_length = max(config.twitter_max_post_length - len(body), 0)
+				max_title_length = max(config.twitter_max_status_length - len(body), 0)
 				text = f'{title[:max_title_length]}\n{body}'
 
 				status = twitter_api.update_status(text, media_ids=[media_id], possibly_sensitive=sensitive)
 				status_id = status.id
 
-				log.info(f'Posted the status #{status_id} with the media #{media_id} using {len(text)} characters.')
+				log.info(f'Posted the recording status #{status_id} with the media #{media_id} using {len(text)} characters.')
 
 				# Add the text-to-speech file as a reply to the previous tweet. While Twitter has a generous
 				# file size limit, the maximum video duration isn't great for the text-to-speech files. To
@@ -156,13 +156,13 @@ if __name__ == '__main__':
 								if len(segment_file_paths) > 1:
 									tts_body += f'\n{i+1} of {len(segment_file_paths)}'
 								
-								max_title_length = max(config.twitter_max_post_length - len(tts_body), 0)
+								max_title_length = max(config.twitter_max_status_length - len(tts_body), 0)
 								tts_text = f'{title[:max_title_length]}\n{tts_body}'
 
 								tts_status = twitter_api.update_status(tts_text, in_reply_to_status_id=last_status_id, media_ids=[tts_media.media_id], possibly_sensitive=sensitive)
 								last_status_id = tts_status.id
 
-								log.debug(f'Posted the text-to-speech status #{tts_status.id} with the media #{tts_media.media_id} ({i+1} of {len(segment_file_paths)}).')
+								log.debug(f'Posted the text-to-speech status #{tts_status.id} with the media #{tts_media.media_id} ({i+1} of {len(segment_file_paths)}) using {len(tts_text)} characters.')
 
 							log.info(f'Posted {len(segment_file_paths)} text-to-speech segments.')
 						else:
@@ -175,7 +175,7 @@ if __name__ == '__main__':
 							delete_file(segment_path)
 
 			except TweepyException as error:
-				log.error(f'Failed to post the status with the error: {repr(error)}')
+				log.error(f'Failed to post the recording status with the error: {repr(error)}')
 			except ffmpeg.Error as error:
 				log.error(f'Failed to split the text-to-speech file with the error: {repr(error)}')
 
@@ -216,7 +216,7 @@ if __name__ == '__main__':
 				return output_file.name
 
 			def try_media_post(path: str, **kwargs) -> int:
-				""" @TODO """
+				""" Posts a media file to the Mastodon instance, retrying if it fails with a 502, 503, or 504 HTTP error. """
 
 				for i in range(config.mastodon_max_retries):
 					try:
@@ -224,7 +224,7 @@ if __name__ == '__main__':
 						media_id = media.id
 						break
 					except (MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
-						log.warning(f'Retrying the media upload operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
+						log.warning(f'Retrying the media post operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
 						time.sleep(config.mastodon_retry_wait)
 				else:
 					raise
@@ -232,7 +232,7 @@ if __name__ == '__main__':
 				return media_id
 
 			def try_status_post(text: str, **kwargs) -> int:
-				""" @TODO """
+				""" Posts a status to the Mastodon instance, retrying if it fails with a 502, 503, or 504 HTTP error. """
 
 				for i in range(config.mastodon_max_retries):
 					try:
@@ -240,7 +240,7 @@ if __name__ == '__main__':
 						status_id = status.id
 						break
 					except (MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
-						log.warning(f'Retrying the media upload operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
+						log.warning(f'Retrying the status post operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
 						time.sleep(config.mastodon_retry_wait)
 				else:
 					raise
@@ -253,7 +253,7 @@ if __name__ == '__main__':
 			recording_path = None
 			tts_path = None
 
-			idempotency_key_prefix = get_current_timestamp() + '_'
+			idempotency_key_prefix = get_current_timestamp() + ' '
 			recording_idempotency_key = idempotency_key_prefix + 'recording'
 			tts_idempotency_key = idempotency_key_prefix + 'tts'
 
@@ -265,12 +265,12 @@ if __name__ == '__main__':
 
 					media_id = try_media_post(recording_path, mime_type='video/mp4', description=alt_text)
 
-					max_title_length = max(config.mastodon_max_post_length - len(body), 0)
+					max_title_length = max(config.mastodon_max_status_length - len(body), 0)
 					text = f'{title[:max_title_length]}\n{body}'
 
 					status_id = try_status_post(text, media_ids=[media_id], sensitive=sensitive, idempotency_key=recording_idempotency_key)
 
-					log.info(f'Posted the status #{status_id} with the media #{media_id} ({recording_file_size / 10 ** 6:.1f} MB) using {len(text)} characters.')
+					log.info(f'Posted the recording status #{status_id} with the media #{media_id} ({recording_file_size / 10 ** 6:.1f} MB) using {len(text)} characters.')
 
 					try:
 						# Unlike with Twitter, uploading videos to Mastodon can be trickier due to hosting costs.
@@ -284,26 +284,26 @@ if __name__ == '__main__':
 
 								tts_media_id = try_media_post(tts_path, mime_type='video/mp4')
 
-								max_title_length = max(config.mastodon_max_post_length - len(tts_body), 0)
+								max_title_length = max(config.mastodon_max_status_length - len(tts_body), 0)
 								tts_text = f'{title[:max_title_length]}\n{tts_body}'
 
 								tts_status_id = try_status_post(tts_text, in_reply_to_id=status_id, media_ids=[tts_media_id], sensitive=sensitive, idempotency_key=tts_idempotency_key)
 
-								log.info(f'Posted the text-to-speech status #{tts_status_id} with the media #{tts_media_id} ({tts_file_size / 10 ** 6:.1f} MB).')
+								log.info(f'Posted the text-to-speech status #{tts_status_id} with the media #{tts_media_id} ({tts_file_size / 10 ** 6:.1f} MB) using {len(tts_text)} characters.')
 							else:
-								log.info(f'Skipping the text-to-speech file since its size ({recording_file_size}) exceeds the limit of {config.mastodon_max_file_size} bytes.')
+								log.info(f'Skipping the text-to-speech file since its size ({recording_file_size}) exceeds the limit of {config.mastodon_max_file_size} MB.')
 					
 					except MastodonError as error:
 						log.error(f'Failed to post the text-to-speech file with the error: {repr(error)}')
 				else:
-					log.info(f'Skipping the recording since its size ({recording_file_size}) exceeds the limit of {config.mastodon_max_file_size} bytes.')
+					log.info(f'Skipping the recording since its size ({recording_file_size}) exceeds the limit of {config.mastodon_max_file_size} MB.')
 
 			except ffmpeg.Error as error:
 				log.error(f'Failed to process the video file with the error: {repr(error)}')
 			except OSError as error:
 				log.error(f'Failed to determine the video file size with the error: {repr(error)}')
 			except MastodonError as error:
-				log.error(f'Failed to post the status with the error: {repr(error)}')
+				log.error(f'Failed to post the recording status with the error: {repr(error)}')
 			finally:
 				if config.mastodon_enable_ffmpeg:
 					
