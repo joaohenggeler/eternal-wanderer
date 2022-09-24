@@ -328,14 +328,15 @@ if __name__ == '__main__':
 				for recording_index in range(num_recordings):
 
 					if was_exit_command_entered():
+						
 						log.info('Stopping at the user\'s request.')
 						
 						try:
 							scheduler.shutdown(wait=False)
 						except SchedulerNotRunningError:
 							pass
-
-						break
+						finally:
+							break
 
 					try:
 						cursor = db.execute('''

@@ -68,6 +68,7 @@ if __name__ == '__main__':
 					print(f'- Standalone Media {snapshot.IsStandaloneMedia}')
 					print(f'- Uses Plugins: {snapshot.PageUsesPlugins}')
 					print(f'- Points: {snapshot.Points}')
+					print(f'- Options: {snapshot.Options}')
 					print(f'- Saved URLs (Recording): {row["SavedRecordingUrls"]} of {row["TotalRecordingUrls"]}')
 					print(f'- Saved URLs (Snapshot): {row["SavedSnapshotUrls"]} of {row["TotalSnapshotUrls"]}')
 					print(f'- Filename: {recording.UploadFilename}')

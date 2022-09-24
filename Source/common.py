@@ -264,7 +264,7 @@ class CommonConfig():
 		bucket = ceil(id / self.max_recordings_per_directory) * self.max_recordings_per_directory
 		return os.path.join(self.recordings_path, str(bucket))
 
-for option in ['encoding', 'notes']:
+for option in ['encoding', 'hide_title' 'notes']:
 	assert option not in CommonConfig.MUTABLE_OPTIONS, f'The mutable option name "{option}" is reserved.'
 
 config = CommonConfig()
@@ -645,6 +645,11 @@ class Snapshot():
 	Points: Optional[int]
 	IsSensitive: Optional[bool]
 
+	# Determined from the Options column.
+	Encoding: str
+	HideTitle: bool
+	Notes: str
+
 	# Determined at runtime.
 	WaybackUrl: str
 	OldestTimestamp: str
@@ -701,6 +706,10 @@ class Snapshot():
 		else:
 			self.Options = {}
 
+		self.Encoding = self.Options.get('encoding', '')
+		self.HideTitle = self.Options.get('hide_title', False)
+		self.Notes = self.Options.get('notes', '')
+
 		modifier = Snapshot.OBJECT_EMBED_MODIFIER if self.IsStandaloneMedia else Snapshot.IFRAME_MODIFIER
 		self.WaybackUrl = compose_wayback_machine_snapshot_url(timestamp=self.Timestamp, modifier=modifier, url=self.Url)
 
@@ -714,7 +723,7 @@ class Snapshot():
 		self.ShortDate = self.OldestDatetime.strftime('%b %Y')
 
 		self.DisplayTitle = self.PageTitle
-		if not self.DisplayTitle:
+		if self.HideTitle or not self.DisplayTitle:
 			
 			parts = urlparse(self.Url)
 			self.DisplayTitle = os.path.basename(parts.path)
@@ -819,6 +828,7 @@ class Browser():
 	window: Optional[WindowSpecification]
 	
 	BLANK_URL = 'about:blank'
+	CONFIG_URL = 'about:config'
 
 	def __init__(self, 	headless: bool = False,
 						multiprocess: bool = True,
@@ -1364,7 +1374,7 @@ class Browser():
 		# - https://web.archive.org/web/20210417185248if_/https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules/Services.jsm
 		# - https://web.archive.org/web/20210629053921if_/https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIPrefBranch
 		setter_name = 'setBoolPref' if isinstance(value, bool) else ('setIntPref' if isinstance(value, int) else 'setCharPref')
-		self.driver.get('about:config')
+		self.driver.get(Browser.CONFIG_URL)
 		self.driver.execute_script(f'''
 									// const prefs = Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefBranch);
 									// prefs.{setter_name}(arguments[0], arguments[1]);
@@ -1385,19 +1395,17 @@ class Browser():
 			retry = False
 
 			try:
-				encoding = snapshot.Options.get('encoding')
+				encoding = snapshot.Encoding
 
 				# Note that not every snapshot has a guessed encoding.
-				if encoding is None and config.use_guessed_encoding_as_fallback:
+				if not encoding and config.use_guessed_encoding_as_fallback:
 
 					global_rate_limiter.wait_for_wayback_machine_rate_limit()
 					response = requests.head(snapshot.WaybackUrl)
 					response.raise_for_status()
 					
 					# This header requires a snapshot URL with the iframe modifier.
-					encoding = response.headers.get('x-archive-guessed-charset')
-
-				encoding = encoding or ''
+					encoding = response.headers.get('x-archive-guessed-charset', '')
 
 				# E.g. https://web.archive.org/web/19991011153317if_/http://www.geocities.com/Athens/Delphi/1240/midigr.htm
 				# In older Firefox versions, the "windows-1252" encoding is used.

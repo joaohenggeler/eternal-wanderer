@@ -165,10 +165,10 @@ if __name__ == '__main__':
 
 			if snapshots_and_recordings:
 
-				try:
-					transition_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
-					concat_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.txt', delete=False)
+				transition_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
+				concat_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.txt', delete=False)
 
+				try:
 					try:
 						template_recording = snapshots_and_recordings[0][1]
 						probe = ffmpeg.probe(template_recording.CompilationSegmentFilePath)
@@ -317,9 +317,11 @@ if __name__ == '__main__':
 					pass
 				finally:
 					transition_file.close()
-					concat_file.close()
 					delete_file(transition_file.name)
+					
+					concat_file.close()
 					delete_file(concat_file.name)
+						
 			else:
 				print('Could not find any recordings that match the given criteria.')
 

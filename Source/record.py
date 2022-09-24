@@ -566,9 +566,17 @@ if __name__ == '__main__':
 				first = False
 
 				try:
+					# For the Flash Player and any other plugins that use the generic window.
+					# E.g. https://web.archive.org/web/20030117223552if_/http://www.miniclip.com:80/dancingbush.htm
 					plugin_windows = self.firefox_window.children(class_name='GeckoPluginWindow')
+					
+					# For the Shockwave Player.
+					# E.g. https://web.archive.org/web/20010122084300if_/http://www.big.or.jp/~frog/others/click.html
 					plugin_windows += self.firefox_window.children(class_name='ImlWinCls')
 					plugin_windows += self.firefox_window.children(class_name='ImlWinClsSw10')
+					
+					# For the Java Plugin.
+					# E.g. https://web.archive.org/web/19970606032004if_/http://www.brown.edu:80/Students/Japanese_Cultural_Association/java/
 					plugin_windows += self.firefox_window.children(class_name='SunAwtCanvas')
 					plugin_windows += self.firefox_window.children(class_name='SunAwtFrame')
 
@@ -579,17 +587,17 @@ if __name__ == '__main__':
 							height = round(rect.height() / config.height_dpi_scaling)
 							interactable = width >= config.plugin_input_repeater_min_window_size and height >= config.plugin_input_repeater_min_window_size
 
+							if interactable:
+								window.click()
+								window.send_keystrokes(config.plugin_input_repeater_keystrokes)
+
 							if config.debug and config.plugin_input_repeater_debug:
 								color = 'green' if interactable else 'red'
 								window.draw_outline(color)
 								window.debug_message(f'{width}x{height}')
 
-							if interactable:
-								window.click()
-								window.send_keystrokes(config.plugin_input_repeater_keystrokes)
-
 						except (ElementNotEnabled, ElementNotVisible):
-							pass
+							log.debug('Skipping a disabled or hidden window.')
 
 				except Exception as error:
 					log.error(f'Failed to send the input to the plugin windows with the error: {repr(error)}')
@@ -628,6 +636,7 @@ if __name__ == '__main__':
 				time.sleep(config.cosmo_player_viewpoint_wait_per_cycle)
 
 				try:
+					# E.g. http://web.archive.org/web/20220616010004if_/http://disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/golf/golf.wrl
 					cosmo_player_windows = self.firefox_window.children(class_name='CpWin32RenderWindow')
 					for window in cosmo_player_windows:
 						window.send_keystrokes('{PGDN}')
@@ -641,25 +650,25 @@ if __name__ == '__main__':
 		
 		log.info(f'Recording {num_snapshots} snapshots.')
 
+		if config.enable_proxy:
+			log.info('Initializing the proxy.')
+			proxy = Proxy.create()
+		else:
+			proxy = nullcontext() # type: ignore
+
+		if config.enable_text_to_speech:
+			log.info('Initializing text-to-speech.')
+			text_to_speech = TextToSpeech()
+
+		standalone_media_page_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.html', delete=False)
+		standalone_media_page_url = f'file:///{standalone_media_page_file.name}'
+		log.debug(f'Created the temporary standalone media page file "{standalone_media_page_file.name}".')
+
+		standalone_media_download_directory = TemporaryDirectory(prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.media')
+		standalone_media_download_search_path = os.path.join(standalone_media_download_directory.name, '*')
+		log.debug(f'Created the temporary standalone media download directory "{standalone_media_download_directory.name}".')
+
 		try:
-			if config.enable_proxy:
-				log.info('Initializing the proxy.')
-				proxy = Proxy.create()
-			else:
-				proxy = nullcontext() # type: ignore
-
-			if config.enable_text_to_speech:
-				log.info('Initializing text-to-speech.')
-				text_to_speech = TextToSpeech()
-
-			standalone_media_page_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.html', delete=False)
-			standalone_media_page_url = f'file:///{standalone_media_page_file.name}'
-			log.debug(f'Created the temporary standalone media page file "{standalone_media_page_file.name}".')
-
-			standalone_media_download_directory = TemporaryDirectory(prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.media')
-			standalone_media_download_search_path = os.path.join(standalone_media_download_directory.name, '*')
-			log.debug(f'Created the temporary standalone media download directory "{standalone_media_download_directory.name}".')
-
 			extra_preferences: dict = {
 				# Always use cached page.
 				'browser.cache.check_doc_frequency': 2,
@@ -826,14 +835,15 @@ if __name__ == '__main__':
 				for snapshot_index in range(num_snapshots):
 
 					if was_exit_command_entered():
+						
 						log.info('Stopping at the user\'s request.')
 						
 						try:
 							scheduler.shutdown(wait=False)
 						except SchedulerNotRunningError:
 							pass
-
-						break
+						finally:
+							break
 
 					try:
 						cursor = db.execute('''
@@ -1325,17 +1335,17 @@ if __name__ == '__main__':
 		finally:
 			raw_search_path = os.path.join(config.recordings_path, '**', '*.raw.mkv')
 			for path in iglob(raw_search_path, recursive=True):
-				log.info(f'Deleting the temporary raw recording file "{path}".')
+				log.warning(f'Deleting the raw recording file "{path}".')
 				delete_file(path)
 
-			standalone_media_page_file.close()
-			delete_file(standalone_media_page_file.name)
-			
 			try:
 				standalone_media_download_directory.cleanup()
 			except Exception as error:
 				log.error(f'Failed to delete the temporary standalone media download directory with the error: {repr(error)}')
 
+			standalone_media_page_file.close()
+			delete_file(standalone_media_page_file.name)
+			
 			if config.enable_text_to_speech:
 				text_to_speech.cleanup()
 
