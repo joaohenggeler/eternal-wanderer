@@ -5,7 +5,7 @@ import sqlite3
 from argparse import ArgumentParser
 from datetime import timedelta
 from tempfile import NamedTemporaryFile
-from typing import List, cast
+from typing import cast
 
 import ffmpeg # type: ignore
 
@@ -43,8 +43,8 @@ if __name__ == '__main__':
 			id_type = args.any[0]
 			id_list = args.any[1]
 			
-			include_id_list: List[int] = []
-			exclude_id_list: List[int] = []
+			include_id_list: list[int] = []
+			exclude_id_list: list[int] = []
 			
 			for id in id_list.split(','):
 				
@@ -180,7 +180,7 @@ if __name__ == '__main__':
 						# See: https://trac.ffmpeg.org/wiki/FilteringGuide#SyntheticInput
 						video_stream = ffmpeg.input(f'color={args.color}:size={width}x{height}:duration={args.duration}:rate={framerate}', f='lavfi')
 						audio_stream = ffmpeg.input(args.sfx, guess_layout_max=0) if args.sfx else None
-						input_streams: List[ffmpeg.Stream] = list(filter(None, [video_stream, audio_stream]))
+						input_streams: list[ffmpeg.Stream] = list(filter(None, [video_stream, audio_stream]))
 
 						ffmpeg_output_args = config.ffmpeg_text_to_speech_output_args if args.tts else config.ffmpeg_upload_output_args
 						ffmpeg_output_args['tune'] = 'stillimage'

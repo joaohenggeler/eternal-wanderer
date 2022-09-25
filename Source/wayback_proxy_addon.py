@@ -80,7 +80,7 @@ def request(flow: http.HTTPFlow) -> None:
 	if wayback_parts is None:
 		return
 	
-	extracted_realaudio_url = False
+	extracted_realmedia_url = False
 
 	if config.proxy_convert_realmedia_metadata_snapshots:
 		
@@ -89,7 +89,7 @@ def request(flow: http.HTTPFlow) -> None:
 
 		if file_extension.lower() == '.ram':
 			try:
-				# The RealAudio metadata files only contain the audio stream's URL, not the content itself.
+				# The RealMedia metadata files only contain the audio stream's URL, not the content itself.
 				# In order to play the audio correctly, we'll extract this URL, convert it to a Wayback
 				# Machine snapshot URL, and send it back to the recorder script. Note that we'll change the
 				# scheme from PNM or RTSP to HTTP since that's how it's served through the Wayback Machine
@@ -121,7 +121,7 @@ def request(flow: http.HTTPFlow) -> None:
 					parts = urlparse(url)
 					
 					if parts.netloc:
-						extracted_realaudio_url = True
+						extracted_realmedia_url = True
 
 						parts = parts._replace(scheme='http')
 						url = urlunparse(parts)
@@ -244,7 +244,7 @@ def request(flow: http.HTTPFlow) -> None:
 	# worlds, we'll create the response ourselves (see below).
 	request.url = wayback_parts.Url if redirect_to_original else compose_wayback_machine_snapshot_url(parts=wayback_parts)
 
-	if extracted_realaudio_url:
+	if extracted_realmedia_url:
 		with lock:
 			print(f'[RAM] [{request.url}]')
 
@@ -284,10 +284,10 @@ def request(flow: http.HTTPFlow) -> None:
 				pass
 
 	live_mark = 'LIVE' if redirect_to_original else None
-	realaudio_mark = 'RAM' if extracted_realaudio_url else None
+	realmedia_mark = 'RAM' if extracted_realmedia_url else None
 	vrml_mark = 'VRML' if request_came_from_vrml else None
 
-	flow.marked = ', '.join(filter(None, [live_mark, realaudio_mark, vrml_mark, cdx_mark]))
+	flow.marked = ', '.join(filter(None, [live_mark, realmedia_mark, vrml_mark, cdx_mark]))
 
 @concurrent
 def response(flow: http.HTTPFlow) -> None:

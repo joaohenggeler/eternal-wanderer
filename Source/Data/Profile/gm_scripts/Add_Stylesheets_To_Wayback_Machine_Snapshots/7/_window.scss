@@ -1,7 +1,7 @@
 /*-------------------------------------------*\
     Window
 \*-------------------------------------------*/
-:root {
+/*:root {
   --window-spacing: 6px;
   --window-border: 1px solid;
   --window-border-radius: 6px;
@@ -31,7 +31,7 @@
   );
 }
 
-/*.window {
+.window {
   font: var(--font);
   box-shadow: 0 0 5px 1px var(--window-border-color);
   border: var(--window-border) var(--window-border-color);

@@ -11,7 +11,7 @@ import unicodedata
 from argparse import ArgumentParser
 from base64 import b64decode
 from collections import Counter
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 from urllib.parse import parse_qs, unquote, urlparse, urlunparse
 
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
@@ -19,19 +19,19 @@ from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
 from selenium.common.exceptions import SessionNotCreatedException, StaleElementReferenceException, WebDriverException # type: ignore
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
-from common import Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url, container_to_lowercase, extract_standalone_media_extension_from_url, find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info, global_rate_limiter, is_url_from_domain, is_wayback_machine_available, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
+from common import Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url, container_to_lowercase, extract_standalone_media_extension_from_url, find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info, is_url_from_domain, is_wayback_machine_available, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
 
 class ScoutConfig(CommonConfig):
 	""" The configuration that applies to the scout script. """
 
 	# From the config file.
-	scheduler: Dict[str, Union[int, str]]
+	scheduler: dict[str, Union[int, str]]
 	num_snapshots_per_scheduled_batch: int
 
-	extension_filter: List[str]
-	user_script_filter: List[str]
+	extension_filter: list[str]
+	user_script_filter: list[str]
 	
-	initial_snapshots: List[Dict[str, str]]
+	initial_snapshots: list[dict[str, str]]
 	
 	ranking_offset: Optional[int]
 	min_year: Optional[int]
@@ -39,15 +39,15 @@ class ScoutConfig(CommonConfig):
 	max_depth: Optional[int]
 	max_required_depth: Optional[int]
 
-	excluded_url_tags: List[str]
+	excluded_url_tags: list[str]
 	
 	store_all_words_and_tags: bool
 	
-	word_points: Dict[str, int]
-	tag_points: Dict[str, int]
+	word_points: dict[str, int]
+	tag_points: dict[str, int]
 	standalone_media_points: int
 	
-	sensitive_words: Dict[str, bool] # Different from the config data type.
+	sensitive_words: dict[str, bool] # Different from the config data type.
 	
 	detect_page_language: bool
 	language_model_path: str
@@ -422,7 +422,7 @@ if __name__ == '__main__':
 					raw_frame_url_list = []
 					word_and_tag_counter: Counter = Counter()
 
-					url_list: List[Tuple[str, Optional[str]]] = []
+					url_list: list[tuple[str, Optional[str]]] = []
 					
 					try:
 						# Checking for redirects should only be done in this block since we're going to navigate to

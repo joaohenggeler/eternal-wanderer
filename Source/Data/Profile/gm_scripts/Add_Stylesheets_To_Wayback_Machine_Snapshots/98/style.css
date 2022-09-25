@@ -729,7 +729,7 @@ ul.tree-view details[open] > summary:before {
 ul.tree-view details > summary::marker,
 ul.tree-view details > summary::-webkit-details-marker {
   content: "";
-}*/
+}
 
 pre {
   display: block;
@@ -737,7 +737,7 @@ pre {
   box-shadow: var(--border-field);
   padding: 12px 8px;
   margin: 0;
-}
+}*/
 
 code,
 code * {

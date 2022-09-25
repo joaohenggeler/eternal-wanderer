@@ -5,7 +5,7 @@ import sqlite3
 import tempfile
 from argparse import ArgumentParser
 from glob import iglob
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from common import CommonConfig, Database, Recording, TemporaryRegistry, delete_directory, delete_file
 
@@ -21,7 +21,7 @@ if __name__ == '__main__':
 	if not any(vars(args).values()):
 		parser.error('No arguments provided.')
 
-	def delete_recordings(recording_list: List[Recording]) -> Tuple[int, int]:
+	def delete_recordings(recording_list: list[Recording]) -> tuple[int, int]:
 		""" Deletes the all video files from a list of recordings. """
 
 		total = 0

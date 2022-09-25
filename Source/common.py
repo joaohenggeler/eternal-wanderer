@@ -26,7 +26,7 @@ from glob import iglob
 from math import ceil
 from random import random
 from subprocess import Popen
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
+from typing import Any, Iterator, Optional, Union
 from urllib.parse import ParseResult, unquote, urlparse, urlunparse
 from winreg import CreateKeyEx, DeleteKey, DeleteValue, EnumKey, EnumValue, OpenKey, QueryInfoKey, QueryValueEx, SetValueEx
 from xml.etree import ElementTree
@@ -76,22 +76,22 @@ class CommonConfig():
 	headless_firefox_path: str
 
 	profile_path: str
-	preferences: Dict[str, Union[bool, int, str]]
+	preferences: dict[str, Union[bool, int, str]]
 
 	extensions_path: str
-	extensions_before_running: Dict[str, bool]
-	extensions_after_running: Dict[str, bool]
-	user_scripts: Dict[str, bool]
+	extensions_before_running: dict[str, bool]
+	extensions_after_running: dict[str, bool]
+	user_scripts: dict[str, bool]
 
 	plugins_path: str
 	use_master_plugin_registry: bool
-	plugins: Dict[str, bool]
+	plugins: dict[str, bool]
 
 	shockwave_renderer: str
 	
 	java_show_console: bool
 	java_add_to_path: bool
-	java_arguments: List[str]
+	java_arguments: list[str]
 
 	cosmo_player_show_console: bool
 	cosmo_player_renderer: str
@@ -101,7 +101,7 @@ class CommonConfig():
 
 	autoit_path: str
 	autoit_poll_frequency: int
-	autoit_scripts: Dict[str, bool]
+	autoit_scripts: dict[str, bool]
 
 	recordings_path: str
 	max_recordings_per_directory: int
@@ -119,16 +119,16 @@ class CommonConfig():
 	rate_limit_poll_frequency: float
 	unavailable_wayback_machine_wait: int
 
-	allowed_domains: List[List[str]] # Different from the config data type.
-	disallowed_domains: List[List[str]] # Different from the config data type.
+	allowed_domains: list[list[str]] # Different from the config data type.
+	disallowed_domains: list[list[str]] # Different from the config data type.
 	
 	enable_fallback_encoding: bool
 	use_guessed_encoding_as_fallback: bool
 
 	ffmpeg_path: Optional[str]
-	ffmpeg_global_args: List[str]
+	ffmpeg_global_args: list[str]
 	
-	language_names: Dict[str, str]
+	language_names: dict[str, str]
 
 	# Determined at runtime.
 	default_options: dict
@@ -206,7 +206,7 @@ class CommonConfig():
 		self.cosmo_player_renderer = self.cosmo_player_renderer.lower()
 		self._3dvia_renderer = getattr(self, '3dvia_renderer').lower()
 
-		def parse_domain_list(domain_list: List[str]) -> List[List[str]]:
+		def parse_domain_list(domain_list: list[str]) -> list[list[str]]:
 			""" Transforms a list of domain patterns into a list of each pattern's components. """
 
 			domain_patterns = []
@@ -347,7 +347,7 @@ class RateLimiter():
 # They're only the same between a script and this module.
 global_rate_limiter = RateLimiter()
 
-def url_key_matches_domain_pattern(url_key: str, domain_patterns: List[List[str]], cache: Dict[str, bool]) -> bool:
+def url_key_matches_domain_pattern(url_key: str, domain_patterns: list[list[str]], cache: dict[str, bool]) -> bool:
 	""" Checks whether a URL's key matches a list of domain patterns. """
 
 	result = False
@@ -381,8 +381,8 @@ def url_key_matches_domain_pattern(url_key: str, domain_patterns: List[List[str]
 
 	return result
 
-checked_allowed_domains: Dict[str, bool] = {}
-checked_disallowed_domains: Dict[str, bool] = {}
+checked_allowed_domains: dict[str, bool] = {}
+checked_disallowed_domains: dict[str, bool] = {}
 
 def is_url_key_allowed(url_key: str) -> bool:
 	""" Checks whether a URL should be scouted or recorded given its URL key. """
@@ -670,7 +670,7 @@ class Snapshot():
 	PUBLISHED = 7
 	ARCHIVED = 8
 
-	STATE_NAMES: Dict[int, str]
+	STATE_NAMES: dict[int, str]
 
 	NO_PRIORITY = 0
 	SCOUT_PRIORITY = 1
@@ -809,17 +809,17 @@ class Browser():
 
 	headless: bool
 	multiprocess: bool
-	extra_preferences: Optional[Dict[str, Union[bool, int, str]]]
+	extra_preferences: Optional[dict[str, Union[bool, int, str]]]
 	use_extensions: bool
-	extension_filter: Optional[List[str]]
-	user_script_filter: Optional[List[str]]
+	extension_filter: Optional[list[str]]
+	user_script_filter: Optional[list[str]]
 	use_plugins: bool
 	use_autoit: bool
 
 	firefox_path: str
 	firefox_directory_path: str
 	webdriver_path: str
-	autoit_processes: List[Popen]
+	autoit_processes: list[Popen]
 	registry: 'TemporaryRegistry'
 	java_deployment_path: str
 
@@ -835,10 +835,10 @@ class Browser():
 
 	def __init__(self, 	headless: bool = False,
 						multiprocess: bool = True,
-						extra_preferences: Optional[Dict[str, Union[bool, int, str]]] = None,
+						extra_preferences: Optional[dict[str, Union[bool, int, str]]] = None,
 						use_extensions: bool = False,
-						extension_filter: Optional[List[str]] = None,
-						user_script_filter: Optional[List[str]] = None,
+						extension_filter: Optional[list[str]] = None,
+						user_script_filter: Optional[list[str]] = None,
 						use_plugins: bool = False,
 						use_autoit: bool = False):
 
@@ -1204,7 +1204,7 @@ class Browser():
 		#
 		# HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\COSMOSOFTWARE
 
-		REQUIRED_REGISTRY_KEYS: Dict[str, Union[int, str]] = {
+		REQUIRED_REGISTRY_KEYS: dict[str, Union[int, str]] = {
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia AudioRenderer3',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\': os.path.join(cosmo_player_system32_path, 'cm12_dshow.dll'),
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\THREADINGMODEL': 'Both',	
@@ -1249,7 +1249,7 @@ class Browser():
 		renderer = {'auto': 'AUTO', 'directx': 'D3D', 'opengl': 'OPENGL'}.get(config.cosmo_player_renderer)
 		assert renderer is not None, f'Unknown Cosmo Player renderer "{config.cosmo_player_renderer}".'
 
-		SETTINGS_REGISTRY_KEYS: Dict[str, Union[int, str]] = {
+		SETTINGS_REGISTRY_KEYS: dict[str, Union[int, str]] = {
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\PANEL_MAXIMIZED': 0, # Minimize dashboard.
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\textureQuality': 1, # Texture quality (auto = 0, best = 1, fastest = 2).
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\transparency': 1, # Nice transparency (off = 0, on = 1).
@@ -1468,7 +1468,7 @@ class Browser():
 				else:
 					break
 
-	def was_wayback_url_redirected(self, expected_wayback_url: str) -> Tuple[bool, Optional[str], Optional[str]]:
+	def was_wayback_url_redirected(self, expected_wayback_url: str) -> tuple[bool, Optional[str], Optional[str]]:
 		""" Checks if a Wayback Machine page was redirected. In order to cover all edge cases, this function only works with snapshot URLs
 		and not any generic website. """
 		
@@ -1821,9 +1821,9 @@ class TemporaryRegistry():
 	# - https://docs.microsoft.com/en-us/windows/win32/winprog64/registry-reflection
 	# - https://docs.microsoft.com/en-us/windows/win32/winprog64/accessing-an-alternate-registry-view
 
-	original_state: Dict[Tuple[int, str, str], Tuple[Optional[int], Any]]
-	keys_to_delete: Set[Tuple[int, str, str]]
-	key_paths_to_delete: Dict[Tuple[int, str], bool]
+	original_state: dict[tuple[int, str, str], tuple[Optional[int], Any]]
+	keys_to_delete: set[tuple[int, str, str]]
+	key_paths_to_delete: dict[tuple[int, str], bool]
 
 	OPEN_HKEYS = {
 		'hkey_classes_root': winreg.HKEY_CLASSES_ROOT,
@@ -1841,7 +1841,7 @@ class TemporaryRegistry():
 		self.key_paths_to_delete = {}
 
 	@staticmethod
-	def partition_key(key: str) -> Tuple[int, str, str]:
+	def partition_key(key: str) -> tuple[int, str, str]:
 		""" Separates a registry key string into its hkey, key path, and sub key components. """
 
 		first_key, key_path = key.split('\\', 1)
@@ -1902,7 +1902,7 @@ class TemporaryRegistry():
 			self.key_paths_to_delete[(hkey, key_path)] = True
 
 		original_state_key = (hkey, key_path, sub_key)
-		original_state_value: Tuple[Optional[int], Any]
+		original_state_value: tuple[Optional[int], Any]
 
 		with CreateKeyEx(hkey, key_path, access=winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_32KEY) as key_handle:
 			try:
@@ -1920,7 +1920,7 @@ class TemporaryRegistry():
 
 		return result
 
-	def delete(self, key: str) -> Tuple[bool, Any]:
+	def delete(self, key: str) -> tuple[bool, Any]:
 		""" Removes a value from a registry key. Returns true and its data if it existed, otherwise false and None. """
 
 		hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
@@ -1953,7 +1953,7 @@ class TemporaryRegistry():
 			self.delete(key)
 
 	@staticmethod
-	def traverse(key: str, recursive: bool = False) -> Iterator[Tuple[str, Any, int]]:
+	def traverse(key: str, recursive: bool = False) -> Iterator[tuple[str, Any, int]]:
 		""" Iterates over the values of a registry key and optionally its subkeys. """
 
 		hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
@@ -2066,7 +2066,7 @@ def extract_standalone_media_extension_from_url(url: str) -> str:
 
 	return extension
 
-def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> Tuple[CDXSnapshot, bool, Optional[str]]:
+def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> tuple[CDXSnapshot, bool, Optional[str]]:
 	""" Finds the best Wayback Machine snapshot given its timestamp and URL. By best snapshot we mean
 	locating the nearest one and then finding the oldest capture where the content is identical. """
 

@@ -8,7 +8,7 @@ import time
 from argparse import ArgumentParser
 from glob import glob
 from tempfile import NamedTemporaryFile
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Union
 
 import ffmpeg # type: ignore
 import tweepy # type: ignore
@@ -23,7 +23,7 @@ class PublishConfig(CommonConfig):
 	""" The configuration that applies to the publisher script. """
 
 	# From the config file.
-	scheduler: Dict[str, Union[int, str]]
+	scheduler: dict[str, Union[int, str]]
 	num_recordings_per_scheduled_batch: int
 	
 	enable_twitter: bool
@@ -58,7 +58,7 @@ class PublishConfig(CommonConfig):
 	mastodon_max_file_size: Optional[int]
 
 	mastodon_enable_ffmpeg: bool
-	mastodon_ffmpeg_output_args: Dict[str, Union[int, str]]
+	mastodon_ffmpeg_output_args: dict[str, Union[int, str]]
 
 	def __init__(self):
 		super().__init__()
@@ -99,7 +99,7 @@ if __name__ == '__main__':
 			log.error(f'Failed to initialize the Twitter API interface with the error: {repr(error)}')
 			sys.exit(1)
 
-		def publish_to_twitter(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str) -> Tuple[Optional[int], Optional[int]]:
+		def publish_to_twitter(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str) -> tuple[Optional[int], Optional[int]]:
 			""" Publishes a snapshot recording and text-to-speech file to Twitter. The video recording is added to the main tweet along
 			with a message whose content is generated using the remaining arguments. The text-to-speech file is added as a reply to the
 			main tweet. If this file is too long for Twitter's video duration limit, then it's split across multiple replies. """
@@ -190,7 +190,7 @@ if __name__ == '__main__':
 			log.error(f'Failed to initialize the Mastodon API interface with the error: {repr(error)}')
 			sys.exit(1)
 
-		def publish_to_mastodon(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str) -> Tuple[Optional[int], Optional[int]]:
+		def publish_to_mastodon(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str) -> tuple[Optional[int], Optional[int]]:
 			""" Publishes a snapshot recording and text-to-speech file to a given Mastodon instance. The video recording is added to the
 			main toot along with a message whose content is generated using the remaining arguments. The text-to-speech file is added
 			as a reply to the main toot. This function can optionally attempt to reduce both files' size before uploading them. If a

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import ctypes
-import itertools
 import os
 import queue
 import re
@@ -19,8 +18,8 @@ from queue import Queue
 from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, STDOUT, TimeoutExpired
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from threading import Thread, Timer
-from typing import BinaryIO, ContextManager, Dict, Iterator, List, Optional, Tuple, Union, cast
-from urllib.parse import unquote, urljoin, urlparse, urlunparse
+from typing import BinaryIO, ContextManager, Optional, Union, cast
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import ffmpeg # type: ignore
 import pywinauto # type: ignore
@@ -40,7 +39,7 @@ class RecordConfig(CommonConfig):
 	""" The configuration that applies to the recorder script. """
 
 	# From the config file.
-	scheduler: Dict[str, Union[int, str]]
+	scheduler: dict[str, Union[int, str]]
 	num_snapshots_per_scheduled_batch: int
 
 	ranking_offset: Optional[int]
@@ -49,8 +48,8 @@ class RecordConfig(CommonConfig):
 	record_sensitive_snapshots: bool
 	min_publish_days_for_new_recording: int
 
-	allowed_standalone_media_extensions: Dict[str, bool] # Different from the config data type.
-	nondownloadable_standalone_media_extensions: Dict[str, bool] # Different from the config data type.
+	allowed_standalone_media_extensions: dict[str, bool] # Different from the config data type.
+	nondownloadable_standalone_media_extensions: dict[str, bool] # Different from the config data type.
 
 	enable_proxy: bool
 	proxy_port: Optional[int]
@@ -100,24 +99,24 @@ class RecordConfig(CommonConfig):
 	min_duration: int
 	max_duration: int
 	keep_archive_copy: bool
-	screen_capture_recorder_settings: Dict[str, Optional[int]]
+	screen_capture_recorder_settings: dict[str, Optional[int]]
 	
 	ffmpeg_recording_input_name: str
-	ffmpeg_recording_input_args: Dict[str, Union[int, str]]
-	ffmpeg_recording_output_args: Dict[str, Union[int, str]]
-	ffmpeg_archive_output_args: Dict[str, Union[int, str]]
-	ffmpeg_upload_output_args: Dict[str, Union[int, str]]
+	ffmpeg_recording_input_args: dict[str, Union[int, str]]
+	ffmpeg_recording_output_args: dict[str, Union[int, str]]
+	ffmpeg_archive_output_args: dict[str, Union[int, str]]
+	ffmpeg_upload_output_args: dict[str, Union[int, str]]
 
 	enable_text_to_speech: bool
 	text_to_speech_audio_format_type: Optional[str]
 	text_to_speech_rate: Optional[int]
 	text_to_speech_default_voice: Optional[str]
-	text_to_speech_language_voices: Dict[str, str]
+	text_to_speech_language_voices: dict[str, str]
 
 	ffmpeg_text_to_speech_video_input_name: str
-	ffmpeg_text_to_speech_video_input_args: Dict[str, Union[int, str]]
-	ffmpeg_text_to_speech_audio_input_args: Dict[str, Union[int, str]]
-	ffmpeg_text_to_speech_output_args: Dict[str, Union[int, str]]
+	ffmpeg_text_to_speech_video_input_args: dict[str, Union[int, str]]
+	ffmpeg_text_to_speech_audio_input_args: dict[str, Union[int, str]]
+	ffmpeg_text_to_speech_output_args: dict[str, Union[int, str]]
 
 	# Determined at runtime.
 	standalone_media_template: str
@@ -220,7 +219,7 @@ if __name__ == '__main__':
 
 		RESPONSE_REGEX = re.compile(r'\[RESPONSE\] \[(?P<status_code>.+)\] \[(?P<mark>.+)\] \[(?P<content_type>.+)\] \[(?P<url>.+)\] \[(?P<id>.+)\]')
 		SAVE_REGEX  = re.compile(r'\[SAVE\] \[(?P<url>.+)\]')
-		REALAUDIO_REGEX  = re.compile(r'\[RAM\] \[(?P<url>.+)\]')
+		REALMEDIA_REGEX  = re.compile(r'\[RAM\] \[(?P<url>.+)\]')
 		FILENAME_REGEX  = re.compile(r'(?P<name>.*?)(?P<num>\d+)(?P<extension>\..*)')
 
 		def __init__(self, port: int):
@@ -444,7 +443,7 @@ if __name__ == '__main__':
 			stream: SpeechLib.ISpeechFileStream
 			temporary_file: BinaryIO
 
-			language_to_voice: Dict[Optional[str], SpeechLib.ISpeechObjectToken]
+			language_to_voice: dict[Optional[str], SpeechLib.ISpeechObjectToken]
 
 			def __init__(self):
 				
@@ -539,7 +538,6 @@ if __name__ == '__main__':
 
 		firefox_window: Optional[WindowSpecification]
 		running: bool
-		debug_highlight_colors: Iterator[str]
 
 		def __init__(self, firefox_window: Optional[WindowSpecification], thread_name='plugin_input_repeater'):
 
@@ -547,7 +545,6 @@ if __name__ == '__main__':
 			
 			self.firefox_window = firefox_window
 			self.running = False
-			self.debug_highlight_colors = itertools.cycle(['red', 'green', 'blue'])
 
 		def run(self):
 			""" Runs the input repeater on a loop, sending a series of keystrokes periodically to any Firefox plugin windows. """
@@ -570,18 +567,18 @@ if __name__ == '__main__':
 					# For the Flash Player and any other plugins that use the generic window.
 					# E.g. https://web.archive.org/web/20010306033409if_/http://www.big.or.jp/~frog/others/button1.html
 					# E.g. https://web.archive.org/web/20030117223552if_/http://www.miniclip.com:80/dancingbush.htm
-					plugin_windows = self.firefox_window.MozillaWindowClass.children(class_name='GeckoPluginWindow')
+					plugin_windows = self.firefox_window.children(class_name='GeckoPluginWindow')
 					
 					# For the Shockwave Player.
 					# No known examples at the time of writing.
-					plugin_windows += self.firefox_window.MozillaWindowClass.children(class_name='ImlWinCls')
-					plugin_windows += self.firefox_window.MozillaWindowClass.children(class_name='ImlWinClsSw10')
+					plugin_windows += self.firefox_window.children(class_name='ImlWinCls')
+					plugin_windows += self.firefox_window.children(class_name='ImlWinClsSw10')
 					
 					# For the Java Plugin.
 					# E.g. https://web.archive.org/web/20050901064800if_/http://www.javaonthebrain.com/java/iceblox/
 					# E.g. https://web.archive.org/web/19970606032004if_/http://www.brown.edu:80/Students/Japanese_Cultural_Association/java/
-					plugin_windows += self.firefox_window.MozillaWindowClass.children(class_name='SunAwtCanvas')
-					plugin_windows += self.firefox_window.MozillaWindowClass.children(class_name='SunAwtFrame')
+					plugin_windows += self.firefox_window.children(class_name='SunAwtCanvas')
+					plugin_windows += self.firefox_window.children(class_name='SunAwtFrame')
 
 					for window in plugin_windows:
 						try:
@@ -641,7 +638,7 @@ if __name__ == '__main__':
 				try:
 					# E.g. https://web.archive.org/web/19970713113545if_/http://www.hedges.org:80/thehedges/Ver21.wrl
 					# E.g. https://web.archive.org/web/20220616010004if_/http://disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/golf/golf.wrl
-					cosmo_player_windows = self.firefox_window.MozillaWindowClass.children(class_name='CpWin32RenderWindow')
+					cosmo_player_windows = self.firefox_window.children(class_name='CpWin32RenderWindow')
 					for window in cosmo_player_windows:
 						window.send_keystrokes('{PGDN}')
 				except Exception as error:
@@ -709,7 +706,7 @@ if __name__ == '__main__':
 
 				browser.go_to_blank_page_with_text('\N{Broom} Initializing \N{Broom}')
 
-				def generate_standalone_media_page(wayback_url: str, media_extension: Optional[str] = None) -> Tuple[float, Optional[str], Optional[str], bool]:
+				def generate_standalone_media_page(wayback_url: str, media_extension: Optional[str] = None) -> tuple[float, Optional[str], Optional[str], bool]:
 					""" Generates the page where a standalone media file is embedded using both the information
 					from the configuration as well as the file's metadata. """
 
@@ -729,7 +726,7 @@ if __name__ == '__main__':
 					title = None
 					author = None
 					
-					# If a media file points to other resources (e.g. VRML worlds or RealAudio metadata), we don't
+					# If a media file points to other resources (e.g. VRML worlds or RealMedia metadata), we don't
 					# want to download it since other files from the Wayback Machine may be required to play it.
 					# If it doesn't (i.e. audio and video formats), we'll just download and play it from disk.
 					if media_extension not in config.nondownloadable_standalone_media_extensions:
@@ -942,7 +939,7 @@ if __name__ == '__main__':
 						except Exception as error:
 							log.error(f'Failed to focus on the browser window and move the mouse with the error: {repr(error)}')
 
-						missing_urls: List[str] = []
+						missing_urls: list[str] = []
 
 						if config.enable_proxy:
 							proxy.timestamp = snapshot.Timestamp
@@ -955,7 +952,7 @@ if __name__ == '__main__':
 						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.plugin_load_wait + cache_wait + proxy_wait
 
 						frame_text_list = []
-						realaudio_url = None
+						realmedia_url = None
 
 						# Wait for the page and its resources to be cached.
 						with proxy, PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout):
@@ -1041,7 +1038,7 @@ if __name__ == '__main__':
 										
 										response_match = Proxy.RESPONSE_REGEX.fullmatch(message)
 										save_match = Proxy.SAVE_REGEX.fullmatch(message) if config.proxy_save_missing_snapshots_that_still_exist_online else None
-										realaudio_match = Proxy.REALAUDIO_REGEX.fullmatch(message) if config.proxy_convert_realmedia_metadata_snapshots else None
+										realmedia_match = Proxy.REALMEDIA_REGEX.fullmatch(message) if config.proxy_convert_realmedia_metadata_snapshots else None
 
 										if response_match is not None:
 											
@@ -1054,9 +1051,9 @@ if __name__ == '__main__':
 											url = save_match.group('url')
 											missing_urls.append(url)
 
-										elif realaudio_match is not None:
+										elif realmedia_match is not None:
 											
-											realaudio_url = realaudio_match.group('url')
+											realmedia_url = realmedia_match.group('url')
 
 										proxy.task_done()
 
@@ -1067,13 +1064,13 @@ if __name__ == '__main__':
 									proxy_status_codes = sorted(proxy_status_codes.items()) # type: ignore
 									log.info(f'Waited {elapsed_proxy_time:.1f} extra seconds for the proxy: {proxy_status_codes}')
 
-						if snapshot.IsStandaloneMedia and realaudio_url is not None:
-							log.info(f'Regenerating the standalone media page for the RealAudio file "{realaudio_url}".')
-							media_duration, media_title, media_author, success = generate_standalone_media_page(realaudio_url)
+						if snapshot.IsStandaloneMedia and realmedia_url is not None:
+							log.info(f'Regenerating the standalone media page for the RealMedia file "{realmedia_url}".')
+							media_duration, media_title, media_author, success = generate_standalone_media_page(realmedia_url)
 							wait_after_load = clamp(config.base_standalone_media_wait_after_load + media_duration, config.min_duration, config.max_duration)
 
 							if not success:
-								log.error(f'Failed to download the RealAudio file.')
+								log.error(f'Failed to download the RealMedia file.')
 								abort_snapshot(snapshot)
 								continue
 
@@ -1263,7 +1260,7 @@ if __name__ == '__main__':
 									saved_urls.append({'snapshot_id': snapshot.Id, 'recording_id': recording_id, 'url': url, 'timestamp': None, 'failed': True})
 
 						text_to_speech_file_path = None
-						if config.enable_text_to_speech and not snapshot.IsStandaloneMedia:
+						if state != Snapshot.ABORTED and config.enable_text_to_speech and not snapshot.IsStandaloneMedia:
 							
 							browser.go_to_blank_page_with_text('\N{Speech Balloon} Generating Text-to-Speech \N{Speech Balloon}', str(snapshot))
 							
