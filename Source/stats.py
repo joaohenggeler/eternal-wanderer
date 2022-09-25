@@ -50,6 +50,23 @@ if __name__ == '__main__':
 
 			print()
 
+			cursor = db.execute('SELECT COUNT(*) AS Total FROM Snapshot WHERE PageUsesPlugins IS NOT NULL;')
+			row = cursor.fetchone()
+			total_eligible_for_plugins = row['Total']
+
+			percent = total_eligible_for_plugins / total_snapshots * 100 if total_snapshots > 0 else 0
+			print(f'- Eligible For Plugins: {total_eligible_for_plugins} ({percent:.2f}%)')
+
+			cursor = db.execute('SELECT PageUsesPlugins, COUNT(*) AS Total FROM Snapshot WHERE PageUsesPlugins IS NOT NULL GROUP BY PageUsesPlugins ORDER BY PageUsesPlugins;')
+			plugin_total = {row['PageUsesPlugins']: row['Total'] for row in cursor}
+
+			for uses_plugins, name in [(0, 'No Plugins'), (1, 'Uses Plugins')]:
+				total = plugin_total.get(uses_plugins, 0)
+				percent = total / total_eligible_for_plugins * 100 if total_eligible_for_plugins > 0 else 0
+				print(f'-> {name}: {total} ({percent:.2f}%)')
+
+			print()
+
 			cursor = db.execute('SELECT IsProcessed, COUNT(*) AS Total FROM Recording GROUP BY IsProcessed ORDER BY IsProcessed;')
 			recording_total = {row['IsProcessed']: row['Total'] for row in cursor}
 

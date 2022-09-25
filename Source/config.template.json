@@ -223,7 +223,6 @@
 		
 		"cosmo_player_show_console": false,
 		"cosmo_player_renderer": "OpenGL",
-		"cosmo_player_high_quality": true,
 		"cosmo_player_animate_transitions": true,
 
 		"3dvia_renderer": "Auto",
@@ -489,6 +488,7 @@
 
 		"fullscreen_browser": true,
 		"sync_plugin_content": true,
+		"skip_java_applets_when_syncing": true,
 		
 		"enable_plugin_input_repeater": true,
 		"plugin_input_repeater_initial_wait": 15,

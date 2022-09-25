@@ -85,6 +85,7 @@ class RecordConfig(CommonConfig):
 
 	fullscreen_browser: bool
 	sync_plugin_content: bool
+	skip_java_applets_when_syncing: bool
 	
 	enable_plugin_input_repeater: bool
 	plugin_input_repeater_initial_wait: int
@@ -567,18 +568,20 @@ if __name__ == '__main__':
 
 				try:
 					# For the Flash Player and any other plugins that use the generic window.
+					# E.g. https://web.archive.org/web/20010306033409if_/http://www.big.or.jp/~frog/others/button1.html
 					# E.g. https://web.archive.org/web/20030117223552if_/http://www.miniclip.com:80/dancingbush.htm
-					plugin_windows = self.firefox_window.children(class_name='GeckoPluginWindow')
+					plugin_windows = self.firefox_window.MozillaWindowClass.children(class_name='GeckoPluginWindow')
 					
 					# For the Shockwave Player.
-					# E.g. https://web.archive.org/web/20010122084300if_/http://www.big.or.jp/~frog/others/click.html
-					plugin_windows += self.firefox_window.children(class_name='ImlWinCls')
-					plugin_windows += self.firefox_window.children(class_name='ImlWinClsSw10')
+					# No known examples at the time of writing.
+					plugin_windows += self.firefox_window.MozillaWindowClass.children(class_name='ImlWinCls')
+					plugin_windows += self.firefox_window.MozillaWindowClass.children(class_name='ImlWinClsSw10')
 					
 					# For the Java Plugin.
+					# E.g. https://web.archive.org/web/20050901064800if_/http://www.javaonthebrain.com/java/iceblox/
 					# E.g. https://web.archive.org/web/19970606032004if_/http://www.brown.edu:80/Students/Japanese_Cultural_Association/java/
-					plugin_windows += self.firefox_window.children(class_name='SunAwtCanvas')
-					plugin_windows += self.firefox_window.children(class_name='SunAwtFrame')
+					plugin_windows += self.firefox_window.MozillaWindowClass.children(class_name='SunAwtCanvas')
+					plugin_windows += self.firefox_window.MozillaWindowClass.children(class_name='SunAwtFrame')
 
 					for window in plugin_windows:
 						try:
@@ -603,12 +606,12 @@ if __name__ == '__main__':
 					log.error(f'Failed to send the input to the plugin windows with the error: {repr(error)}')
 
 		def startup(self) -> None:
-			""" Starts the viewpoint cycler thread. """
+			""" Starts the input repeater thread. """
 			self.running = True
 			self.start()
 
 		def shutdown(self) -> None:
-			""" Stops the viewpoint cycler thread. """
+			""" Stops the input repeater thread. """
 			self.running = False
 			self.join()
 
@@ -636,8 +639,9 @@ if __name__ == '__main__':
 				time.sleep(config.cosmo_player_viewpoint_wait_per_cycle)
 
 				try:
-					# E.g. http://web.archive.org/web/20220616010004if_/http://disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/golf/golf.wrl
-					cosmo_player_windows = self.firefox_window.children(class_name='CpWin32RenderWindow')
+					# E.g. https://web.archive.org/web/19970713113545if_/http://www.hedges.org:80/thehedges/Ver21.wrl
+					# E.g. https://web.archive.org/web/20220616010004if_/http://disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/golf/golf.wrl
+					cosmo_player_windows = self.firefox_window.MozillaWindowClass.children(class_name='CpWin32RenderWindow')
 					for window in cosmo_player_windows:
 						window.send_keystrokes('{PGDN}')
 				except Exception as error:
@@ -1114,12 +1118,12 @@ if __name__ == '__main__':
 							browser.go_to_wayback_url(content_url)
 
 							if config.sync_plugin_content:
-								browser.unload_plugin_content()
+								browser.unload_plugin_content(skip_applets=config.skip_java_applets_when_syncing)
 
 							with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
 							
 								if config.sync_plugin_content:
-									browser.reload_plugin_content()
+									browser.reload_plugin_content(skip_applets=config.skip_java_applets_when_syncing)
 
 								time.sleep(wait_after_load)
 

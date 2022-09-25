@@ -397,8 +397,7 @@ if __name__ == '__main__':
 					alt_text = f'The {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine.'
 					sensitive = config.flag_sensitive_snapshots and snapshot.IsSensitive
 					
-					language = config.language_names.get(snapshot.PageLanguage, snapshot.PageLanguage) if snapshot.PageLanguage is not None else None
-					tts_language = f'Text-to-Speech ({language})' if language is not None else 'Text-to-Speech'
+					tts_language = f'Text-to-Speech ({snapshot.LanguageName})' if snapshot.LanguageName is not None else 'Text-to-Speech'
 					tts_body_identifiers = [snapshot.ShortDate, tts_language]
 					tts_body = '\n'.join(filter(None, tts_body_identifiers))
 					

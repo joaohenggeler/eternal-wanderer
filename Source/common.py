@@ -95,7 +95,6 @@ class CommonConfig():
 
 	cosmo_player_show_console: bool
 	cosmo_player_renderer: str
-	cosmo_player_high_quality: bool
 	cosmo_player_animate_transitions: bool
 
 	_3dvia_renderer: str
@@ -158,6 +157,7 @@ class CommonConfig():
 		'standalone_media_background_color',
 		
 		'sync_plugin_content',
+		'skip_java_applets_when_syncing',
 		
 		'enable_plugin_input_repeater', 
 		'plugin_input_repeater_initial_wait',
@@ -657,6 +657,7 @@ class Snapshot():
 	ShortDate: str
 	DisplayTitle: str
 	DisplayMetadata: Optional[str]
+	LanguageName: Optional[str]
 	
 	# Constants. Each of these must be greater than the last.
 	QUEUED = 0
@@ -740,6 +741,8 @@ class Snapshot():
 			self.DisplayMetadata =  f'By "{self.MediaAuthor}"'
 		else:
 			self.DisplayMetadata = None
+
+		self.LanguageName = config.language_names.get(self.PageLanguage, self.PageLanguage) if self.PageLanguage is not None else None
 
 	def __str__(self):
 		return f'({self.Url}, {self.Timestamp})'
@@ -1248,14 +1251,13 @@ class Browser():
 
 		SETTINGS_REGISTRY_KEYS: Dict[str, Union[int, str]] = {
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\PANEL_MAXIMIZED': 0, # Minimize dashboard.
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\textureQuality': 1, # Texture quality (auto = 0, best = 1, fastest = 2).
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\transparency': 1, # Nice transparency (off = 0, on = 1).
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\twoPassTextures': 1, # Enable specular and emissive color shine-through on textured objects (off = 0, on = 1).
+
+			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\animate': 1 if config.cosmo_player_animate_transitions else 0, # Animate transitions between viewpoints (off = 0, on = 1).
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\renderer': renderer, # See above.
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\showConsoleType': 2 if config.cosmo_player_show_console else 0, # Console on startup (hide = 0, show = 2).
-			
-			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\textureQuality': 1 if config.cosmo_player_high_quality else 2, # Texture quality (auto = 0, best = 1, fastest = 2).
-			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\transparency': 1 if config.cosmo_player_high_quality else 0, # Nice transparency (off = 0, on = 1).
-			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\twoPassTextures': 1 if config.cosmo_player_high_quality else 0, # Enable specular and emissive color shine-through on textured objects (off = 0, on = 1).
-		
-			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\animate': 1 if config.cosmo_player_animate_transitions else 0, # Animate transitions between viewpoints (off = 0, on = 1). 
 		}
 
 		try:
@@ -1675,16 +1677,18 @@ class Browser():
 
 		self.driver.switch_to.default_content()
 	
-	def unload_plugin_content(self) -> None:
+	def unload_plugin_content(self, skip_applets: bool = False) -> None:
 		""" Unloads any content embedded using the object/embed/applet tags in the current web page and its frames.
 		This function should not be called more than once if any of this content is being played by the VLC plugin. """
+
+		selectors = 'object, embed' if skip_applets else 'object, embed, applet'
 
 		try:
 			for _ in self.traverse_frames():
 				self.driver.execute_script(	'''
 											const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
 
-											const plugin_tags = document.querySelectorAll("object, embed, applet");
+											const plugin_tags = document.querySelectorAll(arguments[0]);
 
 											for(const element of plugin_tags)
 											{
@@ -1714,20 +1718,22 @@ class Browser():
 													}
 												}
 											}
-											''')
+											''', selectors)
 		except WebDriverException as error:
 			log.error(f'Failed to unload the plugin content with the error: {repr(error)}')
 
-	def reload_plugin_content(self) -> None:
+	def reload_plugin_content(self, skip_applets: bool = False) -> None:
 		""" Reloads any content embedded using the object/embed/applet tags in the current web page and its frames.
 		This function should not be called more than once if any of this content is being played by the VLC plugin. """
+
+		selectors = 'object, embed' if skip_applets else 'object, embed, applet'
 
 		try:
 			for _ in self.traverse_frames():
 				self.driver.execute_script(	'''
 											const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
 
-											const plugin_tags = document.querySelectorAll("object, embed, applet");
+											const plugin_tags = document.querySelectorAll(arguments[0]);
 
 											for(const element of plugin_tags)
 											{
@@ -1752,7 +1758,7 @@ class Browser():
 													if(element.hasAttribute(source_attribute)) element[source_attribute] += "";
 												}
 											}
-											''')
+											''', selectors)
 		except WebDriverException as error:
 			log.error(f'Failed to reload the plugin content with the error: {repr(error)}')
 
