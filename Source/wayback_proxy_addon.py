@@ -277,6 +277,11 @@ def request(flow: http.HTTPFlow) -> None:
 				# See:
 				# - https://requests.readthedocs.io/en/latest/api/#requests.Response
 				# - https://urllib3.readthedocs.io/en/stable/reference/urllib3.response.html
+				#
+				# For future reference, we could also solve this problem by doing:
+				# - vrml_response = requests.head(request.url, allow_redirects=True)
+				# - request.url = vrml_response.url
+				# But then the browser would always have to make a second request.
 				global_rate_limiter.wait_for_wayback_machine_rate_limit()
 				response = requests.request(request.method, request.url, headers=dict(request.headers))
 				flow.response = http.Response.make(response.status_code, response.content, dict(response.headers))

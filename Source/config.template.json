@@ -186,13 +186,13 @@
 		"user_scripts":
 		{
 			"Disable Alert Confirm Prompt": true,
+			"Add Stylesheets To Wayback Machine Snapshots": true,
 			"Crescendo To Standard Embed": true,
 			"Bgsound To Embed": true,
-			"Fix Vlc Embed": true,
 			"Autoplay Random Audio And Video": true,
+			"Fix Vlc Embed": true,
 			"Force Java Applet Version": true,
-			"Random Yamaha Midplug Skin": true,
-			"Add Stylesheets To Wayback Machine Snapshots": true
+			"Random Yamaha Midplug Skin": true
 		},
 
 		"plugins_path": "Data/Plugins",
@@ -241,14 +241,14 @@
 		"max_recordings_per_directory": 5000,
 		"compilations_path": "Data/Compilations",
 
-		"wayback_machine_rate_limit_amount": 20,
-		"wayback_machine_rate_limit_multiple": 60,
+		"wayback_machine_rate_limit_amount": 15,
+		"wayback_machine_rate_limit_window": 20,
 		
 		"cdx_api_rate_limit_amount": 2,
-		"cdx_api_rate_limit_multiple": 3,
+		"cdx_api_rate_limit_window": 3,
 		
 		"save_api_rate_limit_amount": 3,
-		"save_api_rate_limit_multiple": 60,
+		"save_api_rate_limit_window": 60,
 		
 		"rate_limit_poll_frequency": 0.5,
 		"unavailable_wayback_machine_wait": 900,
@@ -303,7 +303,7 @@
 
 	"scout":
 	{
-		"scheduler": {"day_of_week": "mon-sat", "hour": 0},
+		"scheduler": {"day_of_week": "mon-sat", "hour": 2},
 		"num_snapshots_per_scheduled_batch": 500,
 
 		"extension_filter": ["greasemonkey-3.17-fx.xpi"],
@@ -411,7 +411,7 @@
 
 	"record":
 	{
-		"scheduler": {"day_of_week": "sun", "hour": 3},
+		"scheduler": {"day_of_week": "sun", "hour": 2},
 		"num_snapshots_per_scheduled_batch": 56,
 
 		"ranking_offset": 1500,
@@ -500,7 +500,7 @@
 		"enable_cosmo_player_viewpoint_cycler": true,
 		"cosmo_player_viewpoint_wait_per_cycle": 8,
 
-		"min_duration": 3,
+		"min_duration": 2,
 		"max_duration": 138,
 		"keep_archive_copy": false,
 
@@ -554,7 +554,7 @@
 			"preset": "veryslow",
 			"pix_fmt": "yuv420p",
 			"fps_mode": "vfr",
-			"vf": "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1:color=black",
+			"vf": "scale=1440:1080:force_original_aspect_ratio=decrease,pad=1440:1080:-1:-1:color=black",
 			"sws_flags": "lanczos",
 			"c:a": "aac",
 			"profile:a": "aac_low",

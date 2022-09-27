@@ -108,13 +108,13 @@ class CommonConfig():
 	compilations_path: str
 
 	wayback_machine_rate_limit_amount: int
-	wayback_machine_rate_limit_multiple: int
+	wayback_machine_rate_limit_window: int
 	
 	cdx_api_rate_limit_amount: int
-	cdx_api_rate_limit_multiple: int
+	cdx_api_rate_limit_window: int
 	
 	save_api_rate_limit_amount: int
-	save_api_rate_limit_multiple: int
+	save_api_rate_limit_window: int
 	
 	rate_limit_poll_frequency: float
 	unavailable_wayback_machine_wait: int
@@ -318,15 +318,15 @@ class RateLimiter():
 
 		self.wayback_machine_memory_storage = MemoryStorage()
 		self.wayback_machine_rate_limiter = MovingWindowRateLimiter(self.wayback_machine_memory_storage)
-		self.wayback_machine_requests_per_minute = RateLimitItemPerSecond(config.wayback_machine_rate_limit_amount, config.wayback_machine_rate_limit_multiple)
+		self.wayback_machine_requests_per_minute = RateLimitItemPerSecond(config.wayback_machine_rate_limit_amount, config.wayback_machine_rate_limit_window)
 		
 		self.cdx_api_memory_storage = MemoryStorage()
 		self.cdx_api_rate_limiter = MovingWindowRateLimiter(self.cdx_api_memory_storage)
-		self.cdx_api_requests_per_second = RateLimitItemPerSecond(config.cdx_api_rate_limit_amount, config.cdx_api_rate_limit_multiple)
+		self.cdx_api_requests_per_second = RateLimitItemPerSecond(config.cdx_api_rate_limit_amount, config.cdx_api_rate_limit_window)
 
 		self.save_api_memory_storage = MemoryStorage()
 		self.save_api_rate_limiter = MovingWindowRateLimiter(self.save_api_memory_storage)
-		self.save_api_requests_per_second = RateLimitItemPerSecond(config.save_api_rate_limit_amount, config.save_api_rate_limit_multiple)
+		self.save_api_requests_per_second = RateLimitItemPerSecond(config.save_api_rate_limit_amount, config.save_api_rate_limit_window)
 
 	def wait_for_wayback_machine_rate_limit(self, **kwargs) -> None:
 		""" Waits for a given amount of time if the user-defined Wayback Machine rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
@@ -1165,8 +1165,8 @@ class Browser():
 		# different language may require you to add the localized security prompt's title to the "close_java_popups"
 		# AutoIt script.
 		escaped_java_security_path = java_security_path.replace('\\', '/')
-		REQUIRED_JAVA_ARGUMENTS = [f'-Djava.security.properties=="file:///{escaped_java_security_path}"', '-Xverify:none']
-		os.environ['JAVA_TOOL_OPTIONS'] = ' '.join(REQUIRED_JAVA_ARGUMENTS + config.java_arguments)
+		required_java_arguments = [f'-Djava.security.properties=="file:///{escaped_java_security_path}"', '-Xverify:none']
+		os.environ['JAVA_TOOL_OPTIONS'] = ' '.join(required_java_arguments + config.java_arguments)
 		os.environ['_JAVA_OPTIONS'] = ''
 		os.environ['deployment.expiration.check.enabled'] = 'false'
 
@@ -1204,7 +1204,7 @@ class Browser():
 		#
 		# HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\COSMOSOFTWARE
 
-		REQUIRED_REGISTRY_KEYS: dict[str, Union[int, str]] = {
+		required_registry_keys: dict[str, Union[int, str]] = {
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia AudioRenderer3',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\': os.path.join(cosmo_player_system32_path, 'cm12_dshow.dll'),
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\THREADINGMODEL': 'Both',	
@@ -1249,7 +1249,7 @@ class Browser():
 		renderer = {'auto': 'AUTO', 'directx': 'D3D', 'opengl': 'OPENGL'}.get(config.cosmo_player_renderer)
 		assert renderer is not None, f'Unknown Cosmo Player renderer "{config.cosmo_player_renderer}".'
 
-		SETTINGS_REGISTRY_KEYS: dict[str, Union[int, str]] = {
+		settings_registry_keys: dict[str, Union[int, str]] = {
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\PANEL_MAXIMIZED': 0, # Minimize dashboard.
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\textureQuality': 1, # Texture quality (auto = 0, best = 1, fastest = 2).
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\transparency': 1, # Nice transparency (off = 0, on = 1).
@@ -1261,13 +1261,13 @@ class Browser():
 		}
 
 		try:
-			for key, value in REQUIRED_REGISTRY_KEYS.items():
+			for key, value in required_registry_keys.items():
 				self.registry.set(key, value)
 
 			# These don't require elevated privileges but there's no point in setting them if the Cosmo Player isn't set up correctly.
 			self.registry.clear('HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1')
 			
-			for key, value in SETTINGS_REGISTRY_KEYS.items():
+			for key, value in settings_registry_keys.items():
 				self.registry.set(key, value)
 
 		except PermissionError:
@@ -1713,7 +1713,7 @@ class Browser():
 													{
 														// Clearing the source attribute directly is what unloads
 														// the content.
-														element.setAttribute("eternal-wanderer-" + source_attribute, source);
+														element.dataset["wanderer_" + source_attribute] = source;
 														element[source_attribute] = "";
 													}
 												}
@@ -1746,11 +1746,11 @@ class Browser():
 
 												for(const source_attribute of SOURCE_ATTRIBUTES)
 												{
-													const source = element.getAttribute("eternal-wanderer-" + source_attribute);
-													if(source)
+													const original_attribute = "wanderer_" + source_attribute;
+													if(original_attribute in element.dataset)
 													{
-														element.setAttribute(source_attribute, source);
-														element.removeAttribute("eternal-wanderer-" + source_attribute);
+														element.setAttribute(source_attribute, element.dataset[original_attribute]);
+														delete element.dataset[original_attribute];
 													}
 
 													// This extra check is for cases when the content wasn't unloaded

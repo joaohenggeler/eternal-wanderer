@@ -74,7 +74,7 @@ if __name__ == '__main__':
 				num_temporary_deleted = 0
 				
 				temporary_search_path = os.path.join(tempfile.gettempdir(), CommonConfig.TEMPORARY_PATH_PREFIX + '*')
-				for i, path in enumerate(iglob(temporary_search_path)):
+				for path in iglob(temporary_search_path):
 					
 					total_temporary += 1
 					print(f'- Temporary: {path}')
@@ -86,17 +86,31 @@ if __name__ == '__main__':
 
 			if args.registry:
 
-				COSMO_PLAYER_REGISTRY_KEYS = [
+				registry_keys = [
+					# Shockwave Player (settings)
+					'HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\allowfallback',
+					'HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\allowfallback',
+					'HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Macromedia\\Shockwave 10\\renderer3dsetting',
+					'HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Macromedia\\Shockwave 10\\renderer3dsettingPerm',
+					'HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\renderer3dsetting',
+					'HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\renderer3dsettingPerm',
+					'HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\renderer3dsetting',
+					'HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\renderer3dsettingPerm',
+
+					# Cosmo Player (installation and settings)
 					'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}',
 					'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646731-BCF3-11D0-9518-00C04FC2DD79}',
 					'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}',
 					'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646732-BCF3-11D0-9518-00C04FC2DD79}',
 					'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE',
 					'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware',
+
+					# 3DVIA Player (settings)
+					'HKEY_LOCAL_MACHINE\\SOFTWARE\\Virtools\\WebPlayer\\Config',
 				]
 
 				try:
-					for key in COSMO_PLAYER_REGISTRY_KEYS:
+					for key in registry_keys:
 						print(f'- Registry Key: {key}')
 						TemporaryRegistry.delete_key_tree(key)
 				except PermissionError:
