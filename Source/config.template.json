@@ -487,9 +487,10 @@
 		"standalone_media_background_color": "#000000",
 
 		"fullscreen_browser": true,
+		"reload_page_from_cache": true,
 		"sync_plugin_content": true,
 		"skip_java_applets_when_syncing": true,
-		
+
 		"enable_plugin_input_repeater": true,
 		"plugin_input_repeater_initial_wait": 15,
 		"plugin_input_repeater_wait_per_cycle": 6,

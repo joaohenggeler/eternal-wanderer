@@ -83,6 +83,7 @@ class RecordConfig(CommonConfig):
 	standalone_media_background_color: str
 
 	fullscreen_browser: bool
+	reload_page_from_cache: bool
 	sync_plugin_content: bool
 	skip_java_applets_when_syncing: bool
 	
@@ -1113,6 +1114,9 @@ if __name__ == '__main__':
 							
 							log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
 							browser.go_to_wayback_url(content_url)
+							
+							if config.reload_page_from_cache:
+								browser.reload_page_from_cache()
 
 							if config.sync_plugin_content:
 								browser.unload_plugin_content(skip_applets=config.skip_java_applets_when_syncing)

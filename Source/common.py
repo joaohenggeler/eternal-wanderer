@@ -156,6 +156,7 @@ class CommonConfig():
 		'standalone_media_height',
 		'standalone_media_background_color',
 		
+		'reload_page_from_cache',
 		'sync_plugin_content',
 		'skip_java_applets_when_syncing',
 		
@@ -979,6 +980,7 @@ class Browser():
 		self.driver.set_page_load_timeout(config.page_load_timeout)
 		self.driver.maximize_window()
 
+		# See: https://web.archive.org/web/20220602183757if_/https://www.selenium.dev/documentation/webdriver/capabilities/shared/
 		assert self.driver.capabilities['pageLoadStrategy'] == 'normal', 'The page load strategy must be "normal".'
 
 		self.version =  self.driver.capabilities['browserVersion']
@@ -1468,6 +1470,20 @@ class Browser():
 				else:
 					break
 
+	def reload_page_from_cache(self) -> None:
+		""" Reloads the current page using the F5 shortcut so that its assets are loaded from the cache.
+		Does nothing if Firefox is running in headless mode. """
+
+		if self.window is not None:
+			
+			self.window.send_keystrokes('{F5}')
+
+			try:
+				condition = lambda driver: driver.execute_script('return document.readyState === "complete";')
+				WebDriverWait(self.driver, config.page_load_timeout).until(condition)
+			except TimeoutException:
+				log.warning(f'Timed out after waiting {config.page_load_timeout} seconds for the page to reload from cache: "{self.driver.current_url}".')
+
 	def was_wayback_url_redirected(self, expected_wayback_url: str) -> tuple[bool, Optional[str], Optional[str]]:
 		""" Checks if a Wayback Machine page was redirected. In order to cover all edge cases, this function only works with snapshot URLs
 		and not any generic website. """
@@ -1765,7 +1781,6 @@ class Browser():
 	def toggle_fullscreen(self) -> None:
 		""" Toggles fullscreen Firefox. Does nothing if Firefox is running in headless mode. """
 		if self.window is not None:
-			# Using Selenium's ActionChains didn't seem to work.
 			self.window.send_keystrokes('{F11}')
 		
 	def bring_to_front(self) -> None:
