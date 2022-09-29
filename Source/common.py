@@ -155,12 +155,9 @@ class CommonConfig():
 		'standalone_media_width', 
 		'standalone_media_height',
 		'standalone_media_background_color',
-		
-		'reload_vrml_from_cache',
-		
+				
 		'enable_plugin_syncing',
 		'plugin_syncing_skip_java_applets',
-		'plugin_syncing_delay',
 		
 		'enable_plugin_input_repeater', 
 		'plugin_input_repeater_initial_wait',
@@ -1825,11 +1822,11 @@ class Browser():
 		if self.window is not None:
 			self.window.set_focus()
 
-	def count_plugin_instances(self) -> Optional[int]:
+	def count_plugin_instances(self, class_name: str = 'GeckoPluginWindow') -> Optional[int]:
 		""" Counts the total number of running plugin instances in every Firefox tab and window. For example,
 		if a page has two Flash movies and one Java applet, this function would count three instances (assuming
 		Firefox had the required plugins installed). Returns None if Firefox is running in headless mode. """
-		return len(self.window.children(class_name='GeckoPluginWindow')) if self.window is not None else None
+		return len(self.window.children(class_name=class_name)) if self.window is not None else None
 
 class TemporaryRegistry():
 	""" A temporary registry that remembers and undos any changes (key additions and deletions) made to the Windows registry. """

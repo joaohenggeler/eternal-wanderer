@@ -83,11 +83,9 @@ class RecordConfig(CommonConfig):
 	standalone_media_background_color: str
 
 	fullscreen_browser: bool
-	reload_vrml_from_cache: bool
 	
 	enable_plugin_syncing: bool
 	plugin_syncing_skip_java_applets: bool
-	plugin_syncing_delay: float
 	
 	enable_plugin_input_repeater: bool
 	plugin_input_repeater_initial_wait: int
@@ -568,6 +566,8 @@ if __name__ == '__main__':
 
 				try:
 					# For the Flash Player and any other plugins that use the generic window.
+					# Note that this feature might not work when running in a remote machine that was connected via VNC.
+					# Interacting with Java applets and VRML worlds should still work though.
 					# E.g. https://web.archive.org/web/20010306033409if_/http://www.big.or.jp/~frog/others/button1.html
 					# E.g. https://web.archive.org/web/20030117223552if_/http://www.miniclip.com:80/dancingbush.htm
 					plugin_windows = self.firefox_window.children(class_name='GeckoPluginWindow')
@@ -1090,7 +1090,7 @@ if __name__ == '__main__':
 
 						# Prepare the recording phase.
 
-						plugin_crash_timeout = config.base_plugin_crash_timeout + ceil(config.plugin_syncing_delay if config.enable_plugin_syncing else 0) + config.page_load_timeout + config.max_duration
+						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.max_duration
 						
 						sync_plugins = config.enable_plugin_syncing and num_plugin_instances > 0
 
@@ -1118,19 +1118,24 @@ if __name__ == '__main__':
 							log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
 							browser.go_to_wayback_url(content_url, close_windows=True)
 							
-							if config.reload_vrml_from_cache and snapshot.MediaExtension in ['wrl', 'wrz']:
-								log.debug('Reloading the VRML world from cache.')
-								browser.reload_page_from_cache()
-
 							if sync_plugins:
+								
+								# Syncing VRML content seems to prevent the Cosmo Player from retrieving any previously
+								# cached assets. We'll fix this by reloading the page from cache using the F5 shortcut
+								# if the Cosmo Player is being used.
+								# E.g. https://web.archive.org/web/20220616010004if_/http://disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/golf/golf.wrl
+								num_cosmo_player_instances = browser.count_plugin_instances('CpWin32RenderWindow')
+								if num_cosmo_player_instances > 0:
+									log.info(f'Reloading the page from cache since {num_cosmo_player_instances} Cosmo Player instances were found.')
+									browser.reload_page_from_cache()
+
 								log.debug('Unloading plugin content.')
 								browser.unload_plugin_content(skip_applets=config.plugin_syncing_skip_java_applets)
 
 							with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
 							
 								if sync_plugins:
-									log.debug(f'Reloading plugin content after {config.plugin_syncing_delay:.1f} seconds.')
-									time.sleep(config.plugin_syncing_delay)
+									log.debug('Reloading plugin content.')
 									browser.reload_plugin_content(skip_applets=config.plugin_syncing_skip_java_applets)
 
 								time.sleep(wait_after_load)

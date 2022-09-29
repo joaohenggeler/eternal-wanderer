@@ -19,6 +19,12 @@ pip install -r language_requirements.txt
 pip install -r proxy_requirements.txt
 ```
 
+If you want to run the scripts through a static type checker, you should also install the typing stubs used by some packages by running the following command:
+
+```
+pip install -r typing_requirements.txt
+```
+
 The following Python packages are used:
 
 * [Selenium](https://github.com/SeleniumHQ/selenium): to visit web pages, retrieve their content, and manipulate them (e.g. scroll them during recording). Due to using older Firefox versions to display the pages, only Selenium 3.x can be used.
@@ -59,7 +65,7 @@ If you encounter any errors while installing the packages, try the following two
 
 * Download and install the latest [Microsoft Visual C++ Redistributable](https://docs.microsoft.com/en-US/cpp/windows/latest-supported-vc-redist?view=msvc-170).
 
-If you followed the previous instructions and fastText still fails to install with the error `Microsoft Visual C++ 14.0 or greater is required. Get it with "Microsoft C++ Build Tools"`, try installing [this package](https://github.com/messense/fasttext-wheel) instead by running the command `pip install fasttext-wheel`.
+If you followed the previous instructions and fastText still fails to install with the error `Microsoft Visual C++ 14.0 or greater is required. Get it with "Microsoft C++ Build Tools"`, try installing [this package](https://github.com/messense/fasttext-wheel) instead by running the command `pip install fasttext-wheel>=0.9.2`.
 
 ## Setup Guide
 
