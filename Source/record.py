@@ -86,6 +86,7 @@ class RecordConfig(CommonConfig):
 	
 	enable_plugin_syncing: bool
 	plugin_syncing_skip_java_applets: bool
+	plugin_syncing_delay: int
 	
 	enable_plugin_input_repeater: bool
 	plugin_input_repeater_initial_wait: int
@@ -1093,7 +1094,7 @@ if __name__ == '__main__':
 						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.max_duration
 						
 						sync_plugins = config.enable_plugin_syncing and num_plugin_instances > 0
-
+						
 						plugin_input_repeater: Union[PluginInputRepeater, ContextManager[None]] = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
 						cosmo_player_viewpoint_cycler: Union[CosmoPlayerViewpointCycler, ContextManager[None]] = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
 
@@ -1132,21 +1133,31 @@ if __name__ == '__main__':
 								log.debug('Unloading plugin content.')
 								browser.unload_plugin_content(skip_applets=config.plugin_syncing_skip_java_applets)
 
+								def delayed_sync_plugins() -> None:
+									""" Reloads any previously unloaded plugin content after a given amount of time has passed. """
+									time.sleep(config.plugin_syncing_delay)
+									log.debug('Reloading plugin content.')
+									browser.reload_plugin_content(skip_applets=config.plugin_syncing_skip_java_applets)
+
+								delayed_sync_plugins_thread = Thread(target=delayed_sync_plugins, name='sync_plugins', daemon=True)
+
 							with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
 							
 								if sync_plugins:
-									log.debug('Reloading plugin content.')
-									browser.reload_plugin_content(skip_applets=config.plugin_syncing_skip_java_applets)
+									delayed_sync_plugins_thread.start()
 
 								time.sleep(wait_after_load)
 
 								for _ in range(num_scrolls):
-									
+
 									for _ in browser.traverse_frames():
 										driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
 									
 									time.sleep(wait_per_scroll)
 					
+						if sync_plugins:
+							delayed_sync_plugins_thread.join()
+
 						redirected = False
 						if not snapshot.IsStandaloneMedia:
 							redirected, url, timestamp = browser.was_wayback_url_redirected(content_url)

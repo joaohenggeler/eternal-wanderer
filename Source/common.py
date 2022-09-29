@@ -158,6 +158,7 @@ class CommonConfig():
 				
 		'enable_plugin_syncing',
 		'plugin_syncing_skip_java_applets',
+		'plugin_syncing_delay',
 		
 		'enable_plugin_input_repeater', 
 		'plugin_input_repeater_initial_wait',
