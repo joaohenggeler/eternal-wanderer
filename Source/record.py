@@ -83,9 +83,11 @@ class RecordConfig(CommonConfig):
 	standalone_media_background_color: str
 
 	fullscreen_browser: bool
-	reload_page_from_cache: bool
-	sync_plugin_content: bool
-	skip_java_applets_when_syncing: bool
+	reload_vrml_from_cache: bool
+	
+	enable_plugin_syncing: bool
+	plugin_syncing_skip_java_applets: bool
+	plugin_syncing_delay: float
 	
 	enable_plugin_input_repeater: bool
 	plugin_input_repeater_initial_wait: int
@@ -920,25 +922,18 @@ if __name__ == '__main__':
 					# recorded.
 
 					try:
+						log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} with {snapshot.Points} points (last published = {days_since_last_published} days ago).')
+
 						for path in iglob(standalone_media_download_search_path):
 							delete_file(path)
-
-						media_title = None
-						media_author = None
 
 						if snapshot.IsStandaloneMedia:
 							media_duration, media_title, media_author, _ = generate_standalone_media_page(snapshot.WaybackUrl, snapshot.MediaExtension)
 							content_url = standalone_media_page_url
 						else:
+							media_title = None
+							media_author = None
 							content_url = snapshot.WaybackUrl
-
-						log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} with {snapshot.Points} points (last published = {days_since_last_published} days ago).')
-						
-						try:
-							browser.bring_to_front()
-							pywinauto.mouse.move((0, config.physical_screen_height // 2))
-						except Exception as error:
-							log.error(f'Failed to focus on the browser window and move the mouse with the error: {repr(error)}')
 
 						missing_urls: list[str] = []
 
@@ -958,7 +953,13 @@ if __name__ == '__main__':
 						# Wait for the page and its resources to be cached.
 						with proxy, PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout):
 
-							browser.go_to_wayback_url(content_url)
+							try:
+								browser.bring_to_front()
+								pywinauto.mouse.move((0, config.physical_screen_height // 2))
+							except Exception as error:
+								log.error(f'Failed to focus on the browser window and move the mouse with the error: {repr(error)}')
+
+							browser.go_to_wayback_url(content_url, close_windows=True)
 
 							# Make sure the plugin instances had time to load.
 							time.sleep(config.plugin_load_wait)
@@ -973,6 +974,7 @@ if __name__ == '__main__':
 									for tag in ['object', 'embed', 'applet']:
 										num_plugin_instances += len(driver.find_elements_by_tag_name(tag))
 
+								num_plugin_instances = max(num_plugin_instances, 1)
 								log.warning(f'Could not find any plugin instances when at least one was expected. Assuming {num_plugin_instances} instances.')
 							
 							wait_after_load: float
@@ -1088,43 +1090,48 @@ if __name__ == '__main__':
 
 						# Prepare the recording phase.
 
+						plugin_crash_timeout = config.base_plugin_crash_timeout + ceil(config.plugin_syncing_delay if config.enable_plugin_syncing else 0) + config.page_load_timeout + config.max_duration
+						
+						sync_plugins = config.enable_plugin_syncing and num_plugin_instances > 0
+
+						plugin_input_repeater: Union[PluginInputRepeater, ContextManager[None]] = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
+						cosmo_player_viewpoint_cycler: Union[CosmoPlayerViewpointCycler, ContextManager[None]] = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
+
 						subdirectory_path = config.get_recording_subdirectory_path(recording_id)
 						os.makedirs(subdirectory_path, exist_ok=True)
-						
+
 						parts = urlparse(snapshot.Url)
 						media_identifier = snapshot.MediaExtension if snapshot.IsStandaloneMedia else ('p' if snapshot.PageUsesPlugins else '')
 						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, str(snapshot.OldestDatetime.year), str(snapshot.OldestDatetime.month).zfill(2), str(snapshot.OldestDatetime.day).zfill(2), media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
-						try:
-							browser.bring_to_front()
-							pywinauto.mouse.move((0, config.physical_screen_height // 2))
-						except Exception as error:
-							log.error(f'Failed to focus on the browser window and move the mouse with the error: {repr(error)}')
-
-						browser.close_all_windows()
-
-						plugin_input_repeater: Union[PluginInputRepeater, ContextManager[None]] = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
-						cosmo_player_viewpoint_cycler: Union[CosmoPlayerViewpointCycler, ContextManager[None]] = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
-
-						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.max_duration
 						with PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout) as crash_timer:
 							
 							# Record the snapshot. The page should load faster now that its resources are cached.
-							
+
+							try:
+								browser.bring_to_front()
+								pywinauto.mouse.move((0, config.physical_screen_height // 2))
+							except Exception as error:
+								log.error(f'Failed to focus on the browser window and move the mouse with the error: {repr(error)}')
+
 							log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
-							browser.go_to_wayback_url(content_url)
+							browser.go_to_wayback_url(content_url, close_windows=True)
 							
-							if config.reload_page_from_cache:
+							if config.reload_vrml_from_cache and snapshot.MediaExtension in ['wrl', 'wrz']:
+								log.debug('Reloading the VRML world from cache.')
 								browser.reload_page_from_cache()
 
-							if config.sync_plugin_content:
-								browser.unload_plugin_content(skip_applets=config.skip_java_applets_when_syncing)
+							if sync_plugins:
+								log.debug('Unloading plugin content.')
+								browser.unload_plugin_content(skip_applets=config.plugin_syncing_skip_java_applets)
 
 							with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
 							
-								if config.sync_plugin_content:
-									browser.reload_plugin_content(skip_applets=config.skip_java_applets_when_syncing)
+								if sync_plugins:
+									log.debug(f'Reloading plugin content after {config.plugin_syncing_delay:.1f} seconds.')
+									time.sleep(config.plugin_syncing_delay)
+									browser.reload_plugin_content(skip_applets=config.plugin_syncing_skip_java_applets)
 
 								time.sleep(wait_after_load)
 

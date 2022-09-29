@@ -385,7 +385,7 @@ if __name__ == '__main__':
 
 					try:
 						log.info(f'[{snapshot_index+1} of {num_snapshots}] Scouting snapshot #{snapshot.Id} {snapshot} located at a depth of {snapshot.Depth} pages and whose parent has {parent_points} points.')
-						browser.go_to_wayback_url(snapshot.WaybackUrl)
+						browser.go_to_wayback_url(snapshot.WaybackUrl, close_windows=True)
 					except SessionNotCreatedException as error:
 						log.warning(f'Terminated the WebDriver session abruptly with the error: {repr(error)}')
 						break
@@ -648,8 +648,6 @@ if __name__ == '__main__':
 							# Which does this: <input value="http://www.geocities.com/Hollywood/Hills/5988/random.mid" onfocus="this.focus();this.select();">
 							# We're able to catch these edge cases in the recorder script.
 							page_uses_plugins = page_uses_plugins or any(driver.find_elements_by_tag_name(tag) for tag in ['object', 'embed', 'applet', 'app', 'bgsound'])
-
-						browser.close_all_windows()
 
 					except SessionNotCreatedException as error:
 						log.warning(f'Terminated the WebDriver session abruptly with the error: {repr(error)}')

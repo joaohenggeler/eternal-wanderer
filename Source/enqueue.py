@@ -9,8 +9,10 @@ from common import Database, Snapshot, find_best_wayback_machine_snapshot, find_
 
 if __name__ == '__main__':
 
+	names_to_values = {name.lower(): priority for priority, name in Snapshot.PRIORITY_NAMES.items() if priority != Snapshot.NO_PRIORITY}
+
 	parser = ArgumentParser(description='Adds a Wayback Machine snapshot to the Eternal Wanderer queue with a given priority. This can be used to scout, record, or publish any existing or new snapshots as soon as possible.')
-	parser.add_argument('priority', choices=['scout', 'record', 'publish'], help='The priority to assign to the snapshot.')
+	parser.add_argument('priority', choices=list(names_to_values), help='The priority to assign to the snapshot.')
 	parser.add_argument('url', help='The URL of the snapshot.')
 	parser.add_argument('timestamp', nargs='?', help='The timestamp of the snapshot. May be omitted if the URL already points to a Wayback Machine snapshot.')
 	args = parser.parse_args()
@@ -22,7 +24,6 @@ if __name__ == '__main__':
 	elif args.timestamp is None:
 		parser.error('The timestamp cannot be omitted unless the URL already points to a Wayback Machine snapshot.')
 
-	names_to_values = {'scout': Snapshot.SCOUT_PRIORITY, 'record': Snapshot.RECORD_PRIORITY, 'publish': Snapshot.PUBLISH_PRIORITY}
 	priority = names_to_values[args.priority]
 
 	with Database() as db:

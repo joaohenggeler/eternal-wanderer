@@ -156,9 +156,11 @@ class CommonConfig():
 		'standalone_media_height',
 		'standalone_media_background_color',
 		
-		'reload_page_from_cache',
-		'sync_plugin_content',
-		'skip_java_applets_when_syncing',
+		'reload_vrml_from_cache',
+		
+		'enable_plugin_syncing',
+		'plugin_syncing_skip_java_applets',
+		'plugin_syncing_delay',
 		
 		'enable_plugin_input_repeater', 
 		'plugin_input_repeater_initial_wait',
@@ -678,6 +680,8 @@ class Snapshot():
 	RECORD_PRIORITY = 2
 	PUBLISH_PRIORITY = 3
 
+	PRIORITY_NAMES: dict[int, str]
+
 	TIMESTAMP_FORMAT = '%Y%m%d%H%M%S'
 
 	IFRAME_MODIFIER = 'if_'
@@ -758,6 +762,13 @@ Snapshot.STATE_NAMES = {
 	Snapshot.APPROVED: 'Approved',
 	Snapshot.PUBLISHED: 'Published',
 	Snapshot.ARCHIVED: 'Archived',
+}
+
+Snapshot.PRIORITY_NAMES = {
+	Snapshot.NO_PRIORITY: 'None',
+	Snapshot.SCOUT_PRIORITY: 'Scout',
+	Snapshot.RECORD_PRIORITY: 'Record',
+	Snapshot.PUBLISH_PRIORITY: 'Publish',
 }
 
 class Recording():
@@ -1429,7 +1440,7 @@ class Browser():
 				else:
 					break
 
-	def go_to_wayback_url(self, wayback_url: str) -> None:
+	def go_to_wayback_url(self, wayback_url: str, close_windows: bool = False) -> None:
 		""" Navigates to a Wayback Machine URL, taking into account any rate limiting and retrying if the service is unavailable. """
 
 		while True:
@@ -1437,6 +1448,9 @@ class Browser():
 			retry = False
 
 			try:
+				if close_windows:
+					self.close_all_windows()
+
 				self.driver.get(Browser.BLANK_URL)
 
 				global_rate_limiter.wait_for_wayback_machine_rate_limit()
@@ -1693,6 +1707,29 @@ class Browser():
 
 		self.driver.switch_to.default_content()
 	
+	def close_all_windows(self) -> None:
+		""" Closes every Firefox tab and window, leaving only a single blank page. """
+
+		try:
+			self.driver.get(Browser.BLANK_URL)
+			current_handle = self.driver.current_window_handle
+
+			for handle in self.driver.window_handles:
+				if handle != current_handle:
+					self.driver.switch_to.window(handle)
+					self.driver.close()
+
+			self.driver.switch_to.window(current_handle)
+
+			try:
+				condition = expected_webdriver_conditions.number_of_windows_to_be(1)
+				WebDriverWait(self.driver, 10).until(condition)
+			except TimeoutException:
+				log.warning(f'Timed out while waiting for the other WebDriver windows to close.')
+
+		except NoSuchWindowException:
+			pass
+	
 	def unload_plugin_content(self, skip_applets: bool = False) -> None:
 		""" Unloads any content embedded using the object/embed/applet tags in the current web page and its frames.
 		This function should not be called more than once if any of this content is being played by the VLC plugin. """
@@ -1793,29 +1830,6 @@ class Browser():
 		if a page has two Flash movies and one Java applet, this function would count three instances (assuming
 		Firefox had the required plugins installed). Returns None if Firefox is running in headless mode. """
 		return len(self.window.children(class_name='GeckoPluginWindow')) if self.window is not None else None
-
-	def close_all_windows(self) -> None:
-		""" Closes every Firefox tab and window, leaving only a single blank page. """
-
-		try:
-			self.driver.get(Browser.BLANK_URL)
-			current_handle = self.driver.current_window_handle
-
-			for handle in self.driver.window_handles:
-				if handle != current_handle:
-					self.driver.switch_to.window(handle)
-					self.driver.close()
-
-			self.driver.switch_to.window(current_handle)
-
-			try:
-				condition = expected_webdriver_conditions.number_of_windows_to_be(1)
-				WebDriverWait(self.driver, 10).until(condition)
-			except TimeoutException:
-				log.warning(f'Timed out while waiting for the other WebDriver windows to close.')
-
-		except NoSuchWindowException:
-			pass
 
 class TemporaryRegistry():
 	""" A temporary registry that remembers and undos any changes (key additions and deletions) made to the Windows registry. """

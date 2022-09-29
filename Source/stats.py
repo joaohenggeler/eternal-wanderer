@@ -67,6 +67,24 @@ if __name__ == '__main__':
 
 			print()
 
+			cursor = db.execute('SELECT COUNT(*) AS Total FROM Snapshot WHERE Priority > 0;')
+			row = cursor.fetchone()
+			total_prioritized = row['Total']
+
+			percent = total_prioritized / total_snapshots * 100 if total_snapshots > 0 else 0
+			print(f'- Prioritized: {total_prioritized} ({percent:.2f}%)')
+
+			cursor = db.execute('SELECT Priority, COUNT(*) AS Total FROM Snapshot GROUP BY Priority ORDER BY Priority;')
+			priority_total = {row['Priority']: row['Total'] for row in cursor}
+
+			for priority, name in Snapshot.PRIORITY_NAMES.items():
+				if priority != Snapshot.NO_PRIORITY:
+					total = priority_total.get(priority, 0)
+					percent = total / total_snapshots * 100 if total_snapshots > 0 else 0
+					print(f'-> {name}: {total} ({percent:.2f}%)')
+
+			print()
+
 			cursor = db.execute('SELECT IsProcessed, COUNT(*) AS Total FROM Recording GROUP BY IsProcessed ORDER BY IsProcessed;')
 			recording_total = {row['IsProcessed']: row['Total'] for row in cursor}
 
