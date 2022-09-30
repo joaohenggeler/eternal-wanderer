@@ -555,7 +555,7 @@
 			"preset": "veryslow",
 			"pix_fmt": "yuv420p",
 			"fps_mode": "vfr",
-			"vf": "scale=1440:1080:force_original_aspect_ratio=decrease,pad=1440:1080:-1:-1:color=black",
+			"vf": "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1:color=black",
 			"sws_flags": "lanczos",
 			"c:a": "aac",
 			"profile:a": "aac_low",

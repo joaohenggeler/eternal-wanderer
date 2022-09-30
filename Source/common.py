@@ -983,8 +983,17 @@ class Browser():
 		# - https://ss64.com/nt/syntax-compatibility.html
 		os.environ['__COMPAT_LAYER'] = 'GDIDPISCALING DPIUNAWARE'
 
-		log.info(f'Creating the Firefox WebDriver using the Firefox executable at "{self.firefox_path}" and the WebDriver at "{self.webdriver_path}".')
-		self.driver = webdriver.Firefox(executable_path=self.webdriver_path, options=options, service_log_path=None)
+		log.info(f'Creating the WebDriver using the Firefox executable at "{self.firefox_path}" and the driver at "{self.webdriver_path}".')
+		
+		while True:
+			try:
+				self.driver = webdriver.Firefox(executable_path=self.webdriver_path, options=options, service_log_path=None)
+				break
+			except WebDriverException as error:
+				log.error(f'Failed to create the WebDriver with the error: {repr(error)}')
+				kill_processes_by_path(self.firefox_path)
+				time.sleep(30)
+
 		self.driver.set_page_load_timeout(config.page_load_timeout)
 		self.driver.maximize_window()
 
@@ -1006,8 +1015,8 @@ class Browser():
 				self.application = WindowsApplication(backend='win32')
 				self.application.connect(process=self.pid, timeout=30)
 				self.window = self.application.top_window()
-			except (WindowProcessNotFoundError, WindowTimeoutError):
-				log.error('Failed to connect to the Firefox executable.')
+			except (WindowProcessNotFoundError, WindowTimeoutError) as error:
+				log.error(f'Failed to connect to the Firefox executable with the error: {repr(error)}')
 			
 		if self.use_extensions:
 
@@ -1690,8 +1699,9 @@ class Browser():
 
 				try:
 					condition = expected_webdriver_conditions.frame_to_be_available_and_switch_to_it(frame)
-					WebDriverWait(self.driver, 20).until(condition)
+					WebDriverWait(self.driver, 15).until(condition)
 				except TimeoutException:
+					log.debug('Timed out while waiting for the frame to be available.')
 					continue
 				
 				yield from recurse(frame_source)
@@ -1720,9 +1730,9 @@ class Browser():
 
 			try:
 				condition = expected_webdriver_conditions.number_of_windows_to_be(1)
-				WebDriverWait(self.driver, 10).until(condition)
+				WebDriverWait(self.driver, 15).until(condition)
 			except TimeoutException:
-				log.warning(f'Timed out while waiting for the other WebDriver windows to close.')
+				log.warning('Timed out while waiting for the other browser windows to close.')
 
 		except NoSuchWindowException:
 			pass
@@ -2256,7 +2266,7 @@ def delete_directory(path: str) -> bool:
 # Ignore the PyWinAuto warning about connecting to a 32-bit executable while using a 64-bit Python environment.
 warnings.simplefilter('ignore', category=UserWarning)
 
-def kill_processes_by_path(path: str, timeout: int = 5) -> None:
+def kill_processes_by_path(path: str, timeout: int = 10) -> None:
 	""" Kills all processes running an executable at a given path. """
 
 	path = os.path.abspath(path)
@@ -2271,7 +2281,7 @@ def kill_processes_by_path(path: str, timeout: int = 5) -> None:
 	except Exception as error:
 		log.error(f'Failed to kill the processes using the path "{path}" with the error: {repr(error)}')
 
-def kill_process_by_pid(pid: int, timeout: int = 5) -> None:
+def kill_process_by_pid(pid: int, timeout: int = 10) -> None:
 	""" Kills a process given its PID. """
 
 	try:
