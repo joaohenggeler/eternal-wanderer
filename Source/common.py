@@ -156,8 +156,7 @@ class CommonConfig():
 		'standalone_media_height',
 		'standalone_media_background_color',
 				
-		'enable_plugin_syncing',
-		'plugin_syncing_skip_java_applets',
+		'plugin_syncing_type',
 		'plugin_syncing_delay',
 		
 		'enable_plugin_input_repeater', 

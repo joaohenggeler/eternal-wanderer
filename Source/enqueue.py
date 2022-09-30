@@ -47,7 +47,8 @@ if __name__ == '__main__':
 							 'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest})
 				db.commit()
 				
-				print(f'Added the snapshot ({best_snapshot.original}, {best_snapshot.timestamp}, {best_snapshot.mimetype}) with the "{args.priority}" priority.')
+				snapshot_type = 'media file' if is_standalone_media else 'web page'
+				print(f'Added the {snapshot_type} snapshot ({best_snapshot.original}, {best_snapshot.timestamp}) with the "{args.priority}" priority.')
 				
 				if first_state == Snapshot.QUEUED and priority > Snapshot.SCOUT_PRIORITY:
 					print('The snapshot must be scouted before it can be recorded or published.')
@@ -76,7 +77,8 @@ if __name__ == '__main__':
 						db.execute('UPDATE Snapshot SET State = :state, Priority = :priority WHERE Id = :id;', {'state': new_state, 'priority': priority, 'id': snapshot.Id})
 						db.commit()
 						
-						print(f'Updated the snapshot {snapshot} to the "{args.priority}" priority.')
+						snapshot_type = 'media file' if snapshot.IsStandaloneMedia else 'web page'
+						print(f'Updated the {snapshot_type} snapshot {snapshot} to the "{args.priority}" priority.')
 
 						if new_state == Snapshot.QUEUED and priority > Snapshot.SCOUT_PRIORITY:
 							print('The snapshot must be scouted before it can be recorded or published.')

@@ -84,8 +84,7 @@ class RecordConfig(CommonConfig):
 
 	fullscreen_browser: bool
 	
-	enable_plugin_syncing: bool
-	plugin_syncing_skip_java_applets: bool
+	plugin_syncing_type: str
 	plugin_syncing_delay: int
 	
 	enable_plugin_input_repeater: bool
@@ -138,6 +137,9 @@ class RecordConfig(CommonConfig):
 
 		if self.proxy_max_cdx_path_components is not None:
 			self.proxy_max_cdx_path_components = max(self.proxy_max_cdx_path_components, 1)
+
+		self.plugin_syncing_type = self.plugin_syncing_type.lower()
+		assert self.plugin_syncing_type in ['none', 'reload', 'unload'], f'Unknown plugin syncing type "{self.plugin_syncing_type}".'
 
 		self.screen_capture_recorder_settings = container_to_lowercase(self.screen_capture_recorder_settings)
 		
@@ -1092,9 +1094,7 @@ if __name__ == '__main__':
 						# Prepare the recording phase.
 
 						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.max_duration
-						
-						sync_plugins = config.enable_plugin_syncing and num_plugin_instances > 0
-						
+
 						plugin_input_repeater: Union[PluginInputRepeater, ContextManager[None]] = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
 						cosmo_player_viewpoint_cycler: Union[CosmoPlayerViewpointCycler, ContextManager[None]] = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
 
@@ -1119,7 +1119,10 @@ if __name__ == '__main__':
 							log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
 							browser.go_to_wayback_url(content_url, close_windows=True)
 							
-							if sync_plugins:
+							if config.plugin_syncing_type == 'reload':
+								browser.reload_plugin_content()
+							
+							elif config.plugin_syncing_type == 'unload':
 								
 								# Syncing VRML content seems to prevent the Cosmo Player from retrieving any previously
 								# cached assets. We'll fix this by reloading the page from cache using the F5 shortcut
@@ -1131,19 +1134,19 @@ if __name__ == '__main__':
 									browser.reload_page_from_cache()
 
 								log.debug('Unloading plugin content.')
-								browser.unload_plugin_content(skip_applets=config.plugin_syncing_skip_java_applets)
+								browser.unload_plugin_content(skip_applets=True)
 
 								def delayed_sync_plugins() -> None:
 									""" Reloads any previously unloaded plugin content after a given amount of time has passed. """
 									time.sleep(config.plugin_syncing_delay)
 									log.debug('Reloading plugin content.')
-									browser.reload_plugin_content(skip_applets=config.plugin_syncing_skip_java_applets)
+									browser.reload_plugin_content(skip_applets=True)
 
 								delayed_sync_plugins_thread = Thread(target=delayed_sync_plugins, name='sync_plugins', daemon=True)
 
 							with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
 							
-								if sync_plugins:
+								if config.plugin_syncing_type == 'unload':
 									delayed_sync_plugins_thread.start()
 
 								time.sleep(wait_after_load)
@@ -1155,7 +1158,7 @@ if __name__ == '__main__':
 									
 									time.sleep(wait_per_scroll)
 					
-						if sync_plugins:
+						if config.plugin_syncing_type == 'unload':
 							delayed_sync_plugins_thread.join()
 
 						redirected = False
