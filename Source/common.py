@@ -158,7 +158,8 @@ class CommonConfig():
 				
 		'plugin_syncing_type',
 		'plugin_syncing_delay',
-		
+		'plugin_syncing_reload_vrml_from_cache',
+
 		'enable_plugin_input_repeater', 
 		'plugin_input_repeater_initial_wait',
 		'plugin_input_repeater_wait_per_cycle',

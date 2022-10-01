@@ -489,7 +489,8 @@
 		"fullscreen_browser": true,
 		
 		"plugin_syncing_type": "unload",
-		"plugin_syncing_delay": 1,
+		"plugin_syncing_delay": 0.5,
+		"plugin_syncing_reload_vrml_from_cache": true,
 
 		"enable_plugin_input_repeater": true,
 		"plugin_input_repeater_initial_wait": 15,

@@ -85,7 +85,8 @@ class RecordConfig(CommonConfig):
 	fullscreen_browser: bool
 	
 	plugin_syncing_type: str
-	plugin_syncing_delay: int
+	plugin_syncing_delay: float
+	plugin_syncing_reload_vrml_from_cache: bool
 	
 	enable_plugin_input_repeater: bool
 	plugin_input_repeater_initial_wait: int
@@ -1119,27 +1120,30 @@ if __name__ == '__main__':
 							log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
 							browser.go_to_wayback_url(content_url, close_windows=True)
 							
-							if config.plugin_syncing_type == 'reload':
-								browser.reload_plugin_content()
-							
-							elif config.plugin_syncing_type == 'unload':
-								
-								# Syncing VRML content seems to prevent the Cosmo Player from retrieving any previously
-								# cached assets. We'll fix this by reloading the page from cache using the F5 shortcut
-								# if the Cosmo Player is being used.
+							if config.plugin_syncing_reload_vrml_from_cache:
+								# Syncing VRML content in some machines can prevent the Cosmo Player from retrieving
+								# any previously cached assets. We'll fix this by reloading the page from cache using
+								# the F5 shortcut if the Cosmo Player is being used.
 								# E.g. https://web.archive.org/web/20220616010004if_/http://disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/golf/golf.wrl
 								num_cosmo_player_instances = browser.count_plugin_instances('CpWin32RenderWindow')
 								if num_cosmo_player_instances > 0:
 									log.info(f'Reloading the page from cache since {num_cosmo_player_instances} Cosmo Player instances were found.')
 									browser.reload_page_from_cache()
 
+							if config.plugin_syncing_type == 'reload':
+								
+								log.debug('Reloading plugin content.')
+								browser.reload_plugin_content()
+							
+							elif config.plugin_syncing_type == 'unload':
+								
 								log.debug('Unloading plugin content.')
 								browser.unload_plugin_content(skip_applets=True)
 
 								def delayed_sync_plugins() -> None:
 									""" Reloads any previously unloaded plugin content after a given amount of time has passed. """
 									time.sleep(config.plugin_syncing_delay)
-									log.debug('Reloading plugin content.')
+									log.debug(f'Reloading plugin content after {config.plugin_syncing_delay:.1f} seconds.')
 									browser.reload_plugin_content(skip_applets=True)
 
 								delayed_sync_plugins_thread = Thread(target=delayed_sync_plugins, name='sync_plugins', daemon=True)
