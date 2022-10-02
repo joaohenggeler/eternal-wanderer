@@ -7,7 +7,6 @@ import re
 import sqlite3
 import subprocess
 import sys
-import time
 from argparse import ArgumentParser
 from collections import Counter, defaultdict
 from contextlib import nullcontext
@@ -18,6 +17,7 @@ from queue import Queue
 from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, STDOUT, TimeoutExpired
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from threading import Thread, Timer
+from time import monotonic, sleep
 from typing import BinaryIO, ContextManager, Optional, Union, cast
 from urllib.parse import urljoin, urlparse, urlunparse
 
@@ -255,7 +255,7 @@ if __name__ == '__main__':
 					proxy.task_done()
 					
 					proxy.process.kill()
-					time.sleep(5)
+					sleep(5)
 					port = free_port()
 
 				except queue.Empty:
@@ -562,9 +562,9 @@ if __name__ == '__main__':
 			while self.running:
 				
 				if first:
-					time.sleep(config.plugin_input_repeater_initial_wait)
+					sleep(config.plugin_input_repeater_initial_wait)
 				else:
-					time.sleep(config.plugin_input_repeater_wait_per_cycle)
+					sleep(config.plugin_input_repeater_wait_per_cycle)
 
 				first = False
 
@@ -640,7 +640,7 @@ if __name__ == '__main__':
 
 			while self.running:
 				
-				time.sleep(config.cosmo_player_viewpoint_wait_per_cycle)
+				sleep(config.cosmo_player_viewpoint_wait_per_cycle)
 
 				try:
 					# E.g. https://web.archive.org/web/19970713113545if_/http://www.hedges.org:80/thehedges/Ver21.wrl
@@ -799,7 +799,7 @@ if __name__ == '__main__':
 					except sqlite3.Error as error:
 						log.error(f'Failed to abort the snapshot {snapshot} with the error: {repr(error)}')
 						db.rollback()
-						time.sleep(config.database_error_wait)
+						sleep(config.database_error_wait)
 
 				def is_standalone_media_extension_allowed(media_extension: str) -> bool:
 					""" Checks if a standalone media snapshot should be recorded. """
@@ -912,7 +912,7 @@ if __name__ == '__main__':
 
 					except sqlite3.Error as error:
 						log.error(f'Failed to select the next snapshot with the error: {repr(error)}')
-						time.sleep(config.database_error_wait)
+						sleep(config.database_error_wait)
 						continue
 
 					# Due to the way snapshots are labelled, it's possible that a regular page
@@ -971,7 +971,7 @@ if __name__ == '__main__':
 							browser.go_to_wayback_url(content_url, close_windows=True)
 
 							# Make sure the plugin instances had time to load.
-							time.sleep(config.plugin_load_wait)
+							sleep(config.plugin_load_wait)
 
 							# This may be less than the real value if we had to kill any plugin instances.
 							num_plugin_instances = browser.count_plugin_instances()
@@ -1027,20 +1027,20 @@ if __name__ == '__main__':
 								wait_per_scroll = clamp(wait_per_scroll, 0, max_wait_per_scroll)
 
 							log.info(f'Waiting {cache_wait:.1f} seconds for the page to cache.')
-							time.sleep(cache_wait)
+							sleep(cache_wait)
 
 							# Keep waiting if the page or any plugins are still requesting data.
 							if config.enable_proxy:
 								
 								log.debug('Waiting for the proxy.')
-								begin_proxy_time = time.time()
+								begin_proxy_time = monotonic()
 								
 								proxy_status_codes: Counter = Counter()
 
 								try:
 									while True:
 										
-										elapsed_proxy_time = time.time() - begin_proxy_time
+										elapsed_proxy_time = monotonic() - begin_proxy_time
 										if elapsed_proxy_time > config.proxy_total_timeout:
 											log.debug('Timed out while reading proxy messages.')
 											break
@@ -1072,7 +1072,7 @@ if __name__ == '__main__':
 								except queue.Empty:
 									log.debug('No more proxy messages.')
 								finally:
-									elapsed_proxy_time = time.time() - begin_proxy_time
+									elapsed_proxy_time = monotonic() - begin_proxy_time
 									proxy_status_codes = sorted(proxy_status_codes.items()) # type: ignore
 									log.info(f'Waited {elapsed_proxy_time:.1f} extra seconds for the proxy: {proxy_status_codes}')
 
@@ -1148,7 +1148,7 @@ if __name__ == '__main__':
 
 								def delayed_sync_plugins() -> None:
 									""" Reloads any previously unloaded plugin content after a given amount of time has passed. """
-									time.sleep(config.plugin_syncing_delay)
+									sleep(config.plugin_syncing_delay)
 									log.debug(f'Reloading plugin content after {config.plugin_syncing_delay:.1f} seconds.')
 									browser.reload_plugin_content(skip_applets=True)
 
@@ -1159,14 +1159,14 @@ if __name__ == '__main__':
 								if config.plugin_syncing_type == 'unload':
 									delayed_sync_plugins_thread.start()
 
-								time.sleep(wait_after_load)
+								sleep(wait_after_load)
 
 								for _ in range(num_scrolls):
 
 									for _ in browser.traverse_frames():
 										driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
 									
-									time.sleep(wait_per_scroll)
+									sleep(wait_per_scroll)
 					
 						if config.plugin_syncing_type == 'unload':
 							delayed_sync_plugins_thread.join()
@@ -1245,7 +1245,7 @@ if __name__ == '__main__':
 										num_consecutive_misses += 1
 
 									# Avoid making too many requests at once.
-									time.sleep(1)
+									sleep(1)
 								else:
 									# Avoid getting stuck in an infinite loop because the original
 									# domain is parked, meaning there's potentially a valid response
@@ -1366,7 +1366,7 @@ if __name__ == '__main__':
 					except sqlite3.Error as error:
 						log.error(f'Failed to update the snapshot\'s status with the error: {repr(error)}')
 						db.rollback()
-						time.sleep(config.database_error_wait)
+						sleep(config.database_error_wait)
 						continue
 		
 		except sqlite3.Error as error:

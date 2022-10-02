@@ -6,11 +6,11 @@ import re
 import sqlite3
 import string
 import sys
-import time
 import unicodedata
 from argparse import ArgumentParser
 from base64 import b64decode
 from collections import Counter
+from time import sleep
 from typing import Optional, Union
 from urllib.parse import parse_qs, unquote, urlparse, urlunparse
 
@@ -145,7 +145,7 @@ if __name__ == '__main__':
 				while not is_wayback_machine_available():
 					retry = True
 					log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
-					time.sleep(config.unavailable_wayback_machine_wait)
+					sleep(config.unavailable_wayback_machine_wait)
 			
 			finally:
 				if retry:
@@ -268,7 +268,7 @@ if __name__ == '__main__':
 				except sqlite3.Error as error:
 					log.error(f'Failed to invalidate the snapshot {snapshot} with the error: {repr(error)}')
 					db.rollback()
-					time.sleep(config.database_error_wait)
+					sleep(config.database_error_wait)
 
 			def check_snapshot_redirection(snapshot: Snapshot) -> bool:
 				""" Checks if a snapshot was redirected. If so, the snapshot is invalidated and no information is extracted from its page.
@@ -300,7 +300,7 @@ if __name__ == '__main__':
 					except sqlite3.Error as error:
 						log.error(f'Failed to update the redirected snapshot with the error: {repr(error)}')
 						db.rollback()
-						time.sleep(config.database_error_wait)
+						sleep(config.database_error_wait)
 
 				return redirected
 
@@ -372,7 +372,7 @@ if __name__ == '__main__':
 
 					except sqlite3.Error as error:
 						log.error(f'Failed to select the next snapshot with the error: {repr(error)}')
-						time.sleep(config.database_error_wait)
+						sleep(config.database_error_wait)
 						continue
 					
 					# Due to the way snapshots are labelled, it's possible that a regular page
@@ -415,7 +415,7 @@ if __name__ == '__main__':
 						except sqlite3.Error as error:
 							log.error(f'Failed to update the mislabeled snapshot with the error: {repr(error)}')
 							db.rollback()
-							time.sleep(config.database_error_wait)
+							sleep(config.database_error_wait)
 						finally:
 							continue
 
@@ -709,7 +709,7 @@ if __name__ == '__main__':
 					except sqlite3.Error as error:
 						log.error(f'Failed to insert the next snapshots with the error: {repr(error)}')
 						db.rollback()
-						time.sleep(config.database_error_wait)
+						sleep(config.database_error_wait)
 						continue
 
 			except KeyboardInterrupt:

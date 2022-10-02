@@ -4,10 +4,10 @@ import os
 import sqlite3
 import sys
 import tempfile
-import time
 from argparse import ArgumentParser
 from glob import glob
 from tempfile import NamedTemporaryFile
+from time import sleep
 from typing import Optional, Union
 
 import ffmpeg # type: ignore
@@ -225,7 +225,7 @@ if __name__ == '__main__':
 						break
 					except (MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
 						log.warning(f'Retrying the media post operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
-						time.sleep(config.mastodon_retry_wait)
+						sleep(config.mastodon_retry_wait)
 				else:
 					raise
 
@@ -241,7 +241,7 @@ if __name__ == '__main__':
 						break
 					except (MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
 						log.warning(f'Retrying the status post operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
-						time.sleep(config.mastodon_retry_wait)
+						sleep(config.mastodon_retry_wait)
 				else:
 					raise
 
@@ -380,7 +380,7 @@ if __name__ == '__main__':
 					
 					except sqlite3.Error as error:
 						log.error(f'Failed to select the next snapshot recording with the error: {repr(error)}')
-						time.sleep(config.database_error_wait)
+						sleep(config.database_error_wait)
 						continue
 
 					log.info(f'[{recording_index+1} of {num_recordings}] Publishing recording #{recording.Id} for snapshot #{snapshot.Id} {snapshot} (approved = {snapshot.State == Snapshot.APPROVED}).')
@@ -437,7 +437,7 @@ if __name__ == '__main__':
 					except sqlite3.Error as error:
 						log.error(f'Failed to update the snapshot\'s status with the error: {repr(error)}')
 						db.rollback()
-						time.sleep(config.database_error_wait)
+						sleep(config.database_error_wait)
 						continue
 
 		except sqlite3.Error as error:

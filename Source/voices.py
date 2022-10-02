@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 import subprocess
-import time
 from argparse import ArgumentParser
+from time import sleep
 
 from record import RecordConfig
 
@@ -65,7 +65,7 @@ if __name__ == '__main__':
 				except COMError as error:
 					print(f'Failed to test the voice "{description}" with the error: {repr(error)}')
 				finally:
-					time.sleep(1)
+					sleep(1)
 
 		print()
 

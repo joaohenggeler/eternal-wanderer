@@ -15,7 +15,6 @@ import re
 import shutil
 import sqlite3
 import tempfile
-import time
 import warnings
 import winreg
 from base64 import b64encode
@@ -26,6 +25,7 @@ from glob import iglob
 from math import ceil
 from random import random
 from subprocess import Popen
+from time import sleep
 from typing import Any, Iterator, Optional, Union
 from urllib.parse import ParseResult, unquote, urlparse, urlunparse
 from winreg import CreateKeyEx, DeleteKey, DeleteValue, EnumKey, EnumValue, OpenKey, QueryInfoKey, QueryValueEx, SetValueEx
@@ -332,17 +332,17 @@ class RateLimiter():
 	def wait_for_wayback_machine_rate_limit(self, **kwargs) -> None:
 		""" Waits for a given amount of time if the user-defined Wayback Machine rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
 		while not self.wayback_machine_rate_limiter.hit(self.wayback_machine_requests_per_minute, **kwargs):
-			time.sleep(config.rate_limit_poll_frequency)
+			sleep(config.rate_limit_poll_frequency)
 
 	def wait_for_cdx_api_rate_limit(self, **kwargs) -> None:
 		""" Waits for a given amount of time if the user-defined CDX API rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
 		while not self.cdx_api_rate_limiter.hit(self.cdx_api_requests_per_second, **kwargs):
-			time.sleep(config.rate_limit_poll_frequency)
+			sleep(config.rate_limit_poll_frequency)
 
 	def wait_for_save_api_rate_limit(self, **kwargs) -> None:
 		""" Waits for a given amount of time if the user-defined Save API rate limit has been reached. Otherwise, returns immediately. Thread-safe. """
 		while not self.save_api_rate_limiter.hit(self.save_api_requests_per_second, **kwargs):
-			time.sleep(config.rate_limit_poll_frequency)
+			sleep(config.rate_limit_poll_frequency)
 
 # Note that different scripts use different global rate limiter instances.
 # They're only the same between a script and this module.
@@ -993,7 +993,7 @@ class Browser():
 			except WebDriverException as error:
 				log.error(f'Failed to create the WebDriver with the error: {repr(error)}')
 				kill_processes_by_path(self.firefox_path)
-				time.sleep(30)
+				sleep(30)
 
 		self.driver.set_page_load_timeout(config.page_load_timeout)
 		self.driver.maximize_window()
@@ -1486,7 +1486,7 @@ class Browser():
 			finally:
 				if retry:
 					log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
-					time.sleep(config.unavailable_wayback_machine_wait)
+					sleep(config.unavailable_wayback_machine_wait)
 					continue
 				else:
 					break
