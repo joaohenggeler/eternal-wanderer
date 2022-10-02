@@ -2139,15 +2139,12 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 		if last_modified_header is not None:
 
 			# Fix an issue where the datetime parsing fails due to the number of minutes
-			# and seconds not being delimited properly. Although this seems specific,
-			# it seems to happen with various snapshots from different domains.
+			# and seconds not being delimited properly.
 			# E.g. https://web.archive.org/web/20010926042147if_/http://geocities.yahoo.co.jp:80/
 			# Where the last modified time is "Mon, 24 Sep 2001 04:2146 GMT".
-			
 			# E.g. ["Mon, 24 Sep 2001 04", "2146 GMT"] instead of ["Mon, 24 Sep 2001 04", "21", "46 GMT"]
 			split_header = last_modified_header.split(':')
 			if len(split_header) == 2:
-				
 				# E.g. "2146 GMT" -> "21:46 GMT"
 				log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
 				last_modified_header = ':'.join([split_header[0], split_header[1][:2], split_header[1][2:]])
@@ -2159,13 +2156,20 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 				log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
 				last_modified_header = last_modified_header.removesuffix('GMT') + ' GMT'
 
+			# Fix an issue where the time is missing. This solution adds potentially
+			# incorrect information to the datetime, which is fine for our purposes.
+			# E.g. https://web.archive.org/web/19970112174206if_/http://www.manish.com:80/jneko/
+			# Where the last modified time is "Wed, 27 Mar 1996 ? GMT".
+			if last_modified_header.endswith('? GMT'):
+				log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
+				last_modified_header = last_modified_header.replace('? GMT', '00:00:00 GMT')
+
 			last_modified_time = parsedate_to_datetime(last_modified_header).strftime(Snapshot.TIMESTAMP_FORMAT)
 
 	except requests.RequestException as error:
 		log.error(f'Failed to find any extra information from the snapshot "{wayback_url}" with the error: {repr(error)}')
 	except (ValueError, TypeError) as error:
 		# Catching TypeError is necessary for broken dates like:
-		# - "Wed, 27 Mar 1996 ? GMT" (https://web.archive.org/web/19970112174206if_/http://www.manish.com:80/jneko/)
 		# - "Friday, 18-Oct-96 15:48:24 GMT GMT" (https://web.archive.org/web/19961018174824if_/http://www.com-stock.com:80/dave/)
 		log.error(f'Failed to parse the last modified time "{last_modified_header}" of the snapshot "{wayback_url}" with the error: {repr(error)}')
 	

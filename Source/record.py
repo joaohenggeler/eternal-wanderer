@@ -717,7 +717,7 @@ if __name__ == '__main__':
 					""" Generates the page where a standalone media file is embedded using both the information
 					from the configuration as well as the file's metadata. """
 
-					success = True
+					download_success = True
 
 					wayback_parts = parse_wayback_machine_snapshot_url(wayback_url)
 					parts = urlparse(wayback_parts.Url if wayback_parts is not None else wayback_url)
@@ -750,7 +750,7 @@ if __name__ == '__main__':
 						
 							log.debug(f'Downloaded the standalone media "{wayback_url}" to "{downloaded_file_path}".')
 							
-							# Two separate URLs because ffmpeg uses "file:path" instead of "file://path".
+							# Two separate URLs because ffmpeg uses "file:path" instead of "file:///path".
 							# See: https://superuser.com/questions/718027/ffmpeg-concat-doesnt-work-with-absolute-path/1551017#1551017
 							embed_url = f'file:///{downloaded_file_path}'
 							probe_url = f'file:{downloaded_file_path}'
@@ -770,7 +770,7 @@ if __name__ == '__main__':
 						
 						except requests.RequestException as error:
 							log.error(f'Failed to download the standalone media file "{wayback_url}" with the error: {repr(error)}')
-							success = False
+							download_success = False
 						except (ffmpeg.Error, KeyError, ValueError) as error:
 							log.warning(f'Could not parse the standalone media\'s metadata with the error: {repr(error)}')
 							
@@ -788,7 +788,7 @@ if __name__ == '__main__':
 					standalone_media_page_file.write(content)
 					standalone_media_page_file.flush()
 
-					return duration, title, author, success
+					return duration, title, author, download_success
 
 				def abort_snapshot(snapshot: Snapshot) -> None:
 					""" Aborts a snapshot that couldn't be recorded correctly due to a WebDriver error. """
@@ -932,8 +932,13 @@ if __name__ == '__main__':
 							delete_file(path)
 
 						if snapshot.IsStandaloneMedia:
-							media_duration, media_title, media_author, _ = generate_standalone_media_page(snapshot.WaybackUrl, snapshot.MediaExtension)
+							media_duration, media_title, media_author, download_success = generate_standalone_media_page(snapshot.WaybackUrl, snapshot.MediaExtension)
 							content_url = standalone_media_page_url
+
+							if not download_success:
+								log.error('Failed to download the standalone media file.')
+								abort_snapshot(snapshot)
+								continue
 						else:
 							media_title = None
 							media_author = None
@@ -1073,11 +1078,11 @@ if __name__ == '__main__':
 
 						if snapshot.IsStandaloneMedia and realmedia_url is not None:
 							log.info(f'Regenerating the standalone media page for the RealMedia file "{realmedia_url}".')
-							media_duration, media_title, media_author, success = generate_standalone_media_page(realmedia_url)
+							media_duration, media_title, media_author, download_success = generate_standalone_media_page(realmedia_url)
 							wait_after_load = clamp(config.base_standalone_media_wait_after_load + media_duration, config.min_duration, config.max_duration)
 
-							if not success:
-								log.error(f'Failed to download the RealMedia file.')
+							if not download_success:
+								log.error('Failed to download the RealMedia file.')
 								abort_snapshot(snapshot)
 								continue
 
@@ -1123,7 +1128,8 @@ if __name__ == '__main__':
 							if config.plugin_syncing_reload_vrml_from_cache:
 								# Syncing VRML content in some machines can prevent the Cosmo Player from retrieving
 								# any previously cached assets. We'll fix this by reloading the page from cache using
-								# the F5 shortcut if the Cosmo Player is being used.
+								# the F5 shortcut if the Cosmo Player is being used. This solution can cause issues
+								# with other plugins like VLC, which is why it's currently limited to VRML content.
 								# E.g. https://web.archive.org/web/20220616010004if_/http://disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/golf/golf.wrl
 								num_cosmo_player_instances = browser.count_plugin_instances('CpWin32RenderWindow')
 								if num_cosmo_player_instances > 0:

@@ -465,7 +465,7 @@
 		"proxy_max_cdx_path_components": 2,
 		"proxy_save_missing_snapshots_that_still_exist_online": true,
 		"proxy_max_consecutive_save_tries": 10,
-		"proxy_max_total_save_tries": 150,
+		"proxy_max_total_save_tries": 100,
 		"proxy_cache_missing_responses": true,
 
 		"page_cache_wait": 20,

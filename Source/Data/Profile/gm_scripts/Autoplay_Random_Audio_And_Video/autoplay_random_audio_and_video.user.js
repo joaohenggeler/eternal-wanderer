@@ -1,6 +1,6 @@
 ﻿// ==UserScript==
 // @name			Autoplay Random Audio And Video
-// @description		Makes a random audio and video element start playing as soon as possible. This includes both the audio and video tags as well as any object and embed tags that specify audio and video MIME types.
+// @description		Makes a random audio and video element start playing as soon as possible. This includes both the audio and video tags as well as any object and embed tags that specify audio or video MIME types.
 // @version			1.0.0
 // @grant			none
 // ==/UserScript==

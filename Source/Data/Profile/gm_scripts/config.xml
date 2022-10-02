@@ -22,7 +22,7 @@
 		<Include>*</Include>
 	</Script>
 	
-	<Script basedir="Autoplay_Random_Audio_And_Video" checkRemoteUpdates="0" description="Makes a random audio and video element start playing as soon as possible. This includes both the audio and video tags as well as any object and embed tags that specify audio and video MIME types." enabled="true" filename="autoplay_random_audio_and_video.user.js" installTime="1654470000000" modified="1654470000000" name="Autoplay Random Audio And Video" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="0302bf29-aa41-46d7-a4d9-15659cb98124" version="1.0.0">
+	<Script basedir="Autoplay_Random_Audio_And_Video" checkRemoteUpdates="0" description="Makes a random audio and video element start playing as soon as possible. This includes both the audio and video tags as well as any object and embed tags that specify audio or video MIME types." enabled="true" filename="autoplay_random_audio_and_video.user.js" installTime="1654470000000" modified="1654470000000" name="Autoplay Random Audio And Video" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="0302bf29-aa41-46d7-a4d9-15659cb98124" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
