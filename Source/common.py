@@ -2149,6 +2149,13 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 				log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
 				last_modified_header = ':'.join([split_header[0], split_header[1][:2], split_header[1][2:]])
 
+			# Fix an issue where the time zone identifier appears twice.
+			# E.g. https://web.archive.org/web/19961018174824if_/http://www.com-stock.com:80/dave/
+			# Where the last modified time is "Friday, 18-Oct-96 15:48:24 GMT GMT".
+			if last_modified_header.endswith('GMT GMT'):
+				log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
+				last_modified_header = last_modified_header.replace('GMT GMT', 'GMT')
+
 			# Fix an issue where the time zone identifier is not separated from the time.
 			# E.g. https://web.archive.org/web/20060813091112if_/http://www.phone-books.net/
 			# Where the last modified time is "Sun, 13 Aug 2006 09:11:11GMT".
@@ -2169,8 +2176,7 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 	except requests.RequestException as error:
 		log.error(f'Failed to find any extra information from the snapshot "{wayback_url}" with the error: {repr(error)}')
 	except (ValueError, TypeError) as error:
-		# Catching TypeError is necessary for broken dates like:
-		# - "Friday, 18-Oct-96 15:48:24 GMT GMT" (https://web.archive.org/web/19961018174824if_/http://www.com-stock.com:80/dave/)
+		# Catching TypeError is necessary for other unhandled broken dates.
 		log.error(f'Failed to parse the last modified time "{last_modified_header}" of the snapshot "{wayback_url}" with the error: {repr(error)}')
 	
 	return last_modified_time
