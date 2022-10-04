@@ -2142,7 +2142,7 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 			# and seconds not being delimited properly.
 			# E.g. https://web.archive.org/web/20010926042147if_/http://geocities.yahoo.co.jp:80/
 			# Where the last modified time is "Mon, 24 Sep 2001 04:2146 GMT".
-			# E.g. ["Mon, 24 Sep 2001 04", "2146 GMT"] instead of ["Mon, 24 Sep 2001 04", "21", "46 GMT"]
+			# E.g. ["Mon, 24 Sep 2001 04", "2146 GMT"] (2) instead of ["Mon, 24 Sep 2001 04", "21", "46 GMT"] (3)
 			split_header = last_modified_header.split(':')
 			if len(split_header) == 2:
 				# E.g. "2146 GMT" -> "21:46 GMT"
