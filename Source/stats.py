@@ -18,6 +18,9 @@ if __name__ == '__main__':
 	with Database() as db:
 
 		try:
+			print(f'Database: {config.database_path}')
+			print()
+
 			cursor = db.execute('''
 								SELECT
 									(SELECT COUNT(*) FROM Snapshot) AS TotalSnapshots,

@@ -661,7 +661,10 @@ if __name__ == '__main__':
 					log.debug(f'Words and tags found: {word_and_tag_counter}')
 
 					child_snapshot_list = []
-					for url, wayback_timestamp in url_list:
+					for i, (url, wayback_timestamp) in enumerate(url_list):
+
+						if i > 0 and i % 50 == 0:
+							log.info(f'Locating snapshot {i+1} of {len(url_list)}.')
 
 						timestamp = wayback_timestamp or snapshot.Timestamp
 						child_snapshot = find_child_snapshot(snapshot, url, timestamp)

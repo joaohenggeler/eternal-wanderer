@@ -979,6 +979,9 @@ if __name__ == '__main__':
 
 							if snapshot.PageUsesPlugins and num_plugin_instances == 0:
 								
+								# The bgsound and app tags are used in the scout script but not here
+								# because the former was already converted to an embed tag and the
+								# latter isn't supported by this browser.
 								for _ in browser.traverse_frames():
 									for tag in ['object', 'embed', 'applet']:
 										num_plugin_instances += len(driver.find_elements_by_tag_name(tag))
