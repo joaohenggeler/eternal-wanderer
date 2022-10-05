@@ -663,7 +663,7 @@ if __name__ == '__main__':
 					child_snapshot_list = []
 					for i, (url, wayback_timestamp) in enumerate(url_list):
 
-						if (i+1) % 50 == 0:
+						if (i+1) % 100 == 0:
 							log.info(f'Locating snapshot {i+1} of {len(url_list)}.')
 
 						timestamp = wayback_timestamp or snapshot.Timestamp

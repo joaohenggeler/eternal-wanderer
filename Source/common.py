@@ -2277,7 +2277,7 @@ def delete_directory(path: str) -> bool:
 # Ignore the PyWinAuto warning about connecting to a 32-bit executable while using a 64-bit Python environment.
 warnings.simplefilter('ignore', category=UserWarning)
 
-def kill_processes_by_path(path: str, timeout: int = 10) -> None:
+def kill_processes_by_path(path: str) -> None:
 	""" Kills all processes running an executable at a given path. """
 
 	path = os.path.abspath(path)
@@ -2285,19 +2285,19 @@ def kill_processes_by_path(path: str, timeout: int = 10) -> None:
 	try:
 		application = WindowsApplication(backend='win32')
 		while True:
-			application.connect(path=path, timeout=timeout)
+			application.connect(path=path, timeout=5)
 			application.kill(soft=False)
 	except (WindowProcessNotFoundError, WindowTimeoutError):
 		pass
 	except Exception as error:
 		log.error(f'Failed to kill the processes using the path "{path}" with the error: {repr(error)}')
 
-def kill_process_by_pid(pid: int, timeout: int = 10) -> None:
+def kill_process_by_pid(pid: int) -> None:
 	""" Kills a process given its PID. """
 
 	try:
 		application = WindowsApplication(backend='win32')
-		application.connect(process=pid, timeout=timeout)
+		application.connect(process=pid, timeout=5)
 		application.kill(soft=False)	
 	except (WindowProcessNotFoundError, WindowTimeoutError):
 		pass
