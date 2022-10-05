@@ -36,6 +36,7 @@ from limits import RateLimitItemPerSecond
 from limits.storage import MemoryStorage
 from limits.strategies import MovingWindowRateLimiter
 from pywinauto.application import Application as WindowsApplication, WindowSpecification, ProcessNotFoundError as WindowProcessNotFoundError, TimeoutError as WindowTimeoutError # type: ignore
+from requests.adapters import HTTPAdapter, Retry
 from selenium import webdriver # type: ignore
 from selenium.common.exceptions import NoSuchElementException, NoSuchWindowException, TimeoutException, WebDriverException # type: ignore
 from selenium.webdriver.firefox.firefox_binary import FirefoxBinary # type: ignore
@@ -282,6 +283,13 @@ if config.ffmpeg_path is not None:
 log = logging.getLogger('eternal wanderer')
 log.setLevel(logging.DEBUG if config.debug else logging.INFO)
 log.debug('Running in debug mode.')
+
+global_retry = Retry(total=5, status_forcelist=[502, 503, 504], backoff_factor=1)
+global_adapter = HTTPAdapter(max_retries=global_retry)
+
+global_session = requests.Session()
+global_session.mount('http://web.archive.org', global_adapter)
+global_session.mount('https://web.archive.org', global_adapter)
 
 def setup_logger(filename: str) -> logging.Logger:
 	""" Adds a stream and file handler to the Eternal Wanderer logger. """
@@ -1423,7 +1431,7 @@ class Browser():
 				if not encoding and config.use_guessed_encoding_as_fallback:
 
 					global_rate_limiter.wait_for_wayback_machine_rate_limit()
-					response = requests.head(snapshot.WaybackUrl)
+					response = global_session.head(snapshot.WaybackUrl)
 					response.raise_for_status()
 					
 					# This header requires a snapshot URL with the iframe modifier.
@@ -2132,36 +2140,40 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 
 	try:
 		global_rate_limiter.wait_for_wayback_machine_rate_limit()
-		response = requests.head(wayback_url)
+		response = global_session.head(wayback_url)
 		response.raise_for_status()
 		
 		last_modified_header = response.headers.get('x-archive-orig-last-modified')
 		if last_modified_header is not None:
 
-			# Fix an issue where the datetime parsing fails due to the number of minutes
-			# and seconds not being delimited properly.
-			# E.g. https://web.archive.org/web/20010926042147if_/http://geocities.yahoo.co.jp:80/
-			# Where the last modified time is "Mon, 24 Sep 2001 04:2146 GMT".
-			# E.g. ["Mon, 24 Sep 2001 04", "2146 GMT"] (2) instead of ["Mon, 24 Sep 2001 04", "21", "46 GMT"] (3)
-			split_header = last_modified_header.split(':')
-			if len(split_header) == 2:
-				# E.g. "2146 GMT" -> "21:46 GMT"
+			# Fix an issue where the time zone is missing.
+			# E.g. https://web.archive.org/web/19961227002008if_/http://wwwlbt.fmc.uam.es/
+			# Where the last modified time is "Monday, 18-Nov-1996 11:13:24".
+			if not last_modified_header.endswith(' GMT'):
 				log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
-				last_modified_header = ':'.join([split_header[0], split_header[1][:2], split_header[1][2:]])
+				last_modified_header += ' GMT'
 
-			# Fix an issue where the time zone identifier appears twice.
+			# Fix an issue where the time zone appears twice.
 			# E.g. https://web.archive.org/web/19961018174824if_/http://www.com-stock.com:80/dave/
 			# Where the last modified time is "Friday, 18-Oct-96 15:48:24 GMT GMT".
 			if last_modified_header.endswith('GMT GMT'):
 				log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
 				last_modified_header = last_modified_header.replace('GMT GMT', 'GMT')
 
-			# Fix an issue where the time zone identifier is not separated from the time.
+			# Fix an issue where the time zone and time are not delimited.
 			# E.g. https://web.archive.org/web/20060813091112if_/http://www.phone-books.net/
 			# Where the last modified time is "Sun, 13 Aug 2006 09:11:11GMT".
 			if last_modified_header.endswith('GMT') and not last_modified_header.endswith(' GMT'):
 				log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
 				last_modified_header = last_modified_header.removesuffix('GMT') + ' GMT'
+
+			# Fix an issue where the minutes and seconds are not delimited.
+			# E.g. https://web.archive.org/web/20010926042147if_/http://geocities.yahoo.co.jp:80/
+			# Where the last modified time is "Mon, 24 Sep 2001 04:2146 GMT".
+			split_header = last_modified_header.split(':')
+			if len(split_header) == 2:
+				log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
+				last_modified_header = ':'.join([split_header[0], split_header[1][:2], split_header[1][2:]])
 
 			# Fix an issue where the time is missing. This solution adds potentially
 			# incorrect information to the datetime, which is fine for our purposes.
