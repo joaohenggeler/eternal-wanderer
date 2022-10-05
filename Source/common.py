@@ -2146,13 +2146,6 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 		last_modified_header = response.headers.get('x-archive-orig-last-modified')
 		if last_modified_header is not None:
 
-			# Fix an issue where the time zone is missing.
-			# E.g. https://web.archive.org/web/19961227002008if_/http://wwwlbt.fmc.uam.es/
-			# Where the last modified time is "Monday, 18-Nov-1996 11:13:24".
-			if not last_modified_header.endswith(' GMT'):
-				log.warning(f'Fixing the broken last modified time "{last_modified_header}".')
-				last_modified_header += ' GMT'
-
 			# Fix an issue where the time zone appears twice.
 			# E.g. https://web.archive.org/web/19961018174824if_/http://www.com-stock.com:80/dave/
 			# Where the last modified time is "Friday, 18-Oct-96 15:48:24 GMT GMT".
