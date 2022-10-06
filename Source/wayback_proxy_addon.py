@@ -14,10 +14,15 @@ from urllib.parse import unquote, urlparse, urlunparse
 import requests
 from mitmproxy import http # type: ignore
 from mitmproxy.script import concurrent # type: ignore
+from requests import RequestException
 from tldextract import TLDExtract
 from waybackpy import WaybackMachineCDXServerAPI as Cdx
 
-from common import Snapshot, compose_wayback_machine_snapshot_url, global_rate_limiter, is_url_available, is_url_from_domain, parse_wayback_machine_snapshot_url
+from common import (
+	Snapshot, compose_wayback_machine_snapshot_url,
+	global_rate_limiter, is_url_available, is_url_from_domain,
+	parse_wayback_machine_snapshot_url,
+)
 from record import RecordConfig
 
 # This script must be executed with unbuffered output to work properly (e.g. "python -u" or PYTHONUNBUFFERED = '1').
@@ -129,7 +134,7 @@ def request(flow: http.HTTPFlow) -> None:
 						wayback_parts = wayback_parts._replace(Url=url)
 						request.url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
 
-			except (requests.RequestException, UnicodeError):
+			except (RequestException, UnicodeError):
 				pass
 
 	if config.proxy_find_missing_snapshots_using_cdx or config.proxy_save_missing_snapshots_that_still_exist_online:
@@ -144,7 +149,7 @@ def request(flow: http.HTTPFlow) -> None:
 			global_rate_limiter.wait_for_wayback_machine_rate_limit()
 			wayback_response = requests.head(request.url, allow_redirects=True)
 			found_snapshot = wayback_response.status_code == 200
-		except requests.RequestException:
+		except RequestException:
 			wayback_response = None
 			found_snapshot = None
 
@@ -285,7 +290,7 @@ def request(flow: http.HTTPFlow) -> None:
 				global_rate_limiter.wait_for_wayback_machine_rate_limit()
 				response = requests.request(request.method, request.url, headers=dict(request.headers))
 				flow.response = http.Response.make(response.status_code, response.content, dict(response.headers))
-			except requests.RequestException:
+			except RequestException:
 				pass
 
 	live_mark = 'LIVE' if redirect_to_original else None

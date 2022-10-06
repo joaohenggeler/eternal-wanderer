@@ -9,7 +9,10 @@ from typing import cast
 
 import ffmpeg # type: ignore
 
-from common import CommonConfig, Database, Recording, Snapshot, delete_file, get_current_timestamp
+from common import (
+	CommonConfig, Database, Recording, Snapshot,
+	delete_file, get_current_timestamp,
+)
 from record import RecordConfig
 
 if __name__ == '__main__':

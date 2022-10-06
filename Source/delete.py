@@ -7,7 +7,10 @@ from argparse import ArgumentParser
 from glob import iglob
 from typing import Optional
 
-from common import CommonConfig, Database, Recording, TemporaryRegistry, delete_directory, delete_file
+from common import (
+	CommonConfig, Database, Recording, TemporaryRegistry,
+	delete_directory, delete_file,
+)
 
 if __name__ == '__main__':
 

@@ -28,21 +28,33 @@ from subprocess import Popen
 from time import sleep
 from typing import Any, Iterator, Optional, Union
 from urllib.parse import ParseResult, unquote, urlparse, urlunparse
-from winreg import CreateKeyEx, DeleteKey, DeleteValue, EnumKey, EnumValue, OpenKey, QueryInfoKey, QueryValueEx, SetValueEx
+from winreg import (
+	CreateKeyEx, DeleteKey, DeleteValue, EnumKey, EnumValue,
+	OpenKey, QueryInfoKey, QueryValueEx, SetValueEx,
+)
 from xml.etree import ElementTree
 
 import requests
 from limits import RateLimitItemPerSecond
 from limits.storage import MemoryStorage
 from limits.strategies import MovingWindowRateLimiter
-from pywinauto.application import Application as WindowsApplication, WindowSpecification, ProcessNotFoundError as WindowProcessNotFoundError, TimeoutError as WindowTimeoutError # type: ignore
+from pywinauto.application import ( # type: ignore
+	Application as WindowsApplication,
+	ProcessNotFoundError as WindowProcessNotFoundError,
+	TimeoutError as WindowTimeoutError,
+	WindowSpecification,
+)
+from requests import RequestException
 from requests.adapters import HTTPAdapter, Retry
 from selenium import webdriver # type: ignore
-from selenium.common.exceptions import NoSuchElementException, NoSuchWindowException, TimeoutException, WebDriverException # type: ignore
+from selenium.common.exceptions import ( # type: ignore
+	NoSuchElementException, NoSuchWindowException,
+	TimeoutException, WebDriverException,
+)
 from selenium.webdriver.firefox.firefox_binary import FirefoxBinary # type: ignore
 from selenium.webdriver.firefox.firefox_profile import FirefoxProfile # type: ignore
 from selenium.webdriver.firefox.webdriver import WebDriver # type: ignore
-from selenium.webdriver.support import expected_conditions as expected_webdriver_conditions # type: ignore
+from selenium.webdriver.support import expected_conditions as webdriver_conditions # type: ignore
 from selenium.webdriver.support.ui import WebDriverWait # type: ignore
 from waybackpy import WaybackMachineCDXServerAPI as Cdx
 from waybackpy.cdx_snapshot import CDXSnapshot
@@ -278,18 +290,19 @@ if config.debug:
 if config.ffmpeg_path is not None:
 	path = os.environ.get('PATH', '')
 	os.environ['PATH'] = f'{config.ffmpeg_path};{path}'
-	del path
 
 log = logging.getLogger('eternal wanderer')
 log.setLevel(logging.DEBUG if config.debug else logging.INFO)
 log.debug('Running in debug mode.')
 
-global_retry = Retry(total=5, status_forcelist=[502, 503, 504], backoff_factor=1)
-global_adapter = HTTPAdapter(max_retries=global_retry)
+retry = Retry(total=5, status_forcelist=[502, 503, 504], backoff_factor=1)
+adapter = HTTPAdapter(max_retries=retry)
 
 global_session = requests.Session()
-global_session.mount('http://web.archive.org', global_adapter)
-global_session.mount('https://web.archive.org', global_adapter)
+global_session.mount('http://web.archive.org', adapter)
+global_session.mount('https://web.archive.org', adapter)
+
+del option, path, retry, adapter
 
 def setup_logger(filename: str) -> logging.Logger:
 	""" Adds a stream and file handler to the Eternal Wanderer logger. """
@@ -1443,7 +1456,7 @@ class Browser():
 				log.debug(f'Setting the fallback encoding to "{encoding}".')
 				self.set_preference('intl.charset.fallback.override', encoding)
 
-			except requests.RequestException as error:
+			except RequestException as error:
 				log.error(f'Failed to find the guessed encoding for the snapshot {snapshot} with the error: {repr(error)}')
 				# Keep trying until the Wayback Machine is available.
 				retry = not is_wayback_machine_available()
@@ -1707,7 +1720,7 @@ class Browser():
 					continue
 
 				try:
-					condition = expected_webdriver_conditions.frame_to_be_available_and_switch_to_it(frame)
+					condition = webdriver_conditions.frame_to_be_available_and_switch_to_it(frame)
 					WebDriverWait(self.driver, 15).until(condition)
 				except TimeoutException:
 					log.debug('Timed out while waiting for the frame to be available.')
@@ -1738,7 +1751,7 @@ class Browser():
 			self.driver.switch_to.window(current_handle)
 
 			try:
-				condition = expected_webdriver_conditions.number_of_windows_to_be(1)
+				condition = webdriver_conditions.number_of_windows_to_be(1)
 				WebDriverWait(self.driver, 15).until(condition)
 			except TimeoutException:
 				log.warning('Timed out while waiting for the other browser windows to close.')
@@ -2178,7 +2191,7 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 
 			last_modified_time = parsedate_to_datetime(last_modified_header).strftime(Snapshot.TIMESTAMP_FORMAT)
 
-	except requests.RequestException as error:
+	except RequestException as error:
 		log.error(f'Failed to find any extra information from the snapshot "{wayback_url}" with the error: {repr(error)}')
 	except (ValueError, TypeError) as error:
 		# Catching TypeError is necessary for other unhandled broken dates.
@@ -2225,7 +2238,7 @@ def is_url_available(url: str, allow_redirects: bool = False) -> bool:
 	try:
 		response = requests.head(url, allow_redirects=allow_redirects)
 		result = response.status_code < 400 if allow_redirects else response.status_code == 200
-	except requests.RequestException:
+	except RequestException:
 		result = False
 
 	return result

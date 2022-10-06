@@ -121,7 +121,7 @@ If you're hosting the bot in a remote Windows machine, there are some additional
 
 * Consider disabling any appearance settings that might reduce the remote machine's performance in the Windows settings by going to `System > About > Advanced system settings (under Related settings) > Settings... (under Performance) > Visual Effects` and selecting `Adjust for best performance`. Doing this can also make the text in old pages look sharper.
 
-* If you installed a Windows version without a product key, you should find a way to remove the activation watermark before recording (e.g. by activating Windows).
+* If you installed a Windows version without a product key, you should activate it to prevent the watermark from appearing in the recordings.
 
 * If you want Windows to automatically sign into your account after booting then run the command `netplwiz`, uncheck `Users must enter a user name and password to use this computer` in the User Accounts window, and enter your credentials after pressing ok.
 

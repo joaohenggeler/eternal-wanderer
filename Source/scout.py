@@ -16,10 +16,19 @@ from urllib.parse import parse_qs, unquote, urlparse, urlunparse
 
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
-from selenium.common.exceptions import SessionNotCreatedException, StaleElementReferenceException, WebDriverException # type: ignore
+from selenium.common.exceptions import ( # type: ignore
+	SessionNotCreatedException, StaleElementReferenceException,
+	WebDriverException,
+)
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
-from common import Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url, container_to_lowercase, extract_standalone_media_extension_from_url, find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info, is_url_from_domain, is_wayback_machine_available, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
+from common import (
+	Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url,
+	container_to_lowercase, extract_standalone_media_extension_from_url,
+	find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info,
+	is_url_from_domain, is_wayback_machine_available, parse_wayback_machine_snapshot_url,
+	setup_logger, was_exit_command_entered,
+)
 
 class ScoutConfig(CommonConfig):
 	""" The configuration that applies to the scout script. """

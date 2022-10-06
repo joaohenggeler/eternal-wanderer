@@ -14,10 +14,18 @@ import ffmpeg # type: ignore
 import tweepy # type: ignore
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
-from mastodon import Mastodon, MastodonBadGatewayError, MastodonError, MastodonGatewayTimeoutError, MastodonServiceUnavailableError # type: ignore
+from mastodon import ( # type: ignore
+	Mastodon, MastodonBadGatewayError, MastodonError,
+	MastodonGatewayTimeoutError, MastodonServiceUnavailableError,
+)
 from tweepy.errors import TweepyException # type: ignore
 
-from common import CommonConfig, Database, Recording, Snapshot, container_to_lowercase, delete_file, get_current_timestamp, setup_logger, was_exit_command_entered
+from common import (
+	CommonConfig, Database, Recording, Snapshot,
+	container_to_lowercase, delete_file,
+	get_current_timestamp, setup_logger,
+	was_exit_command_entered,
+)
 
 class PublishConfig(CommonConfig):
 	""" The configuration that applies to the publisher script. """

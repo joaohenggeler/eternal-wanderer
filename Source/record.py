@@ -28,12 +28,19 @@ from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
 from pywinauto.application import WindowSpecification # type: ignore
 from pywinauto.base_wrapper import ElementNotEnabled, ElementNotVisible # type: ignore
+from requests import RequestException
 from selenium.common.exceptions import SessionNotCreatedException, WebDriverException # type: ignore
 from selenium.webdriver.common.utils import free_port # type: ignore
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
-from common import Browser, CommonConfig, Database, Snapshot, TemporaryRegistry, clamp, container_to_lowercase, delete_file, get_current_timestamp, global_rate_limiter, global_session, is_url_available, kill_processes_by_path, parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered
+from common import (
+	Browser, CommonConfig, Database, Snapshot, TemporaryRegistry,
+	clamp, container_to_lowercase, delete_file, get_current_timestamp,
+	global_rate_limiter, global_session, is_url_available,
+	kill_processes_by_path, parse_wayback_machine_snapshot_url,
+	setup_logger, was_exit_command_entered,
+)
 
 class RecordConfig(CommonConfig):
 	""" The configuration that applies to the recorder script. """
@@ -768,7 +775,7 @@ if __name__ == '__main__':
 							duration = float(format['duration'])
 							log.debug(f'The standalone media has a duration of {duration} seconds.')
 						
-						except requests.RequestException as error:
+						except RequestException as error:
 							log.error(f'Failed to download the standalone media file "{wayback_url}" with the error: {repr(error)}')
 							download_success = False
 						except (ffmpeg.Error, KeyError, ValueError) as error:

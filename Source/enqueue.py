@@ -5,7 +5,11 @@ from argparse import ArgumentParser
 
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
-from common import Database, Snapshot, find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info, is_wayback_machine_available, parse_wayback_machine_snapshot_url
+from common import (
+	Database, Snapshot, find_best_wayback_machine_snapshot,
+	find_extra_wayback_machine_snapshot_info,
+	is_wayback_machine_available, parse_wayback_machine_snapshot_url,
+)
 
 if __name__ == '__main__':
 
