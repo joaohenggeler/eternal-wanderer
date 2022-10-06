@@ -107,7 +107,7 @@ if __name__ == '__main__':
 			log.error(f'Failed to initialize the Twitter API interface with the error: {repr(error)}')
 			sys.exit(1)
 
-		def publish_to_twitter(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str) -> tuple[Optional[int], Optional[int]]:
+		def publish_to_twitter(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str, tts_alt_text: str) -> tuple[Optional[int], Optional[int]]:
 			""" Publishes a snapshot recording and text-to-speech file to Twitter. The video recording is added to the main tweet along
 			with a message whose content is generated using the remaining arguments. The text-to-speech file is added as a reply to the
 			main tweet. If this file is too long for Twitter's video duration limit, then it's split across multiple replies. """
@@ -160,17 +160,24 @@ if __name__ == '__main__':
 							for i, segment_path in enumerate(segment_file_paths):
 
 								tts_media = twitter_api.chunked_upload(filename=segment_path, file_type='video/mp4', media_category='TweetVideo')
-	
-								if len(segment_file_paths) > 1:
-									tts_body += f'\n{i+1} of {len(segment_file_paths)}'
-								
-								max_title_length = max(config.twitter_max_status_length - len(tts_body), 0)
-								tts_text = f'{title[:max_title_length]}\n{tts_body}'
+								tts_media_id = tts_media.media_id
 
-								tts_status = twitter_api.update_status(tts_text, in_reply_to_status_id=last_status_id, media_ids=[tts_media.media_id], possibly_sensitive=sensitive)
+								# See above.
+								if False:
+									twitter_api.create_media_metadata(tts_media_id, tts_alt_text)
+
+								segment_body = tts_body
+								
+								if len(segment_file_paths) > 1:
+									segment_body += f'\n{i+1} of {len(segment_file_paths)}'
+								
+								max_title_length = max(config.twitter_max_status_length - len(segment_body), 0)
+								tts_text = f'{title[:max_title_length]}\n{segment_body}'
+
+								tts_status = twitter_api.update_status(tts_text, in_reply_to_status_id=last_status_id, media_ids=[tts_media_id], possibly_sensitive=sensitive)
 								last_status_id = tts_status.id
 
-								log.debug(f'Posted the text-to-speech status #{tts_status.id} with the media #{tts_media.media_id} ({i+1} of {len(segment_file_paths)}) using {len(tts_text)} characters.')
+								log.debug(f'Posted the text-to-speech status #{last_status_id} with the media #{tts_media_id} ({i+1} of {len(segment_file_paths)}) using {len(tts_text)} characters.')
 
 							log.info(f'Posted {len(segment_file_paths)} text-to-speech segments.')
 						else:
@@ -198,7 +205,7 @@ if __name__ == '__main__':
 			log.error(f'Failed to initialize the Mastodon API interface with the error: {repr(error)}')
 			sys.exit(1)
 
-		def publish_to_mastodon(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str) -> tuple[Optional[int], Optional[int]]:
+		def publish_to_mastodon(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str, tts_alt_text: str) -> tuple[Optional[int], Optional[int]]:
 			""" Publishes a snapshot recording and text-to-speech file to a given Mastodon instance. The video recording is added to the
 			main toot along with a message whose content is generated using the remaining arguments. The text-to-speech file is added
 			as a reply to the main toot. This function can optionally attempt to reduce both files' size before uploading them. If a
@@ -290,7 +297,7 @@ if __name__ == '__main__':
 
 							if config.mastodon_max_file_size is None or tts_file_size <= config.mastodon_max_file_size:
 
-								tts_media_id = try_media_post(tts_path, mime_type='video/mp4')
+								tts_media_id = try_media_post(tts_path, mime_type='video/mp4', description=tts_alt_text)
 
 								max_title_length = max(config.mastodon_max_status_length - len(tts_body), 0)
 								tts_text = f'{title[:max_title_length]}\n{tts_body}'
@@ -306,12 +313,12 @@ if __name__ == '__main__':
 				else:
 					log.info(f'Skipping the recording since its size ({recording_file_size}) exceeds the limit of {config.mastodon_max_file_size} MB.')
 
-			except ffmpeg.Error as error:
-				log.error(f'Failed to process the video file with the error: {repr(error)}')
-			except OSError as error:
-				log.error(f'Failed to determine the video file size with the error: {repr(error)}')
 			except MastodonError as error:
 				log.error(f'Failed to post the recording status with the error: {repr(error)}')
+			except OSError as error:
+				log.error(f'Failed to determine the video file size with the error: {repr(error)}')
+			except ffmpeg.Error as error:
+				log.error(f'Failed to process the video file with the error: {repr(error)}')
 			finally:
 				if config.mastodon_enable_ffmpeg:
 					
@@ -408,9 +415,10 @@ if __name__ == '__main__':
 					tts_language = f'Text-to-Speech ({snapshot.LanguageName})' if snapshot.LanguageName is not None else 'Text-to-Speech'
 					tts_body_identifiers = [snapshot.ShortDate, tts_language]
 					tts_body = '\n'.join(filter(None, tts_body_identifiers))
-					
-					twitter_media_id, twitter_status_id = publish_to_twitter(recording, title, body, alt_text, sensitive, tts_body) if config.enable_twitter else (None, None)
-					mastodon_media_id, mastodon_status_id = publish_to_mastodon(recording, title, body, alt_text, sensitive, tts_body) if config.enable_mastodon else (None, None)
+					tts_alt_text = f'An audio recording of the {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine. Generated using text-to-speech.'
+
+					twitter_media_id, twitter_status_id = publish_to_twitter(recording, title, body, alt_text, sensitive, tts_body, tts_alt_text) if config.enable_twitter else (None, None)
+					mastodon_media_id, mastodon_status_id = publish_to_mastodon(recording, title, body, alt_text, sensitive, tts_body, tts_alt_text) if config.enable_mastodon else (None, None)
 
 					if config.delete_files_after_upload:
 						delete_file(recording.UploadFilePath)

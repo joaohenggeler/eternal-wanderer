@@ -84,8 +84,18 @@ if __name__ == '__main__':
 						os.startfile(recording.TextToSpeechFilePath)
 				
 				except FileNotFoundError:
-					print(f'The recording file does not exist.')
+					print('The recording file does not exist.')
+					
+					# This is the same as telling it to record the snapshot again (see below).
+					state = Snapshot.SCOUTED
+					priority = max(snapshot.Priority, Snapshot.RECORD_PRIORITY)
+					is_sensitive_override = snapshot.IsSensitiveOverride
+					is_processed = True
 					num_missing += 1
+
+					snapshot_updates.append({'state': state, 'priority': priority, 'is_sensitive_override': is_sensitive_override, 'id': snapshot.Id})
+					recording_updates.append({'is_processed': is_processed, 'id': recording.Id})
+					
 					continue
 
 				while True:
@@ -118,8 +128,6 @@ if __name__ == '__main__':
 					else:
 						print(f'Invalid input "{verdict}".')
 						continue
-
-					is_sensitive_override: Optional[bool]
 
 					while True:
 						sensitive = input('Sensitive Override [(y)es, (n)o, (s)kip]: ').lower()

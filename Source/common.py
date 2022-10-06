@@ -1120,7 +1120,7 @@ class Browser():
 		java_plugin_search_path = os.path.join(config.plugins_path, '**', 'jre*', 'bin', 'plugin2')
 		java_plugin_path = next(iglob(java_plugin_search_path, recursive=True), None)
 		if java_plugin_path is None:
-			log.error('Could not find the path to the Java Runtime Environment. The Java Plugin was not be set up correctly.')
+			log.error('Could not find the path to the Java Runtime Environment. The Java Plugin was not set up correctly.')
 			return
 
 		java_jre_path = os.path.dirname(os.path.dirname(java_plugin_path))
@@ -1312,7 +1312,7 @@ class Browser():
 				self.registry.set(key, value)
 
 		except PermissionError:
-			log.error('Failed to set up the Cosmo Player since elevated privileges are required to temporarily set the necessary registry keys.')
+			log.error('Failed to configure the Cosmo Player since elevated privileges are required to temporarily set the necessary registry keys.')
 
 	def configure_3dvia_player(self) -> None:
 		""" Configures the 3DVIA Player by setting the appropriate registry keys. """
@@ -1337,7 +1337,7 @@ class Browser():
 			# For future reference, the 3DVIA network settings are here: HKEY_CURRENT_USER\SOFTWARE\Virtools\Network
 
 		except PermissionError:
-			log.error('Failed to set up the 3DVIA Player since elevated privileges are required to temporarily set the necessary registry keys.')
+			log.error('Failed to configure the 3DVIA Player since elevated privileges are required to temporarily set the necessary registry keys.')
 
 	def delete_user_level_java_properties(self) -> None:
 		""" Deletes the current user-level Java deployment properties file. """
