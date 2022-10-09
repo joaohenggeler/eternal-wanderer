@@ -26,8 +26,8 @@ function get_object_embed_attributes(element, attributes_map)
 			
 			if(!value)
 			{
-				const param_tags = element.querySelectorAll("param");
-				for(const param of param_tags)
+				const param_nodes = element.querySelectorAll("param");
+				for(const param of param_nodes)
 				{
 					let param_name = param.getAttribute("name");
 					if(param_name) param_name = param_name.toLowerCase();
@@ -58,8 +58,8 @@ function set_object_embed_attributes(element, attributes_map)
 {
 	if(element.tagName === "OBJECT" || element.tagName === "APPLET")
 	{
-		const param_tags = element.querySelectorAll("param");
-		for(const param of param_tags)
+		const param_nodes = element.querySelectorAll("param");
+		for(const param of param_nodes)
 		{
 			let name = param.getAttribute("name");
 			if(name) name = name.toLowerCase();
@@ -98,9 +98,9 @@ const vlc_plugin = plugins.find(plugin => plugin.name.includes("VLC"));
 
 if(vlc_plugin)
 {
-	const plugin_tags = document.querySelectorAll("object, embed");
+	const plugin_nodes = document.querySelectorAll("object, embed");
 
-	for(const element of plugin_tags)
+	for(const element of plugin_nodes)
 	{
 		// Vetinari is the codename for VLC 3.x. Note that the web plugin was removed in VLC 4.x.
 		if(typeof(element.VersionInfo) === "string" && element.VersionInfo.includes("Vetinari"))

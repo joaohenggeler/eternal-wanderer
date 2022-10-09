@@ -26,8 +26,8 @@ function get_object_embed_attributes(element, attributes_map)
 			
 			if(!value)
 			{
-				const param_tags = element.querySelectorAll("param");
-				for(const param of param_tags)
+				const param_nodes = element.querySelectorAll("param");
+				for(const param of param_nodes)
 				{
 					let param_name = param.getAttribute("name");
 					if(param_name) param_name = param_name.toLowerCase();
@@ -58,8 +58,8 @@ function set_object_embed_attributes(element, attributes_map)
 {
 	if(element.tagName === "OBJECT" || element.tagName === "APPLET")
 	{
-		const param_tags = element.querySelectorAll("param");
-		for(const param of param_tags)
+		const param_nodes = element.querySelectorAll("param");
+		for(const param of param_nodes)
 		{
 			let name = param.getAttribute("name");
 			if(name) name = name.toLowerCase();
@@ -125,8 +125,8 @@ function object_embed_uses_midplug_plugin(element)
 			if(result) break;
 		}
 
-		const param_tags = element.querySelectorAll("param");
-		for(const param of param_tags)
+		const param_nodes = element.querySelectorAll("param");
+		for(const param of param_nodes)
 		{
 			const name = param.getAttribute("name");
 			const value = param.getAttribute("value");
@@ -157,9 +157,9 @@ if(midplug_plugin)
 		}
 	}
 
-	const plugin_tags = document.querySelectorAll("object, embed");
+	const plugin_nodes = document.querySelectorAll("object, embed");
 	
-	for(const element of plugin_tags)
+	for(const element of plugin_nodes)
 	{
 		if(object_embed_uses_midplug_plugin(element))
 		{

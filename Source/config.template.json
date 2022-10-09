@@ -568,6 +568,7 @@
 		},
 
 		"enable_text_to_speech": true,
+		"text_to_speech_read_image_alt_text": true,
 		"text_to_speech_audio_format_type": "SAFT22kHz16BitMono",
 		"text_to_speech_rate": 0,
 		"text_to_speech_default_voice": "David",

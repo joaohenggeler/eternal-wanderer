@@ -30,8 +30,8 @@ function get_object_embed_attributes(element, attributes_map)
 			
 			if(!value)
 			{
-				const param_tags = element.querySelectorAll("param");
-				for(const param of param_tags)
+				const param_nodes = element.querySelectorAll("param");
+				for(const param of param_nodes)
 				{
 					let param_name = param.getAttribute("name");
 					if(param_name) param_name = param_name.toLowerCase();
@@ -62,8 +62,8 @@ function set_object_embed_attributes(element, attributes_map)
 {
 	if(element.tagName === "OBJECT" || element.tagName === "APPLET")
 	{
-		const param_tags = element.querySelectorAll("param");
-		for(const param of param_tags)
+		const param_nodes = element.querySelectorAll("param");
+		for(const param of param_nodes)
 		{
 			let name = param.getAttribute("name");
 			if(name) name = name.toLowerCase();
@@ -115,13 +115,13 @@ function object_embed_uses_java_plugin(element)
 		|| (class_id && class_id.startsWith("clsid:cafeefac-"));
 }
 
-const applet_tags = Array.from(document.querySelectorAll("applet"));
-let object_and_embed_tags = Array.from(document.querySelectorAll("object, embed"));
-object_and_embed_tags = object_and_embed_tags.filter(object_embed_uses_java_plugin);
+const applet_nodes = Array.from(document.querySelectorAll("applet"));
+let object_and_embed_nodes = Array.from(document.querySelectorAll("object, embed"));
+object_and_embed_nodes = object_and_embed_nodes.filter(object_embed_uses_java_plugin);
 
-const plugin_tags = applet_tags.concat(object_and_embed_tags);
+const plugin_nodes = applet_nodes.concat(object_and_embed_nodes);
 
-for(const element of plugin_tags)
+for(const element of plugin_nodes)
 {
 	// See: https://docs.oracle.com/javase/8/docs/technotes/guides/deploy/applet_dev_guide.html#JSDPG709
 	const attributes_map = new Map();

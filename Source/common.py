@@ -185,6 +185,8 @@ class CommonConfig():
 		'min_duration',
 		'max_duration',
 
+		'text_to_speech_read_image_alt_text',
+
 		# For the publisher script.
 		'show_standalone_media_metadata',
 	]
@@ -1770,9 +1772,9 @@ class Browser():
 				self.driver.execute_script(	'''
 											const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
 
-											const plugin_tags = document.querySelectorAll(arguments[0]);
+											const plugin_nodes = document.querySelectorAll(arguments[0]);
 
-											for(const element of plugin_tags)
+											for(const element of plugin_nodes)
 											{
 												// If the element is using the VLC plugin and is currently being
 												// monitored so it doesn't play twice, then we need to ensure that
@@ -1815,9 +1817,9 @@ class Browser():
 				self.driver.execute_script(	'''
 											const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
 
-											const plugin_tags = document.querySelectorAll(arguments[0]);
+											const plugin_nodes = document.querySelectorAll(arguments[0]);
 
-											for(const element of plugin_tags)
+											for(const element of plugin_nodes)
 											{
 												// See the comments in unload_plugin_content().
 												if("vlcLastPosition" in element.dataset && element.input)

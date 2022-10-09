@@ -139,7 +139,7 @@ Below is a summary of the Python scripts located in [the source directory](Sourc
 
 * `publish.py`: publishes the previously recorded snapshots to Twitter and Mastodon on a set schedule. The publisher script uploads each snapshot's MP4 video and generates a tweet with the web page's title, its date, and a link to its Wayback Machine capture.
 
-* `approve.py`: approves snapshot recordings for publishing. This operation is optional and may only be done if the publisher script was started with the `require_approval` option set to true.
+* `approve.py`: approves snapshot recordings for publishing. This process is optional and can only be done if the publisher script was started with the `require_approval` option enabled.
 
 * `enqueue.py`: adds a Wayback Machine snapshot to the Eternal Wanderer queue with a given priority. This can be used to scout, record, or publish any existing or new snapshots as soon as possible.
 
@@ -155,7 +155,7 @@ Below is a summary of the Python scripts located in [the source directory](Sourc
 
 * `stats.py`: shows snapshot and recording statistics from the database.
 
-* `wayback_proxy_addon.py`: a mitmproxy script that tells the recorder script if the page is still making requests while also checking if any missing files are available in a different subdomain. This script should not be run directly and is instead started automatically by the recorder if the `enable_proxy` option is true.
+* `wayback_proxy_addon.py`: a mitmproxy script that tells the recorder script if the page is still making requests while also checking if any missing files are available in a different subdomain. This script should not be run directly and is instead started automatically by the recorder if `enable_proxy` is enabled.
 
 * `common.py`: a module that defines any general purpose functions used by all scripts, including loading configuration files, connecting to the database, and interfacing with Firefox.
 

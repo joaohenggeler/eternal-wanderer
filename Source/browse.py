@@ -19,7 +19,7 @@ if __name__ == '__main__':
 	config = CommonConfig()
 
 	if args.pluginreg and config.use_master_plugin_registry:
-		parser.error('The "use_master_plugin_registry" configuration option must be set to false in order to generate the pluginreg.dat file.')
+		parser.error('The "use_master_plugin_registry" option must be disabled in order to generate the pluginreg.dat file.')
 
 	try:
 		with Browser(multiprocess=args.multiprocess, use_extensions=True, use_plugins=True) as (browser, driver):

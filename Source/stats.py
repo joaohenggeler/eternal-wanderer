@@ -18,7 +18,13 @@ if __name__ == '__main__':
 	with Database() as db:
 
 		try:
-			print(f'Database: {config.database_path}')
+			print('Database:')
+			print()
+
+			database_size = os.path.getsize(config.database_path) / 10 ** 9
+			print(f'- Path: {config.database_path}')
+			print(f'- Size: {database_size:.2f} GB')
+			
 			print()
 
 			cursor = db.execute('''
@@ -140,7 +146,7 @@ if __name__ == '__main__':
 			total_recordings_size = total_recordings_size / 10 ** 9
 			total_disk_space, _, free_disk_space = (size / 10 ** 9 for size in shutil.disk_usage('/'))
 			
-			print(f'- Recordings Disk Space: {total_recordings_size:.2f} of {total_disk_space:.2f} GB ({free_disk_space:.2f} free).')
+			print(f'- Recordings Disk Space: {total_recordings_size:.2f} of {total_disk_space:.2f} GB ({free_disk_space:.2f} free)')
 
 			print()
 

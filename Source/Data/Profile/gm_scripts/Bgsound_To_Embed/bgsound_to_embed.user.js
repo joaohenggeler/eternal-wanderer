@@ -12,17 +12,17 @@ const LOG = true;
 // for older pages that included both to support the most popular
 // browsers at the time.
 const playing_tracks = [];
-const embed_tags = document.querySelectorAll("embed");
+const embed_nodes = document.querySelectorAll("embed");
 
-for(const embed of embed_tags)
+for(const embed of embed_nodes)
 {
 	const source = embed.getAttribute("src");
 	if(source) playing_tracks.push(source);
 }
 
-const bgsound_tags = document.querySelectorAll("bgsound");
+const bgsound_nodes = document.querySelectorAll("bgsound");
 
-for(const bgsound of bgsound_tags)
+for(const bgsound of bgsound_nodes)
 {
 	const source = bgsound.getAttribute("src");
 	

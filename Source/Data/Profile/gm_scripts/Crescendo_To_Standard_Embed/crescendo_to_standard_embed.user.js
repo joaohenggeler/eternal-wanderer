@@ -26,8 +26,8 @@ function get_object_embed_attributes(element, attributes_map)
 			
 			if(!value)
 			{
-				const param_tags = element.querySelectorAll("param");
-				for(const param of param_tags)
+				const param_nodes = element.querySelectorAll("param");
+				for(const param of param_nodes)
 				{
 					let param_name = param.getAttribute("name");
 					if(param_name) param_name = param_name.toLowerCase();
@@ -58,8 +58,8 @@ function set_object_embed_attributes(element, attributes_map)
 {
 	if(element.tagName === "OBJECT" || element.tagName === "APPLET")
 	{
-		const param_tags = element.querySelectorAll("param");
-		for(const param of param_tags)
+		const param_nodes = element.querySelectorAll("param");
+		for(const param of param_nodes)
 		{
 			let name = param.getAttribute("name");
 			if(name) name = name.toLowerCase();
@@ -93,11 +93,12 @@ function reload_object_embed(element)
 	}
 }
 
-const plugin_tags = document.querySelectorAll("object[type='music/crescendo'], embed[type='music/crescendo']");
+const plugin_nodes = document.querySelectorAll("object[type='music/crescendo'], embed[type='music/crescendo']");
 
-for(const element of plugin_tags)
+for(const element of plugin_nodes)
 {
-	// E.g. <embed type="music/crescendo" song="drummer1.mid" loop="true"> to <embed type="music/crescendo" song="drummer1.mid" src="drummer1.mid" loop="true">
+	// E.g. <embed type="music/crescendo" song="drummer1.mid" loop="true">
+	// Into <embed type="music/crescendo" song="drummer1.mid" src="drummer1.mid" loop="true">
 	// See: https://web.archive.org/web/20030812135126if_/http://www.liveupdate.com/cpauth.html
 	const attributes_map = new Map();
 	

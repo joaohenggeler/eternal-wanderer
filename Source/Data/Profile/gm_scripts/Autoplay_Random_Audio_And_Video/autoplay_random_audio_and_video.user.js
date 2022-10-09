@@ -26,8 +26,8 @@ function get_object_embed_attributes(element, attributes_map)
 			
 			if(!value)
 			{
-				const param_tags = element.querySelectorAll("param");
-				for(const param of param_tags)
+				const param_nodes = element.querySelectorAll("param");
+				for(const param of param_nodes)
 				{
 					let param_name = param.getAttribute("name");
 					if(param_name) param_name = param_name.toLowerCase();
@@ -58,8 +58,8 @@ function set_object_embed_attributes(element, attributes_map)
 {
 	if(element.tagName === "OBJECT" || element.tagName === "APPLET")
 	{
-		const param_tags = element.querySelectorAll("param");
-		for(const param of param_tags)
+		const param_nodes = element.querySelectorAll("param");
+		for(const param of param_nodes)
 		{
 			let name = param.getAttribute("name");
 			if(name) name = name.toLowerCase();
@@ -179,24 +179,24 @@ const tag_mime_types = new Map();
 tag_mime_types.set("audio", new RegExp("audio/.*", "i"));
 tag_mime_types.set("video", new RegExp("video/.*", "i"));
 
-const plugin_tags = Array.from(document.querySelectorAll("object, embed"));
+const plugin_nodes = Array.from(document.querySelectorAll("object, embed"));
 
 // For each type of tag (audio and video), make a random element start playing if there isn't one already doing so.
 // If that random element contains or is contained by an object or embed tag then these will also start playing.
 for(const [tag_name, mime_type_regex] of tag_mime_types)
 {
-	const plugin_tags_with_mime_type = plugin_tags.filter(element => object_embed_has_mime_type(element, mime_type_regex));
-	const regular_tags = Array.from(document.querySelectorAll(tag_name));
-	const tags = plugin_tags_with_mime_type.concat(regular_tags);
+	const plugin_nodes_with_mime_type = plugin_nodes.filter(element => object_embed_has_mime_type(element, mime_type_regex));
+	const regular_nodes = Array.from(document.querySelectorAll(tag_name));
+	const nodes = plugin_nodes_with_mime_type.concat(regular_nodes);
 
-	const autoplaying = tags.some(is_autoplaying);
-	if(tags && tags.length && !autoplaying)
+	const autoplaying = nodes.some(is_autoplaying);
+	if(nodes && nodes.length && !autoplaying)
 	{
-		const random_index = Math.floor(Math.random() * tags.length);
-		const random_element = tags[random_index];
+		const random_index = Math.floor(Math.random() * nodes.length);
+		const random_element = nodes[random_index];
 		
 		// An element contains itself which works for our case since we want to iterate at least once below.
-		const elements_with_same_content = plugin_tags_with_mime_type.filter(element => element.contains(random_element) || random_element.contains(element));
+		const elements_with_same_content = plugin_nodes_with_mime_type.filter(element => element.contains(random_element) || random_element.contains(element));
 
 		// Take into account embed tags that are contained inside object tags (a common design pattern).
 		// In cases like these, we can assume that both tags are meant to be playing the same content.
@@ -209,11 +209,11 @@ for(const [tag_name, mime_type_regex] of tag_mime_types)
 			
 			reload_object_embed(element);
 
-			if(LOG) console.log(`Autoplay Random Audio And Video (${tags.length} ${tag_name} tags) - Playing:`, element);	
+			if(LOG) console.log(`Autoplay Random Audio And Video (${nodes.length} ${tag_name} tags) - Playing:`, element);	
 		}
 	}
 	else
 	{
-		if(LOG) console.log(`Autoplay Random Audio And Video (${tags.length} ${tag_name} tags) - No Elements That Require Autoplay.`);	
+		if(LOG) console.log(`Autoplay Random Audio And Video (${nodes.length} ${tag_name} tags) - No Elements That Require Autoplay.`);	
 	}
 }

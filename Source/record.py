@@ -117,6 +117,7 @@ class RecordConfig(CommonConfig):
 	ffmpeg_upload_output_args: dict[str, Union[int, str]]
 
 	enable_text_to_speech: bool
+	text_to_speech_read_image_alt_text: bool
 	text_to_speech_audio_format_type: Optional[str]
 	text_to_speech_rate: Optional[int]
 	text_to_speech_default_voice: Optional[str]
@@ -1016,6 +1017,21 @@ if __name__ == '__main__':
 										client_height = driver.execute_script('return document.body.clientHeight;')
 
 									if config.enable_text_to_speech:
+
+										# Replace every image with its alt text (if it exists) so it's read
+										# when generating the text-to-speech file. An extra space is added
+										# in case the images are right next to each other.
+										# E.g. https://web.archive.org/web/20000413210520if_/http://www.geocities.com:80/Athens/Acropolis/5551/index.html
+										if config.text_to_speech_read_image_alt_text:
+											driver.execute_script(	'''
+																	const image_nodes = document.querySelectorAll("img[alt]");
+																	for(const element of image_nodes)
+																	{
+																		const alt_text = element.getAttribute("alt");
+																		element.replaceWith(alt_text + " ");
+																	}
+																	''')
+
 										frame_text = driver.execute_script('return document.documentElement.innerText;')
 										frame_text_list.append(frame_text)
 
@@ -1194,9 +1210,6 @@ if __name__ == '__main__':
 						if crash_timer.crashed or capture.failed or redirected:
 							log.error(f'Aborted the recording (plugins crashed = {crash_timer.crashed}, capture failed = {capture.failed}, redirected = {redirected}).')
 							state = Snapshot.ABORTED
-						elif days_since_last_published is not None:
-							log.info(f'Saved the new recording after {days_since_last_published} days to "{capture.upload_recording_path}".')
-							state = Snapshot.APPROVED
 						else:
 							log.info(f'Saved the recording to "{capture.upload_recording_path}".')
 							state = Snapshot.RECORDED
