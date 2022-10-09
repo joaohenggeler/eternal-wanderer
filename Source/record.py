@@ -1019,8 +1019,8 @@ if __name__ == '__main__':
 									if config.enable_text_to_speech:
 
 										# Replace every image with its alt text (if it exists) so it's read
-										# when generating the text-to-speech file. An extra space is added
-										# in case the images are right next to each other.
+										# when generating the text-to-speech file. An extra delimiter is
+										# added to prevent run-on sentences.
 										# E.g. https://web.archive.org/web/20000413210520if_/http://www.geocities.com:80/Athens/Acropolis/5551/index.html
 										if config.text_to_speech_read_image_alt_text:
 											driver.execute_script(	'''
@@ -1028,7 +1028,7 @@ if __name__ == '__main__':
 																	for(const element of image_nodes)
 																	{
 																		const alt_text = element.getAttribute("alt");
-																		element.replaceWith(alt_text + " ");
+																		element.replaceWith(alt_text + ". ");
 																	}
 																	''')
 
