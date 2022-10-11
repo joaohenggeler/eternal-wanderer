@@ -740,7 +740,15 @@ class Snapshot():
 		modifier = Snapshot.OBJECT_EMBED_MODIFIER if self.IsStandaloneMedia else Snapshot.IFRAME_MODIFIER
 		self.WaybackUrl = compose_wayback_machine_snapshot_url(timestamp=self.Timestamp, modifier=modifier, url=self.Url)
 
-		if self.LastModifiedTime is not None:
+		# If the last modified time is older than the first website (August 1991)
+		# or if it's newer than the archival date, use the snapshot's timestamp.
+		# See: https://en.wikipedia.org/wiki/List_of_websites_founded_before_1995
+		#
+		# E.g. https://web.archive.org/web/19961111002723if_/http://www.metamor.com:80/pages/missioncontrol/mission_control.html
+		# Where the last modified time is 19800501233128 (too old).
+		# E.g. https://web.archive.org/web/19961222034448if_/http://panter.soci.aau.dk:80/
+		# Where the last modified time is 20090215174615 (too new).
+		if self.LastModifiedTime is not None and self.LastModifiedTime > '1991':
 			self.OldestTimestamp = min(self.Timestamp, self.LastModifiedTime)
 		else:
 			self.OldestTimestamp = self.Timestamp

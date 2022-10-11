@@ -111,10 +111,10 @@ class RecordConfig(CommonConfig):
 	screen_capture_recorder_settings: dict[str, Optional[int]]
 	
 	ffmpeg_recording_input_name: str
-	ffmpeg_recording_input_args: dict[str, Union[int, str]]
-	ffmpeg_recording_output_args: dict[str, Union[int, str]]
-	ffmpeg_archive_output_args: dict[str, Union[int, str]]
-	ffmpeg_upload_output_args: dict[str, Union[int, str]]
+	ffmpeg_recording_input_args: dict[str, Union[None, int, str]]
+	ffmpeg_recording_output_args: dict[str, Union[None, int, str]]
+	ffmpeg_archive_output_args: dict[str, Union[None, int, str]]
+	ffmpeg_upload_output_args: dict[str, Union[None, int, str]]
 
 	enable_text_to_speech: bool
 	text_to_speech_read_image_alt_text: bool
@@ -124,9 +124,9 @@ class RecordConfig(CommonConfig):
 	text_to_speech_language_voices: dict[str, str]
 
 	ffmpeg_text_to_speech_video_input_name: str
-	ffmpeg_text_to_speech_video_input_args: dict[str, Union[int, str]]
-	ffmpeg_text_to_speech_audio_input_args: dict[str, Union[int, str]]
-	ffmpeg_text_to_speech_output_args: dict[str, Union[int, str]]
+	ffmpeg_text_to_speech_video_input_args: dict[str, Union[None, int, str]]
+	ffmpeg_text_to_speech_audio_input_args: dict[str, Union[None, int, str]]
+	ffmpeg_text_to_speech_output_args: dict[str, Union[None, int, str]]
 
 	# Determined at runtime.
 	standalone_media_template: str
@@ -673,12 +673,12 @@ if __name__ == '__main__':
 			proxy = nullcontext() # type: ignore
 
 		if config.enable_text_to_speech:
-			log.info('Initializing text-to-speech.')
+			log.info('Initializing the text-to-speech engine.')
 			text_to_speech = TextToSpeech()
 
 		standalone_media_page_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.html', delete=False)
 		standalone_media_page_url = f'file:///{standalone_media_page_file.name}'
-		log.debug(f'Created the temporary standalone media page file "{standalone_media_page_file.name}".')
+		log.debug(f'Created the temporary standalone media page "{standalone_media_page_file.name}".')
 
 		standalone_media_download_directory = TemporaryDirectory(prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.media')
 		standalone_media_download_search_path = os.path.join(standalone_media_download_directory.name, '*')

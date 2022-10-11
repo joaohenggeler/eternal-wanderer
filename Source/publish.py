@@ -66,7 +66,7 @@ class PublishConfig(CommonConfig):
 	mastodon_max_file_size: Optional[int]
 
 	mastodon_enable_ffmpeg: bool
-	mastodon_ffmpeg_output_args: dict[str, Union[int, str]]
+	mastodon_ffmpeg_output_args: dict[str, Union[None, int, str]]
 
 	def __init__(self):
 		super().__init__()

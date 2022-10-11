@@ -211,8 +211,6 @@ if __name__ == '__main__':
 				log.info('Skipping the initial snapshots at the user\'s request.')
 
 			try:
-				log.debug('Updating the word and tag attributes.')
-
 				# Removing words that are no longer associated with any snapshot is handy when we change
 				# certain options (e.g. toggling Japanese text tokenization from one execution to another).
 				# This step is skipped for any words that were added via the configuration file.

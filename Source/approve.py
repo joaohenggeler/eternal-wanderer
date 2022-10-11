@@ -103,7 +103,6 @@ if __name__ == '__main__':
 
 					if not verdict:
 						continue
-					
 					elif verdict[0] == 'y':
 						print('[APPROVED]')
 						state = Snapshot.APPROVED
@@ -130,20 +129,19 @@ if __name__ == '__main__':
 						continue
 
 					while True:
-						sensitive = input('Sensitive Override [(y)es, (n)o, (s)kip]: ').lower()
+						sensitive = input('Sensitive Override [(s)kip, (y)es, (n)o]: ').lower()
 
 						if not sensitive:
 							continue
-
+						elif sensitive[0] == 's':
+							print('[SKIPPED]')
+							is_sensitive_override = snapshot.IsSensitiveOverride
 						elif sensitive[0] == 'y':
 							print('[YES]')
 							is_sensitive_override = True
 						elif sensitive[0] == 'n':
 							print('[NO]')
 							is_sensitive_override = False
-						elif sensitive[0] == 's':
-							print('[SKIPPED]')
-							is_sensitive_override = snapshot.IsSensitiveOverride
 						else:
 							print(f'Invalid input "{sensitive}".')
 							continue
