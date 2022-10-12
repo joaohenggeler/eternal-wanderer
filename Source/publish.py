@@ -306,12 +306,12 @@ if __name__ == '__main__':
 
 								log.info(f'Posted the text-to-speech status #{tts_status_id} with the media #{tts_media_id} ({tts_file_size / 10 ** 6:.1f} MB) using {len(tts_text)} characters.')
 							else:
-								log.info(f'Skipping the text-to-speech file since its size ({recording_file_size}) exceeds the limit of {config.mastodon_max_file_size} MB.')
+								log.info(f'Skipping the text-to-speech file since its size ({tts_file_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_file_size / 10 ** 6} MB.')
 					
 					except MastodonError as error:
 						log.error(f'Failed to post the text-to-speech file with the error: {repr(error)}')
 				else:
-					log.info(f'Skipping the recording since its size ({recording_file_size}) exceeds the limit of {config.mastodon_max_file_size} MB.')
+					log.info(f'Skipping the recording since its size ({recording_file_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_file_size / 10 ** 6} MB.')
 
 			except MastodonError as error:
 				log.error(f'Failed to post the recording status with the error: {repr(error)}')

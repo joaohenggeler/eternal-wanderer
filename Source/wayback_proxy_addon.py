@@ -220,7 +220,7 @@ def request(flow: http.HTTPFlow) -> None:
 			cdx_list = [(prefix_cdx, 'PREFIX'), (subdomain_cdx, 'SUBDOMAIN'), (no_query_cdx, 'NO QUERY')]
 			for i, (cdx, identifier) in enumerate(filter(lambda x: x[0], cdx_list)):
 				try:
-					# Queries to the CDX API cost twice as much as the queries sent from other scripts.
+					# Queries to the CDX API cost twice as much here as the queries sent from other scripts.
 					global_rate_limiter.wait_for_cdx_api_rate_limit(cost=2)
 					snapshot = cdx.near(wayback_machine_timestamp=timestamp)
 					wayback_parts = wayback_parts._replace(Timestamp=snapshot.timestamp, Url=snapshot.original)
@@ -258,7 +258,7 @@ def request(flow: http.HTTPFlow) -> None:
 	# the Wayback Machine, these will naturally be redirected since it's unlikely
 	# that they share the same timestamp as the main world file. To prevent Cosmo
 	# Player from throwing an error when loading assets, we'll request them here
-	# and create the mitmproxy response ourselves.
+	# and create the response ourselves.
 	request_came_from_vrml = False
 	referer = request.headers.get('referer')
 	
@@ -268,7 +268,6 @@ def request(flow: http.HTTPFlow) -> None:
 		path = parts.path.lower()
 		_, file_extension = os.path.splitext(path)
 
-		# Check if the request came from a VRML world.
 		if file_extension in ['.wrl', '.wrz'] or path.endswith('.wrl.gz'):
 			
 			request_came_from_vrml = True
@@ -288,7 +287,7 @@ def request(flow: http.HTTPFlow) -> None:
 				# - request.url = vrml_response.url
 				# But then the browser would always have to make a second request.
 				global_rate_limiter.wait_for_wayback_machine_rate_limit()
-				response = requests.request(request.method, request.url, headers=dict(request.headers))
+				response = requests.get(request.url, headers=dict(request.headers))
 				flow.response = http.Response.make(response.status_code, response.content, dict(response.headers))
 			except RequestException:
 				pass
