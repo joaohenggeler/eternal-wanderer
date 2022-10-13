@@ -111,7 +111,7 @@ function object_embed_uses_java_plugin(element)
 	if(class_id) class_id = class_id.toLowerCase();
 
 	return (type && JAVA_MIME_TYPES.some(mime_type => type.startsWith(mime_type)))
-		|| (class_id && class_id == "clsid:8ad9c840-044e-11d1-b3e9-00805f499d93")
+		|| (class_id && class_id === "clsid:8ad9c840-044e-11d1-b3e9-00805f499d93")
 		|| (class_id && class_id.startsWith("clsid:cafeefac-"));
 }
 

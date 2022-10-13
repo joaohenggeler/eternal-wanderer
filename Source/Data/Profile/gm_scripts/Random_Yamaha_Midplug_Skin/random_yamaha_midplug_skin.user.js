@@ -169,7 +169,7 @@ if(midplug_plugin)
 			get_object_embed_attributes(element, attributes_map);
 
 			const panel = attributes_map.get("panel");
-			if(panel == null)
+			if(!panel)
 			{
 				// See: https://web.archive.org/web/20020614163533if_/http://www.yamaha-xg.com/midplug/server.html
 				const random_panel = Math.round(Math.random());

@@ -167,10 +167,11 @@ function is_autoplaying(element)
 	const autoplay = attributes_map.get("autoplay");
 	const autostart = attributes_map.get("autostart");
 
-	// By default, the audio and video HTML5 tags do not start playing automatically.
-	// For the VLC plugin (i.e. the object and embed tags), any audio and video is played automatically by default.
-	const playing_by_default = ((autoplay == null && autostart == null) && (element.tagName === "OBJECT" || element.tagName === "EMBED"))
-							|| ((autoplay === "") && (element.tagName === "VIDEO" || element.tagName === "AUDIO"));
+	// By default, the audio and video HTML5 tags do not start playing automatically. In modern browsers,
+	// the element autoplays if the attribute exists at all (even if it's an empty string). For the VLC
+	// plugin (i.e. the object and embed tags), any audio and video is played automatically by default.
+	const playing_by_default = ( (!autoplay && !autostart) && (element.tagName === "OBJECT" || element.tagName === "EMBED") )
+							|| ( (autoplay !== null) && (element.tagName === "VIDEO" || element.tagName === "AUDIO") );
 
 	return playing_by_default || (autoplay && autoplay !== "false" && autoplay !== "0") || (autostart && autostart !== "false" && autostart !== "0");
 }

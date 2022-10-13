@@ -27,7 +27,7 @@
 		<Include>*</Include>
 	</Script>
 	
-	<Script basedir="Fix_Vlc_Embed" checkRemoteUpdates="0" description="Fixes an issue where a video meant to be played by the VLC plugin would be displayed in the wrong position on the page. Also fixes an issue where embedded audio that isn't supposed to loop is played twice by VLC. The first fix removes the video's controls so the script allows you to toggle pause by clicking on it. Videos can also be played from the beginning by right-clicking on them." enabled="true" filename="fix_vlc_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Fix Vlc Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="68eabf0f-f06e-44bb-b234-7a7c01a6e054" version="1.0.0">
+	<Script basedir="Fix_Vlc_Embed" checkRemoteUpdates="0" description="Fixes an issue where a video played by the VLC plugin is displayed in the wrong position on the page. Also fixes an issue where embedded media that isn't supposed to loop forever is played twice by VLC. The first fix removes the video's controls so the script allows you to toggle pause by clicking on it. Videos can also be played from the beginning by right-clicking on them." enabled="true" filename="fix_vlc_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Fix Vlc Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="68eabf0f-f06e-44bb-b234-7a7c01a6e054" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
