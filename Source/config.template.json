@@ -659,6 +659,7 @@
 		"show_standalone_media_metadata": true,
 		"reply_with_text_to_speech": true,
 		"delete_files_after_upload": false,
+		"api_request_wait": 10,
 
 		"twitter_api_key": "<API Key>",
 		"twitter_api_secret": "<API Secret>",
@@ -670,7 +671,7 @@
 
 		"twitter_max_status_length": 280,
 		"twitter_text_to_speech_segment_duration": 138,
-		"twitter_max_text_to_speech_segments": 5,
+		"twitter_max_text_to_speech_segments": 3,
 
 		"mastodon_instance_url": "<Instance URL>",
 		"mastodon_access_token": "<Access Token>",

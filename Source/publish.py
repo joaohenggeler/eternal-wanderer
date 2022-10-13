@@ -42,6 +42,7 @@ class PublishConfig(CommonConfig):
 	show_standalone_media_metadata: bool
 	reply_with_text_to_speech: bool
 	delete_files_after_upload: bool
+	api_request_wait: int
 
 	twitter_api_key: str
 	twitter_api_secret: str
@@ -124,14 +125,16 @@ if __name__ == '__main__':
 				# At the time of writing, you can't add alt text to videos.
 				# See: https://docs.tweepy.org/en/stable/api.html#tweepy.API.create_media_metadata
 				if False:
+					sleep(config.api_request_wait)
 					twitter_api.create_media_metadata(media_id, alt_text)
 				
 				max_title_length = max(config.twitter_max_status_length - len(body), 0)
 				text = f'{title[:max_title_length]}\n{body}'
 
+				sleep(config.api_request_wait)
 				status = twitter_api.update_status(text, media_ids=[media_id], possibly_sensitive=sensitive)
 				status_id = status.id
-
+				
 				log.info(f'Posted the recording status #{status_id} with the media #{media_id} using {len(text)} characters.')
 
 				# Add the text-to-speech file as a reply to the previous tweet. While Twitter has a generous
@@ -159,11 +162,13 @@ if __name__ == '__main__':
 							
 							for i, segment_path in enumerate(segment_file_paths):
 
+								sleep(config.api_request_wait)
 								tts_media = twitter_api.chunked_upload(filename=segment_path, file_type='video/mp4', media_category='TweetVideo')
 								tts_media_id = tts_media.media_id
 
 								# See above.
 								if False:
+									sleep(config.api_request_wait)
 									twitter_api.create_media_metadata(tts_media_id, tts_alt_text)
 
 								segment_body = tts_body
@@ -174,6 +179,7 @@ if __name__ == '__main__':
 								max_title_length = max(config.twitter_max_status_length - len(segment_body), 0)
 								tts_text = f'{title[:max_title_length]}\n{segment_body}'
 
+								sleep(config.api_request_wait)
 								tts_status = twitter_api.update_status(tts_text, in_reply_to_status_id=last_status_id, media_ids=[tts_media_id], possibly_sensitive=sensitive)
 								last_status_id = tts_status.id
 
@@ -283,6 +289,7 @@ if __name__ == '__main__':
 					max_title_length = max(config.mastodon_max_status_length - len(body), 0)
 					text = f'{title[:max_title_length]}\n{body}'
 
+					sleep(config.api_request_wait)
 					status_id = try_status_post(text, media_ids=[media_id], sensitive=sensitive, idempotency_key=recording_idempotency_key)
 
 					log.info(f'Posted the recording status #{status_id} with the media #{media_id} ({recording_file_size / 10 ** 6:.1f} MB) using {len(text)} characters.')
@@ -297,11 +304,13 @@ if __name__ == '__main__':
 
 							if config.mastodon_max_file_size is None or tts_file_size <= config.mastodon_max_file_size:
 
+								sleep(config.api_request_wait)
 								tts_media_id = try_media_post(tts_path, mime_type='video/mp4', description=tts_alt_text)
 
 								max_title_length = max(config.mastodon_max_status_length - len(tts_body), 0)
 								tts_text = f'{title[:max_title_length]}\n{tts_body}'
 
+								sleep(config.api_request_wait)
 								tts_status_id = try_status_post(tts_text, in_reply_to_id=status_id, media_ids=[tts_media_id], sensitive=sensitive, idempotency_key=tts_idempotency_key)
 
 								log.info(f'Posted the text-to-speech status #{tts_status_id} with the media #{tts_media_id} ({tts_file_size / 10 ** 6:.1f} MB) using {len(tts_text)} characters.')
