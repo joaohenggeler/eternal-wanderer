@@ -373,6 +373,7 @@
 		{
 			"flash": 20,
 			"フラッシュ": 20,
+			"futuresplash": 20,
 			"shockwave": 20,
 			"applet": 20,
 			"applets": 20,
@@ -384,6 +385,8 @@
 			"3dvia": 20,
 			"midi": 20,
 			"realaudio": 20,
+			"realvideo": 20,
+			"realmedia": 20,
 			"quicktime": 20
 		},
 
@@ -395,7 +398,6 @@
 			"bgsound": 1000,
 			"audio": 1000,
 			"video": 1000,
-			"map": 100,
 			"blink": 100,
 			"marquee": 100
 		},
@@ -659,7 +661,7 @@
 		"show_standalone_media_metadata": true,
 		"reply_with_text_to_speech": true,
 		"delete_files_after_upload": false,
-		"api_request_wait": 10,
+		"api_wait": 10,
 
 		"twitter_api_key": "<API Key>",
 		"twitter_api_secret": "<API Secret>",
