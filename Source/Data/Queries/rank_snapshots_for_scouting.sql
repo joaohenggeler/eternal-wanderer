@@ -10,4 +10,5 @@ FROM Snapshot S
 LEFT JOIN Snapshot PS ON S.ParentId = PS.Id
 LEFT JOIN SnapshotInfo PSI ON PS.Id = PSI.Id
 WHERE S.State = 0
-ORDER BY S.Priority DESC, Rank DESC;
+ORDER BY S.Priority DESC, Rank DESC
+LIMIT 20;

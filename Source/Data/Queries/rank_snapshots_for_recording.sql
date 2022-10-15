@@ -7,4 +7,5 @@ SELECT
 FROM Snapshot S
 INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 WHERE S.State = 2 AND (NOT S.IsStandaloneMedia OR S.MediaExtension IN ('swf', 'dcr', 'wrl', 'wrz', 'mid', 'mod', 's3m', 'xm', 'aif', 'aiff', 'au', 'avi', 'flac', 'flv', 'mkv', 'mov', 'mp3', 'mp4', 'mpeg', 'mpg', 'ogg', 'ra', 'ram', 'rm', 'wav', 'webm', 'wma', 'wmv'))
-ORDER BY S.Priority DESC, Rank DESC;
+ORDER BY S.Priority DESC, Rank DESC
+LIMIT 20;
