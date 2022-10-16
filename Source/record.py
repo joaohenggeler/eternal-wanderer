@@ -226,6 +226,7 @@ if __name__ == '__main__':
 		in other subdomains via the CDX API while also allowing plugin media that loads slowly to finish requesting assets. """
 
 		port: int
+		
 		process: Popen
 		queue: Queue
 		timestamp: Optional[str]
@@ -240,6 +241,7 @@ if __name__ == '__main__':
 			super().__init__(name='proxy', daemon=True)
 
 			self.port = port
+			
 			os.environ['PYTHONUNBUFFERED'] = '1'
 			self.process = Popen(['mitmdump', '--quiet', '--listen-port', str(self.port), '--script', 'wayback_proxy_addon.py'], stdin=PIPE, stdout=PIPE, stderr=STDOUT, bufsize=1, encoding='utf-8')
 			self.queue = Queue()
@@ -318,17 +320,22 @@ if __name__ == '__main__':
 	class PluginCrashTimer():
 		""" A special timer that kills Firefox's plugin container child processes after a given time has elapsed (e.g. the recording duration). """
 
-		firefox_directory_path: str
 		timeout: float
-		timer: Timer
+		
 		plugin_container_path: str
+		java_plugin_launcher_path: Optional[str]
+		timer: Timer
 		crashed: bool
 
-		def __init__(self, firefox_directory_path: str, timeout: float):
-			self.firefox_directory_path = firefox_directory_path
+		def __init__(self, browser: Browser, timeout: float):
+			
 			self.timeout = timeout
+			
+			self.plugin_container_path = os.path.join(browser.firefox_directory_path, 'plugin-container.exe')
+			self.java_plugin_launcher_path = os.path.join(browser.java_bin_path, 'jp2launcher.exe') if browser.java_bin_path is not None else None
+
 			self.timer = Timer(self.timeout, self.kill_plugin_containers)
-			self.plugin_container_path = os.path.join(self.firefox_directory_path, 'plugin-container.exe')
+
 			log.debug(f'Created a plugin crash timer with {self.timeout:.1f} seconds.')
 
 		def start(self) -> None:
@@ -350,6 +357,10 @@ if __name__ == '__main__':
 
 		def kill_plugin_containers(self) -> None:
 			log.warning(f'Killing all plugin containers since {self.timeout:.1f} seconds have passed without the timer being reset.')
+			
+			if self.java_plugin_launcher_path is not None:
+				kill_processes_by_path(self.java_plugin_launcher_path)
+			
 			kill_processes_by_path(self.plugin_container_path)
 
 	class ScreenCapture():
@@ -968,7 +979,7 @@ if __name__ == '__main__':
 						realmedia_url = None
 
 						# Wait for the page and its resources to be cached.
-						with proxy, PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout):
+						with proxy, PluginCrashTimer(browser, plugin_crash_timeout):
 
 							try:
 								browser.bring_to_front()
@@ -1138,7 +1149,7 @@ if __name__ == '__main__':
 						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, str(snapshot.OldestDatetime.year), str(snapshot.OldestDatetime.month).zfill(2), str(snapshot.OldestDatetime.day).zfill(2), media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
-						with PluginCrashTimer(browser.firefox_directory_path, plugin_crash_timeout) as crash_timer:
+						with PluginCrashTimer(browser, plugin_crash_timeout) as crash_timer:
 							
 							# Record the snapshot. The page should load faster now that its resources are cached.
 

@@ -848,26 +848,23 @@ class CustomFirefoxProfile(FirefoxProfile):
 class Browser():
 	""" A Firefox browser instance created by Selenium. """
 
-	headless: bool
-	multiprocess: bool
-	extra_preferences: Optional[dict[str, Union[bool, int, str]]]
-	use_extensions: bool
-	extension_filter: Optional[list[str]]
-	user_script_filter: Optional[list[str]]
 	use_plugins: bool
 	use_autoit: bool
 
 	firefox_path: str
 	firefox_directory_path: str
 	webdriver_path: str
-	autoit_processes: list[Popen]
+	
 	registry: 'TemporaryRegistry'
 	java_deployment_path: str
+	java_bin_path: Optional[str]
+	autoit_processes: list[Popen]
 
 	driver: WebDriver
 	version: str
 	profile_path: str
 	pid: int
+	
 	application: Optional[WindowsApplication]
 	window: Optional[WindowSpecification]
 	
@@ -883,21 +880,19 @@ class Browser():
 						use_plugins: bool = False,
 						use_autoit: bool = False):
 
-		self.headless = headless
-		self.multiprocess = multiprocess
-		self.extra_preferences = extra_preferences
-		self.use_extensions = use_extensions
-		self.extension_filter = container_to_lowercase(extension_filter) if extension_filter else extension_filter # type: ignore
-		self.user_script_filter = container_to_lowercase(user_script_filter) if user_script_filter else user_script_filter # type: ignore
+		extension_filter = container_to_lowercase(extension_filter) if extension_filter is not None else extension_filter # type: ignore
+		user_script_filter = container_to_lowercase(user_script_filter) if user_script_filter is not None else user_script_filter # type: ignore
 		self.use_plugins = use_plugins
 		self.use_autoit = use_autoit
 
-		self.firefox_path = config.headless_firefox_path if self.headless else config.gui_firefox_path
+		self.firefox_path = config.headless_firefox_path if headless else config.gui_firefox_path
 		self.firefox_directory_path = os.path.dirname(self.firefox_path)
-		self.webdriver_path = config.headless_webdriver_path if self.headless else config.gui_webdriver_path
-		self.autoit_processes = []
+		self.webdriver_path = config.headless_webdriver_path if headless else config.gui_webdriver_path
+		
 		self.registry = TemporaryRegistry()
 		self.java_deployment_path = os.path.join(os.environ['USERPROFILE'], 'AppData', 'LocalLow', 'Sun', 'Java', 'Deployment')
+		self.java_bin_path = None
+		self.autoit_processes = []
 
 		log.info('Configuring Firefox.')
 
@@ -926,7 +921,7 @@ class Browser():
 
 					name = name.lower()
 					enabled = config.user_scripts.get(name, False)
-					filtered = self.user_script_filter is not None and name not in self.user_script_filter
+					filtered = user_script_filter is not None and name not in user_script_filter
 
 					if enabled and not filtered:
 						log.info(f'Enabling the user script "{name}".')
@@ -943,9 +938,9 @@ class Browser():
 		for key, value in config.preferences.items():
 			profile.set_preference(key, value)
 
-		if self.extra_preferences is not None:
-			log.info(f'Setting additional preferences: {self.extra_preferences}')
-			for key, value in self.extra_preferences.items():
+		if extra_preferences is not None:
+			log.info(f'Setting additional preferences: {extra_preferences}')
+			for key, value in extra_preferences.items():
 				profile.set_preference(key, value)
 
 		if self.use_plugins:
@@ -983,13 +978,13 @@ class Browser():
 		else:
 			os.environ['MOZ_PLUGIN_PATH'] = ''
 
-		if self.use_extensions:
+		if use_extensions:
 
 			log.info(f'Installing the extensions in "{config.extensions_path}".')
 
 			for filename, enabled in config.extensions_before_running.items():
 				
-				filtered = self.extension_filter is not None and filename not in self.extension_filter
+				filtered = extension_filter is not None and filename not in extension_filter
 
 				if enabled and not filtered:
 					log.info(f'Installing the extension "{filename}".')
@@ -1001,9 +996,9 @@ class Browser():
 		options = webdriver.FirefoxOptions()
 		options.binary = FirefoxBinary(self.firefox_path)
 		options.profile = profile
-		options.headless = self.headless
+		options.headless = headless
 
-		if self.multiprocess:
+		if multiprocess:
 			os.environ.pop('MOZ_FORCE_DISABLE_E10S', None)
 		else:
 			log.warning('Disabling multiprocess Firefox.')
@@ -1041,7 +1036,7 @@ class Browser():
 		self.application = None
 		self.window = None
 
-		if not self.headless:
+		if not headless:
 			try:
 				log.info(f'Connecting to the Firefox executable with the PID {self.pid}.')
 				self.application = WindowsApplication(backend='win32')
@@ -1050,11 +1045,11 @@ class Browser():
 			except (WindowProcessNotFoundError, WindowTimeoutError) as error:
 				log.error(f'Failed to connect to the Firefox executable with the error: {repr(error)}')
 			
-		if self.use_extensions:
+		if use_extensions:
 
 			for filename, enabled in config.extensions_after_running.items():
 				
-				filtered = self.extension_filter is not None and filename not in self.extension_filter
+				filtered = extension_filter is not None and filename not in extension_filter
 
 				if enabled and not filtered:
 					log.info(f'Installing the extension "{filename}".')
@@ -1137,11 +1132,11 @@ class Browser():
 		log.info(f'Configuring the Java Plugin using the runtime environment located in "{java_jre_path}".')
 
 		java_lib_path = os.path.join(java_jre_path, 'lib')
-		java_bin_path = os.path.join(java_jre_path, 'bin')
+		self.java_bin_path = os.path.join(java_jre_path, 'bin')
 
 		if config.java_add_to_path:
 			path = os.environ.get('PATH', '')
-			os.environ['PATH'] = f'{java_bin_path};{path}'
+			os.environ['PATH'] = f'{self.java_bin_path};{path}'
 
 		java_config_path = os.path.join(java_lib_path, 'deployment.config')
 		java_properties_path = os.path.join(java_lib_path, 'deployment.properties')
@@ -1166,7 +1161,7 @@ class Browser():
 		java_platform, _ = java_product.rsplit('.', 1) # E.g. "1.8"
 		_, java_version = java_platform.split('.', 1) # E.g. "8"
 
-		java_firefox_path = os.path.join(java_bin_path, 'javaws.exe')
+		java_web_start_path = os.path.join(self.java_bin_path, 'javaws.exe')
 
 		java_exception_sites_path = os.path.join(java_lib_path, 'exception.sites')
 		java_exception_sites_template_path = os.path.join(config.plugins_path, 'Java', 'exception.sites.template')
@@ -1178,7 +1173,7 @@ class Browser():
 		content = content.replace('{comment}', f'Generated by "{__file__}" on {get_current_timestamp()}.')
 		content = content.replace('{jre_platform}', java_platform)
 		content = content.replace('{jre_product}', java_product)
-		content = content.replace('{jre_path}', escape_java_deployment_properties_path(java_firefox_path))
+		content = content.replace('{jre_path}', escape_java_deployment_properties_path(java_web_start_path))
 		content = content.replace('{jre_version}', java_version)
 		content = content.replace('{security_level}', 'LOW' if java_product <= '1.7.0_17' else 'MEDIUM')
 		content = content.replace('{exception_sites_path}', escape_java_deployment_properties_path(java_exception_sites_path))
@@ -1191,6 +1186,8 @@ class Browser():
 		java_policy_template_path = os.path.join(config.plugins_path, 'Java', 'java.policy.template')
 		shutil.copy(java_policy_template_path, java_policy_path)
 
+		# Override any security properties from other locally installed Java versions in order to allow applets
+		# to run even if they use a disabled cryptographic algorithm.
 		java_security_path = os.path.join(java_lib_path, 'security', 'java.security')
 
 		with open(java_security_path, encoding='utf-8') as file:
@@ -1201,9 +1198,6 @@ class Browser():
 		with open(java_security_path, 'w', encoding='utf-8') as file:
 			file.write(content)
 
-		# Override any security properties from other locally installed Java versions in order to allow applets
-		# to run even if they use a disabled cryptographic algorithm.
-		#
 		# Disable Java bytecode verification in order to run older applets correctly.
 		#
 		# Originally, we wanted to pass the character encoding and locale Java arguments on a page-by-page basis.

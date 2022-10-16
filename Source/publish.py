@@ -75,6 +75,21 @@ class PublishConfig(CommonConfig):
 
 		self.scheduler = container_to_lowercase(self.scheduler)
 
+		if self.twitter_api_key is None:
+			self.twitter_api_key = os.environ['WANDERER_TWITTER_API_KEY']
+
+		if self.twitter_api_secret is None:
+			self.twitter_api_secret = os.environ['WANDERER_TWITTER_API_SECRET']
+
+		if self.twitter_access_token is None:
+			self.twitter_access_token = os.environ['WANDERER_TWITTER_ACCESS_TOKEN']
+
+		if self.twitter_access_token_secret is None:
+			self.twitter_access_token_secret = os.environ['WANDERER_TWITTER_ACCESS_TOKEN_SECRET']
+
+		if self.mastodon_access_token is None:
+			self.mastodon_access_token = os.environ['WANDERER_MASTODON_ACCESS_TOKEN']
+
 		if self.mastodon_max_file_size is not None:
 			self.mastodon_max_file_size = self.mastodon_max_file_size * 10 ** 6
 
