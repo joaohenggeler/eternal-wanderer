@@ -381,6 +381,10 @@ def url_key_matches_domain_pattern(url_key: str, domain_patterns: list[list[str]
 		# E.g. "com,geocities)/hollywood/hills/5988"
 		domain, _ = url_key.lower().split(')', 1)
 		
+		# E.g. "com,sun,java:8081)/products/javamail/index.html"
+		if ':' in domain:
+			domain, _ = domain.split(':', 1)
+
 		if domain in cache:
 			return cache[domain]
 
