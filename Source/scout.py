@@ -347,11 +347,17 @@ if __name__ == '__main__':
 						cursor = db.execute('''
 											SELECT 	S.*,
 													CAST(MIN(SUBSTR(S.Timestamp, 1, 4), IFNULL(SUBSTR(S.LastModifiedTime, 1, 4), '9999')) AS INTEGER) AS OldestYear,
-													RANK_SNAPSHOT_BY_POINTS(PSI.Points, :ranking_offset) AS Rank,
-													PSI.Points AS ParentPoints
+													RANK_SNAPSHOT_BY_POINTS(PSI.ParentPoints, :ranking_offset) AS Rank,
+													PSI.ParentPoints
 											FROM Snapshot S
-											LEFT JOIN Snapshot PS ON S.ParentId = PS.Id
-											LEFT JOIN SnapshotInfo PSI ON PS.Id = PSI.Id
+											LEFT JOIN
+											(
+												SELECT T.ChildId, SUM(SI.Points) AS ParentPoints
+												FROM Topology T
+												INNER JOIN SnapshotInfo SI ON T.ParentId = SI.Id
+												WHERE T.ParentId <> T.ChildId
+												GROUP BY T.ChildId
+											) PSI ON S.Id = PSI.ChildId
 											WHERE
 												S.State = :queued_state
 												AND NOT S.IsStandaloneMedia
@@ -391,7 +397,7 @@ if __name__ == '__main__':
 					# set the current URL to a blank page before navigating to the Wayback Machine.
 
 					try:
-						log.info(f'[{snapshot_index+1} of {num_snapshots}] Scouting snapshot #{snapshot.Id} {snapshot} located at a depth of {snapshot.Depth} pages and whose parent has {parent_points} points.')
+						log.info(f'[{snapshot_index+1} of {num_snapshots}] Scouting snapshot #{snapshot.Id} {snapshot} located at a depth of {snapshot.Depth} pages and whose parents have {parent_points} points.')
 						browser.go_to_wayback_url(snapshot.WaybackUrl, close_windows=True)
 					except SessionNotCreatedException as error:
 						log.warning(f'Terminated the WebDriver session abruptly with the error: {repr(error)}')
