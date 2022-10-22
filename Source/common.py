@@ -152,7 +152,7 @@ class CommonConfig():
 	MUTABLE_OPTIONS = [
 		# For the recorder script.
 		'page_cache_wait',
-		'standalone_media_cache_wait',
+		'media_cache_wait',
 		
 		'plugin_load_wait',
 		'base_plugin_crash_timeout',
@@ -162,12 +162,12 @@ class CommonConfig():
 		'wait_after_load_per_plugin_instance',
 		'base_wait_per_scroll',
 		'wait_after_scroll_per_plugin_instance',
-		'base_standalone_media_wait_after_load',
+		'base_media_wait_after_load',
 		
-		'standalone_media_fallback_duration',
-		'standalone_media_width', 
-		'standalone_media_height',
-		'standalone_media_background_color',
+		'media_fallback_duration',
+		'media_width', 
+		'media_height',
+		'media_background_color',
 				
 		'plugin_syncing_type',
 		'plugin_syncing_delay',
@@ -188,7 +188,7 @@ class CommonConfig():
 		'text_to_speech_read_image_alt_text',
 
 		# For the publisher script.
-		'show_standalone_media_metadata',
+		'show_media_metadata',
 	]
 
 	def __init__(self):
@@ -476,7 +476,7 @@ class Database():
 									State INTEGER NOT NULL,
 									Priority INTEGER NOT NULL DEFAULT {Snapshot.NO_PRIORITY},
 									IsExcluded BOOLEAN NOT NULL,
-									IsStandaloneMedia BOOLEAN,
+									IsMedia BOOLEAN,
 									PageLanguage TEXT,
 									PageTitle TEXT,
 									PageUsesPlugins BOOLEAN,
@@ -551,7 +551,7 @@ class Database():
 									S.Id AS Id,
 									(
 										CASE WHEN S.State = {Snapshot.QUEUED} THEN NULL
-											 ELSE IFNULL(CASE WHEN S.IsStandaloneMedia THEN (SELECT CAST(Value AS INTEGER) FROM Config WHERE Name = 'standalone_media_points')
+											 ELSE IFNULL(CASE WHEN S.IsMedia THEN (SELECT CAST(Value AS INTEGER) FROM Config WHERE Name = 'media_points')
 															  WHEN W.IsTag THEN SUM(SW.Count * W.Points)
 															  ELSE SUM(MIN(SW.Count, 1) * W.Points)
 														 END, 0)
@@ -654,7 +654,7 @@ class Snapshot():
 	State: int
 	Priority: int
 	IsExcluded: bool
-	IsStandaloneMedia: Optional[bool]
+	IsMedia: Optional[bool]
 	PageLanguage: Optional[str]
 	PageTitle: Optional[str]
 	PageUsesPlugins: Optional[bool]
@@ -723,7 +723,7 @@ class Snapshot():
 			return bool(value) if value is not None else None
 
 		self.IsExcluded = bool_or_none(self.IsExcluded)
-		self.IsStandaloneMedia = bool_or_none(self.IsStandaloneMedia)
+		self.IsMedia = bool_or_none(self.IsMedia)
 		self.PageUsesPlugins = bool_or_none(self.PageUsesPlugins)	
 		self.IsSensitiveOverride = bool_or_none(self.IsSensitiveOverride)
 		self.IsSensitive = bool_or_none(self.IsSensitive)
@@ -741,7 +741,7 @@ class Snapshot():
 		self.HideTitle = self.Options.get('hide_title', False)
 		self.Notes = self.Options.get('notes', '')
 
-		modifier = Snapshot.OBJECT_EMBED_MODIFIER if self.IsStandaloneMedia else Snapshot.IFRAME_MODIFIER
+		modifier = Snapshot.OBJECT_EMBED_MODIFIER if self.IsMedia else Snapshot.IFRAME_MODIFIER
 		self.WaybackUrl = compose_wayback_machine_snapshot_url(timestamp=self.Timestamp, modifier=modifier, url=self.Url)
 
 		# If the last modified time is older than the first website (August 1991)
@@ -1492,7 +1492,7 @@ class Browser():
 				global_rate_limiter.wait_for_wayback_machine_rate_limit()
 				self.driver.get(wayback_url)
 
-				# Skip the availability check for auto-generated standalone media pages.
+				# Skip the availability check for auto-generated media pages.
 				# This check works for expected downtime (e.g. maintenance).
 				retry = not wayback_url.startswith('file:') and not is_wayback_machine_available()
 
@@ -2116,8 +2116,8 @@ def get_current_timestamp() -> str:
 	""" Retrieves the current timestamp in UTC. """
 	return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
-def extract_standalone_media_extension_from_url(url: str) -> str:
-	""" Retrieves the file extension from a standalone media URL. The returned extension may be
+def extract_media_extension_from_url(url: str) -> str:
+	""" Retrieves the file extension from a media file URL. The returned extension may be
 	different from the real value for the sake of convenience (e.g. compressed VRML worlds). """
 
 	parts = urlparse(url)
@@ -2146,10 +2146,10 @@ def find_best_wayback_machine_snapshot(timestamp: str, url: str) -> tuple[CDXSna
 
 	# Consider plain text files since regular HTML pages may be served with this MIME type.
 	# E.g. https://web.archive.org/web/20011201170113if_/http://www.yahoo.co.jp/bin/top3
-	is_standalone_media = snapshot.mimetype not in ['text/html', 'text/plain']
-	media_extension = extract_standalone_media_extension_from_url(snapshot.original) if is_standalone_media else None
+	is_media = snapshot.mimetype not in ['text/html', 'text/plain']
+	media_extension = extract_media_extension_from_url(snapshot.original) if is_media else None
 
-	return snapshot, is_standalone_media, media_extension
+	return snapshot, is_media, media_extension
 
 def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 	""" Finds the last modified time of a Wayback Machine snapshot. Note that not every snapshot has this information. """

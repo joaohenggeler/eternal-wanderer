@@ -49,8 +49,8 @@ if __name__ == '__main__':
 
 			print()
 
-			cursor = db.execute('SELECT IsStandaloneMedia, COUNT(*) AS Total FROM Snapshot GROUP BY IsStandaloneMedia ORDER BY IsStandaloneMedia;')
-			type_total = {row['IsStandaloneMedia']: row['Total'] for row in cursor}
+			cursor = db.execute('SELECT IsMedia, COUNT(*) AS Total FROM Snapshot GROUP BY IsMedia ORDER BY IsMedia;')
+			type_total = {row['IsMedia']: row['Total'] for row in cursor}
 
 			for type, name in [(0, 'Pages'), (1, 'Media'), (None, 'Excluded')]:
 				total = type_total.get(type, 0)

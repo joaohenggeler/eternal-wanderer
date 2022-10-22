@@ -402,7 +402,7 @@
 			"marquee": 100
 		},
 
-		"standalone_media_points": 500,
+		"media_points": 500,
 
 		"sensitive_words": ["b64:Ymxvd2pvYg==", "b64:Ymxvd2pvYnM=", "b64:Y3Vt", "b64:Y3Vtcw==", "b64:Y3Vtc2hvdA==", "b64:Y3Vtc2hvdHM=", "b64:Y3VudA==", "b64:Y3VudHM=", "b64:ZG9nZ3lzdHlsZQ==", "b64:ZmFn", "b64:ZmFnZ290", "b64:ZmFnZ290cw==", "b64:ZmFncw==", "b64:aGFuZGpvYg==", "b64:aGFuZGpvYnM=", "b64:aGVudGFp", "b64:aml6eg==", "b64:aml6emVk", "b64:aml6emVz", "b64:bWlsZg==", "b64:bWlsZnM=", "b64:bW90aGVyZnVja2Vy", "b64:bW90aGVyZnVja2Vycw==", "b64:bmlnZ2Vy", "b64:bmlnZ2Vycw==", "b64:bnVkZQ==", "b64:cGFlZG9waGlsZQ==", "b64:cGFlZG9waGlsZXM=", "b64:cGVkbw==", "b64:cGVkb3BoaWxl", "b64:cGVkb3BoaWxlcw==", "b64:cGVkb3M=", "b64:cHVzc2llcw==", "b64:cHVzc3k=", "b64:cmFwZQ==", "b64:cmFwZWQ=", "b64:cmFwZXM=", "b64:cmFwaXN0", "b64:cmFwaXN0cw==", "b64:c2hlbWFsZQ==", "b64:c2hlbWFsZXM=", "b64:dGl0ZnVjaw==", "b64:dGl0ZnVja2Vk", "b64:dGl0ZnVja3M=", "b64:dGl0am9i", "b64:dGl0am9icw==", "b64:dGl0cw==", "b64:dGl0dHlmdWNr", "b64:dGl0dHlmdWNrZWQ=", "b64:dGl0dHlmdWNrcw==", "b64:dHJhbm5pZXM=", "b64:dHJhbm55", "b64:d2hvcmU=", "b64:d2hvcmVz"],
 
@@ -422,7 +422,7 @@
 		"record_sensitive_snapshots": true,
 		"min_publish_days_for_new_recording": 365,
 
-		"allowed_standalone_media_extensions":
+		"allowed_media_extensions":
 		[
 			"spl", "swf",
 			"dcr", "dir", "dxr",
@@ -449,7 +449,7 @@
 			"xspf"
 		],
 
-		"nondownloadable_standalone_media_extensions":
+		"nondownloadable_media_extensions":
 		[
 			"spl", "swf",
 			"dcr", "dir", "dxr",
@@ -471,7 +471,7 @@
 		"proxy_cache_missing_responses": true,
 
 		"page_cache_wait": 20,
-		"standalone_media_cache_wait": 40,
+		"media_cache_wait": 40,
 
 		"plugin_load_wait": 5,
 		"base_plugin_crash_timeout": 60,
@@ -481,12 +481,12 @@
 		"wait_after_load_per_plugin_instance": 15,
 		"base_wait_per_scroll": 10,
 		"wait_after_scroll_per_plugin_instance": 10,
-		"base_standalone_media_wait_after_load": 2,
+		"base_media_wait_after_load": 2,
 
-		"standalone_media_fallback_duration": 45,
-		"standalone_media_width": "90%",
-		"standalone_media_height": "90%",
-		"standalone_media_background_color": "#000000",
+		"media_fallback_duration": 45,
+		"media_width": "90%",
+		"media_height": "90%",
+		"media_background_color": "#000000",
 
 		"fullscreen_browser": true,
 		
@@ -658,7 +658,7 @@
 
 		"require_approval": true,
 		"flag_sensitive_snapshots": true,
-		"show_standalone_media_metadata": true,
+		"show_media_metadata": true,
 		"reply_with_text_to_speech": true,
 		"delete_files_after_upload": false,
 		"api_wait": 10,

@@ -150,7 +150,7 @@ if __name__ == '__main__':
 
 				assert snapshot.IsSensitive is not None, 'The IsSensitive column is not being computed properly.'
 
-				if args.tts and snapshot.IsStandaloneMedia:
+				if args.tts and snapshot.IsMedia:
 					continue
 
 				total_recordings += 1
@@ -242,7 +242,7 @@ if __name__ == '__main__':
 
 								timestamp = timedelta(seconds=round(current_duration))
 								formatted_timestamp = str(timestamp).zfill(8)
-								plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsStandaloneMedia or snapshot.PageUsesPlugins else None
+								plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsMedia or snapshot.PageUsesPlugins else None
 								sensitive_identifier = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
 								recording_identifiers = [formatted_timestamp, f'"{snapshot.DisplayTitle}"', f'({snapshot.ShortDate})', plugin_identifier, sensitive_identifier]
 								

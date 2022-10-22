@@ -24,7 +24,7 @@ from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
 from common import (
 	Browser, CommonConfig, Database, Snapshot, compose_wayback_machine_snapshot_url,
-	container_to_lowercase, extract_standalone_media_extension_from_url,
+	container_to_lowercase, extract_media_extension_from_url,
 	find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info,
 	is_url_from_domain, is_wayback_machine_available, parse_wayback_machine_snapshot_url,
 	setup_logger, was_exit_command_entered,
@@ -54,7 +54,7 @@ class ScoutConfig(CommonConfig):
 	
 	word_points: dict[str, int]
 	tag_points: dict[str, int]
-	standalone_media_points: int
+	media_points: int
 	
 	sensitive_words: dict[str, bool] # Different from the config data type.
 	
@@ -129,13 +129,13 @@ if __name__ == '__main__':
 
 			try:
 				log.debug(f'Locating the snapshot at "{url}" near {timestamp}.')
-				best_snapshot, is_standalone_media, media_extension = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url)
+				best_snapshot, is_media, media_extension = find_best_wayback_machine_snapshot(timestamp=timestamp, url=url)
 				last_modified_time = find_extra_wayback_machine_snapshot_info(best_snapshot.archive_url)
 
-				state = Snapshot.SCOUTED if is_standalone_media else Snapshot.QUEUED
+				state = Snapshot.SCOUTED if is_media else Snapshot.QUEUED
 
 				result = {'parent_id': parent_id, 'depth': depth, 'state': state, 'is_excluded': False,
-						  'is_standalone_media': is_standalone_media, 'media_extension': media_extension,
+						  'is_media': is_media, 'media_extension': media_extension,
 						  'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
 						  'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey,
 						  'digest': best_snapshot.digest}
@@ -145,7 +145,7 @@ if __name__ == '__main__':
 			except BlockedSiteError:
 				log.warning(f'The snapshot at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
 				result = {'parent_id': parent_id, 'depth': depth, 'state': Snapshot.QUEUED, 'is_excluded': True,
-						  'is_standalone_media': None, 'media_extension': None, 'url': url, 'timestamp': timestamp,
+						  'is_media': None, 'media_extension': None, 'url': url, 'timestamp': timestamp,
 						  'last_modified_time': None, 'url_key': None, 'digest': None}
 			
 			except Exception as error:
@@ -196,8 +196,8 @@ if __name__ == '__main__':
 							log.warning(f'Could not find the initial snapshot at "{url}" near {timestamp}.')
 
 					db.executemany(	'''
-									INSERT OR IGNORE INTO Snapshot (State, Depth, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
-									VALUES (:state, :depth, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
+									INSERT OR IGNORE INTO Snapshot (State, Depth, IsExcluded, IsMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+									VALUES (:state, :depth, :is_excluded, :is_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
 									''', initial_snapshot_list)
 
 					db.commit()
@@ -257,7 +257,7 @@ if __name__ == '__main__':
 								DO UPDATE SET IsSensitive = :is_sensitive;
 								''', sensitive_words)
 
-				db.execute('INSERT OR REPLACE INTO Config (Name, Value) VALUES (:name, :value);', {'name': 'standalone_media_points', 'value': config.standalone_media_points})
+				db.execute('INSERT OR REPLACE INTO Config (Name, Value) VALUES (:name, :value);', {'name': 'media_points', 'value': config.media_points})
 
 				db.commit()
 
@@ -296,8 +296,8 @@ if __name__ == '__main__':
 
 							if child_snapshot is not None:
 								db.execute(	'''
-											INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
-											VALUES (:parent_id, :depth, :state, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
+											INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+											VALUES (:parent_id, :depth, :state, :is_excluded, :is_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
 											''', child_snapshot)
 							else:
 								log.warning(f'Could not find the redirected snapshot at "{url}" near {timestamp}.')
@@ -360,7 +360,7 @@ if __name__ == '__main__':
 											) PSI ON S.Id = PSI.ChildId
 											WHERE
 												S.State = :queued_state
-												AND NOT S.IsStandaloneMedia
+												AND NOT S.IsMedia
 												AND NOT S.IsExcluded
 												AND (:min_year IS NULL OR OldestYear >= :min_year)
 												AND (:max_year IS NULL OR OldestYear <= :max_year)
@@ -388,13 +388,13 @@ if __name__ == '__main__':
 						sleep(config.database_error_wait)
 						continue
 					
-					# Due to the way snapshots are labelled, it's possible that a regular page
-					# will be marked as standalone media and vice versa. Let's look at both cases:
-					# - If it's actually a regular page, then it will be skipped since we don't
-					# scout standalone media.
-					# - If it's actually standalone media, then the browser will download the file
-					# and the current URL won't change. This can be caught below since we always
-					# set the current URL to a blank page before navigating to the Wayback Machine.
+					# Due to the way snapshots are labelled, it's possible that a web page will be
+					# marked as a media file and vice versa. Let's look at both cases:
+					# - If it's actually a web page, then it will be skipped since we don't scout
+					# media files.
+					# - If it's actually a media file, then the browser will download it and the
+					# current URL won't change. This can be caught below since we always set the
+					# current URL to a blank page before navigating to the Wayback Machine.
 
 					try:
 						log.info(f'[{snapshot_index+1} of {num_snapshots}] Scouting snapshot #{snapshot.Id} {snapshot} located at a depth of {snapshot.Depth} pages and whose parents have {parent_points} points.')
@@ -407,18 +407,18 @@ if __name__ == '__main__':
 						invalidate_snapshot(snapshot)
 						continue
 
-					# Skip downloads, i.e., regular pages that were mislabeled as standalone media.
+					# Skip downloads, i.e., web pages that were mislabeled as media files.
 					# When this happens, we have to wait for the WebDriver to time out.
 					#
 					# E.g. https://web.archive.org/web/20060321063750if_/http://www.thekidfrombrooklyn.com/movies/PoundCake_02_06.wmv
 					# This video file was stored in the Wayback Machine with the text/plain media type.
 					if driver.current_url == Browser.BLANK_URL:
 						try:
-							log.warning(f'Skipping the snapshot since it was mislabeled as standalone media.')
+							log.warning('Skipping the snapshot since it was mislabeled as a media file.')
 							
-							media_extension = extract_standalone_media_extension_from_url(snapshot.Url)
-							db.execute(	'UPDATE Snapshot SET State = :scouted_state, IsStandaloneMedia = :is_standalone_media, MediaExtension = :media_extension WHERE Id = :id;',
-										{'scouted_state': Snapshot.SCOUTED, 'is_standalone_media': True, 'media_extension': media_extension, 'id': snapshot.Id})
+							media_extension = extract_media_extension_from_url(snapshot.Url)
+							db.execute(	'UPDATE Snapshot SET State = :scouted_state, IsMedia = :is_media, MediaExtension = :media_extension WHERE Id = :id;',
+										{'scouted_state': Snapshot.SCOUTED, 'is_media': True, 'media_extension': media_extension, 'id': snapshot.Id})
 							
 							if snapshot.Priority == Snapshot.SCOUT_PRIORITY:
 								db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
@@ -689,8 +689,8 @@ if __name__ == '__main__':
 			
 					try:
 						db.executemany(	'''
-										INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
-										VALUES (:parent_id, :depth, :state, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
+										INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+										VALUES (:parent_id, :depth, :state, :is_excluded, :is_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
 										''', child_snapshot_list)
 
 						topology = [{'parent_id': child['parent_id'], 'url': child['url'], 'timestamp': child['timestamp']} for child in child_snapshot_list]

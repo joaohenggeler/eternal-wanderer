@@ -62,7 +62,7 @@ if __name__ == '__main__':
 					print()
 					print('Approve the following recording:')
 					print(f'- Snapshot: #{snapshot.Id} {snapshot}')
-					print(f'- Type: {"Media" if snapshot.IsStandaloneMedia else "Page"}')
+					print(f'- Type: {"Media" if snapshot.IsMedia else "Page"}')
 					print(f'- Title: {snapshot.DisplayTitle}')
 					print(f'- Language: {snapshot.LanguageName}')
 					print(f'- Metadata: {snapshot.DisplayMetadata}')

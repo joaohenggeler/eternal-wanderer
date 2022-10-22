@@ -55,8 +55,8 @@ class RecordConfig(CommonConfig):
 	record_sensitive_snapshots: bool
 	min_publish_days_for_new_recording: int
 
-	allowed_standalone_media_extensions: dict[str, bool] # Different from the config data type.
-	nondownloadable_standalone_media_extensions: dict[str, bool] # Different from the config data type.
+	allowed_media_extensions: dict[str, bool] # Different from the config data type.
+	nondownloadable_media_extensions: dict[str, bool] # Different from the config data type.
 
 	enable_proxy: bool
 	proxy_port: Optional[int]
@@ -72,7 +72,7 @@ class RecordConfig(CommonConfig):
 	proxy_cache_missing_responses: bool
 
 	page_cache_wait: int
-	standalone_media_cache_wait: int
+	media_cache_wait: int
 
 	plugin_load_wait: int
 	base_plugin_crash_timeout: int
@@ -82,12 +82,12 @@ class RecordConfig(CommonConfig):
 	wait_after_load_per_plugin_instance: int
 	base_wait_per_scroll: int
 	wait_after_scroll_per_plugin_instance: int
-	base_standalone_media_wait_after_load: int
+	base_media_wait_after_load: int
 
-	standalone_media_fallback_duration: int
-	standalone_media_width: str
-	standalone_media_height: str
-	standalone_media_background_color: str
+	media_fallback_duration: int
+	media_width: str
+	media_height: str
+	media_background_color: str
 
 	fullscreen_browser: bool
 	
@@ -129,7 +129,7 @@ class RecordConfig(CommonConfig):
 	ffmpeg_text_to_speech_output_args: dict[str, Union[None, int, str]]
 
 	# Determined at runtime.
-	standalone_media_template: str
+	media_template: str
 	physical_screen_width: int
 	physical_screen_height: int
 	width_dpi_scaling: float
@@ -141,8 +141,8 @@ class RecordConfig(CommonConfig):
 
 		self.scheduler = container_to_lowercase(self.scheduler)
 
-		self.allowed_standalone_media_extensions = {extension: True for extension in container_to_lowercase(self.allowed_standalone_media_extensions)}
-		self.nondownloadable_standalone_media_extensions = {extension: True for extension in container_to_lowercase(self.nondownloadable_standalone_media_extensions)}
+		self.allowed_media_extensions = {extension: True for extension in container_to_lowercase(self.allowed_media_extensions)}
+		self.nondownloadable_media_extensions = {extension: True for extension in container_to_lowercase(self.nondownloadable_media_extensions)}
 
 		if self.proxy_max_cdx_path_components is not None:
 			self.proxy_max_cdx_path_components = max(self.proxy_max_cdx_path_components, 1)
@@ -163,9 +163,9 @@ class RecordConfig(CommonConfig):
 		self.ffmpeg_text_to_speech_audio_input_args = container_to_lowercase(self.ffmpeg_text_to_speech_audio_input_args)
 		self.ffmpeg_text_to_speech_output_args = container_to_lowercase(self.ffmpeg_text_to_speech_output_args)
 
-		template_path = os.path.join(self.plugins_path, 'standalone_media.html.template')
+		template_path = os.path.join(self.plugins_path, 'media.html.template')
 		with open(template_path, 'r', encoding='utf-8') as file:
-			self.standalone_media_template = file.read()
+			self.media_template = file.read()
 
 		S_OK = 0
 
@@ -687,13 +687,13 @@ if __name__ == '__main__':
 			log.info('Initializing the text-to-speech engine.')
 			text_to_speech = TextToSpeech()
 
-		standalone_media_page_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.html', delete=False)
-		standalone_media_page_url = f'file:///{standalone_media_page_file.name}'
-		log.debug(f'Created the temporary standalone media page "{standalone_media_page_file.name}".')
+		media_page_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.html', delete=False)
+		media_page_url = f'file:///{media_page_file.name}'
+		log.debug(f'Created the temporary media page "{media_page_file.name}".')
 
-		standalone_media_download_directory = TemporaryDirectory(prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.media')
-		standalone_media_download_search_path = os.path.join(standalone_media_download_directory.name, '*')
-		log.debug(f'Created the temporary standalone media download directory "{standalone_media_download_directory.name}".')
+		media_download_directory = TemporaryDirectory(prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.media')
+		media_download_search_path = os.path.join(media_download_directory.name, '*')
+		log.debug(f'Created the temporary media download directory "{media_download_directory.name}".')
 
 		try:
 			extra_preferences: dict = {
@@ -725,16 +725,16 @@ if __name__ == '__main__':
 					'network.proxy.ftp_port': proxy.port,
 					'network.proxy.socks': '127.0.0.1',
 					'network.proxy.socks_port': 9, # Discard Protocol.
-					'network.proxy.no_proxies_on': 'localhost, 127.0.0.1', # For standalone media.
+					'network.proxy.no_proxies_on': 'localhost, 127.0.0.1', # For media snapshots.
 				})
 
 			with Database() as db, Browser(extra_preferences=extra_preferences, use_extensions=True, use_plugins=True, use_autoit=True) as (browser, driver), TemporaryRegistry() as registry:
 
 				browser.go_to_blank_page_with_text('\N{Broom} Initializing \N{Broom}')
 
-				def generate_standalone_media_page(wayback_url: str, media_extension: Optional[str] = None) -> tuple[float, Optional[str], Optional[str], bool]:
-					""" Generates the page where a standalone media file is embedded using both the information
-					from the configuration as well as the file's metadata. """
+				def generate_media_page(wayback_url: str, media_extension: Optional[str] = None) -> tuple[float, Optional[str], Optional[str], bool]:
+					""" Generates the page where a media file is embedded using both the
+					information from the configuration as well as the file's metadata. """
 
 					download_success = True
 
@@ -748,14 +748,14 @@ if __name__ == '__main__':
 
 					embed_url = wayback_url
 					loop = 'true'
-					duration: float = config.standalone_media_fallback_duration
+					duration: float = config.media_fallback_duration
 					title = None
 					author = None
 					
 					# If a media file points to other resources (e.g. VRML worlds or RealMedia metadata), we don't
 					# want to download it since other files from the Wayback Machine may be required to play it.
 					# If it doesn't (i.e. audio and video formats), we'll just download and play it from disk.
-					if media_extension not in config.nondownloadable_standalone_media_extensions:
+					if media_extension not in config.nondownloadable_media_extensions:
 						
 						try:
 							global_rate_limiter.wait_for_wayback_machine_rate_limit()
@@ -763,11 +763,11 @@ if __name__ == '__main__':
 							response.raise_for_status()
 							
 							# We need to keep the file extension so Firefox can choose the right plugin to play it.
-							downloaded_file_path = os.path.join(standalone_media_download_directory.name, filename)
+							downloaded_file_path = os.path.join(media_download_directory.name, filename)
 							with open(downloaded_file_path, 'wb') as file:
 								file.write(response.content)
 						
-							log.debug(f'Downloaded the standalone media "{wayback_url}" to "{downloaded_file_path}".')
+							log.debug(f'Downloaded the media file "{wayback_url}" to "{downloaded_file_path}".')
 							
 							# Two separate URLs because ffmpeg uses "file:path" instead of "file:///path".
 							# See: https://superuser.com/questions/718027/ffmpeg-concat-doesnt-work-with-absolute-path/1551017#1551017
@@ -782,30 +782,30 @@ if __name__ == '__main__':
 							# See: https://wiki.multimedia.cx/index.php/FFmpeg_Metadata
 							title = tags.get('title')
 							author = tags.get('author') or tags.get('artist') or tags.get('album_artist') or tags.get('composer') or tags.get('copyright')
-							log.debug(f'The standalone media "{title}" by "{author}" has the following tags: {tags}')
+							log.debug(f'The media file "{title}" by "{author}" has the following tags: {tags}')
 
 							duration = float(format['duration'])
-							log.debug(f'The standalone media has a duration of {duration} seconds.')
+							log.debug(f'The media file has a duration of {duration} seconds.')
 						
 						except RequestException as error:
-							log.error(f'Failed to download the standalone media file "{wayback_url}" with the error: {repr(error)}')
+							log.error(f'Failed to download the media file "{wayback_url}" with the error: {repr(error)}')
 							download_success = False
 						except (ffmpeg.Error, KeyError, ValueError) as error:
-							log.warning(f'Could not parse the standalone media\'s metadata with the error: {repr(error)}')
+							log.warning(f'Could not parse the media file\'s metadata with the error: {repr(error)}')
 							
-					content = config.standalone_media_template
+					content = config.media_template
 					content = content.replace('{comment}', f'Generated by "{__file__}" on {get_current_timestamp()}.')
-					content = content.replace('{background_color}', config.standalone_media_background_color)
-					content = content.replace('{width}', config.standalone_media_width)
-					content = content.replace('{height}', config.standalone_media_height)
+					content = content.replace('{background_color}', config.media_background_color)
+					content = content.replace('{width}', config.media_width)
+					content = content.replace('{height}', config.media_height)
 					content = content.replace('{url}', embed_url)
 					content = content.replace('{loop}', loop)
 					
-					# Overwrite the temporary standalone media page.
-					standalone_media_page_file.seek(0)
-					standalone_media_page_file.truncate(0)
-					standalone_media_page_file.write(content)
-					standalone_media_page_file.flush()
+					# Overwrite the temporary media page.
+					media_page_file.seek(0)
+					media_page_file.truncate(0)
+					media_page_file.write(content)
+					media_page_file.flush()
 
 					return duration, title, author, download_success
 
@@ -820,11 +820,11 @@ if __name__ == '__main__':
 						db.rollback()
 						sleep(config.database_error_wait)
 
-				def is_standalone_media_extension_allowed(media_extension: str) -> bool:
-					""" Checks if a standalone media snapshot should be recorded. """
-					return bool(config.allowed_standalone_media_extensions) and media_extension in config.allowed_standalone_media_extensions
+				def is_media_extension_allowed(media_extension: str) -> bool:
+					""" Checks if a media snapshot should be recorded. """
+					return bool(config.allowed_media_extensions) and media_extension in config.allowed_media_extensions
 
-				db.create_function('IS_STANDALONE_MEDIA_EXTENSION_ALLOWED', 1, is_standalone_media_extension_allowed)
+				db.create_function('IS_media_EXTENSION_ALLOWED', 1, is_media_extension_allowed)
 
 				if config.fullscreen_browser:
 					browser.toggle_fullscreen()
@@ -897,7 +897,7 @@ if __name__ == '__main__':
 												AND (:min_year IS NULL OR OldestYear >= :min_year)
 												AND (:max_year IS NULL OR OldestYear <= :max_year)
 												AND (:record_sensitive_snapshots OR NOT SI.IsSensitive)
-												AND (NOT S.IsStandaloneMedia OR IS_STANDALONE_MEDIA_EXTENSION_ALLOWED(S.MediaExtension))
+												AND (NOT S.IsMedia OR IS_media_EXTENSION_ALLOWED(S.MediaExtension))
 												AND IS_URL_KEY_ALLOWED(S.UrlKey)
 											ORDER BY
 												S.Priority DESC,
@@ -934,28 +934,28 @@ if __name__ == '__main__':
 						sleep(config.database_error_wait)
 						continue
 
-					# Due to the way snapshots are labelled, it's possible that a regular page
-					# will be marked as standalone media and vice versa. Let's look at both cases:
-					# - If it's actually a regular page, then the plugin associated with that file
+					# Due to the way snapshots are labelled, it's possible that a web page will be
+					# marked as a media file and vice versa. Let's look at both cases:
+					# - If it's actually a web page, then the plugin associated with that file
 					# extension won't be able to play it. In most cases, this just results in a
 					# black screen. For others, like Authorware, an AutoIt script is used to close
 					# the error popup.
-					# - If it's actually standalone media, then the scout script will catch it and
+					# - If it's actually a media file, then the scout script will catch it and
 					# label it correctly since all pages have to be scouted before they can be
 					# recorded.
 
 					try:
 						log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} with {snapshot.Points} points (last published = {days_since_last_published} days ago).')
 
-						for path in iglob(standalone_media_download_search_path):
+						for path in iglob(media_download_search_path):
 							delete_file(path)
 
-						if snapshot.IsStandaloneMedia:
-							media_duration, media_title, media_author, download_success = generate_standalone_media_page(snapshot.WaybackUrl, snapshot.MediaExtension)
-							content_url = standalone_media_page_url
+						if snapshot.IsMedia:
+							media_duration, media_title, media_author, download_success = generate_media_page(snapshot.WaybackUrl, snapshot.MediaExtension)
+							content_url = media_page_url
 
 							if not download_success:
-								log.error('Failed to download the standalone media file.')
+								log.error('Failed to download the media file.')
 								abort_snapshot(snapshot)
 								continue
 						else:
@@ -968,7 +968,7 @@ if __name__ == '__main__':
 						if config.enable_proxy:
 							proxy.timestamp = snapshot.Timestamp
 						
-						cache_wait = config.standalone_media_cache_wait if snapshot.IsStandaloneMedia else config.page_cache_wait
+						cache_wait = config.media_cache_wait if snapshot.IsMedia else config.page_cache_wait
 						proxy_wait = config.proxy_queue_timeout + config.proxy_total_timeout if config.enable_proxy else 0
 
 						# How much we wait before killing the plugins depends on how long we expect
@@ -1011,11 +1011,11 @@ if __name__ == '__main__':
 							wait_after_load: float
 							wait_per_scroll: float
 
-							if snapshot.IsStandaloneMedia:
+							if snapshot.IsMedia:
 								scroll_height = 0
 								scroll_step = 0.0
 								num_scrolls = 0
-								wait_after_load = clamp(config.base_standalone_media_wait_after_load + media_duration, config.min_duration, config.max_duration)
+								wait_after_load = clamp(config.base_media_wait_after_load + media_duration, config.min_duration, config.max_duration)
 								wait_per_scroll = 0.0
 							else:
 								scroll_height = 0
@@ -1113,10 +1113,10 @@ if __name__ == '__main__':
 									proxy_status_codes = sorted(proxy_status_codes.items()) # type: ignore
 									log.info(f'Waited {elapsed_proxy_time:.1f} extra seconds for the proxy: {proxy_status_codes}')
 
-						if snapshot.IsStandaloneMedia and realmedia_url is not None:
-							log.info(f'Regenerating the standalone media page for the RealMedia file "{realmedia_url}".')
-							media_duration, media_title, media_author, download_success = generate_standalone_media_page(realmedia_url)
-							wait_after_load = clamp(config.base_standalone_media_wait_after_load + media_duration, config.min_duration, config.max_duration)
+						if snapshot.IsMedia and realmedia_url is not None:
+							log.info(f'Regenerating the media page for the RealMedia file "{realmedia_url}".')
+							media_duration, media_title, media_author, download_success = generate_media_page(realmedia_url)
+							wait_after_load = clamp(config.base_media_wait_after_load + media_duration, config.min_duration, config.max_duration)
 
 							if not download_success:
 								log.error('Failed to download the RealMedia file.')
@@ -1145,7 +1145,7 @@ if __name__ == '__main__':
 						os.makedirs(subdirectory_path, exist_ok=True)
 
 						parts = urlparse(snapshot.Url)
-						media_identifier = snapshot.MediaExtension if snapshot.IsStandaloneMedia else ('p' if snapshot.PageUsesPlugins else '')
+						media_identifier = snapshot.MediaExtension if snapshot.IsMedia else ('p' if snapshot.PageUsesPlugins else '')
 						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, str(snapshot.OldestDatetime.year), str(snapshot.OldestDatetime.month).zfill(2), str(snapshot.OldestDatetime.day).zfill(2), media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
@@ -1209,7 +1209,7 @@ if __name__ == '__main__':
 							delayed_sync_plugins_thread.join()
 
 						redirected = False
-						if not snapshot.IsStandaloneMedia:
+						if not snapshot.IsMedia:
 							redirected, url, timestamp = browser.was_wayback_url_redirected(content_url)
 							if redirected:
 								log.error(f'The page was redirected to "{url}" at {timestamp} while recording.')
@@ -1334,7 +1334,7 @@ if __name__ == '__main__':
 									saved_urls.append({'snapshot_id': snapshot.Id, 'recording_id': recording_id, 'url': url, 'timestamp': None, 'failed': True})
 
 						text_to_speech_file_path = None
-						if state != Snapshot.ABORTED and config.enable_text_to_speech and not snapshot.IsStandaloneMedia:
+						if state != Snapshot.ABORTED and config.enable_text_to_speech and not snapshot.IsMedia:
 							
 							browser.go_to_blank_page_with_text('\N{Speech Balloon} Generating Text-to-Speech \N{Speech Balloon}', str(snapshot))
 							
@@ -1377,7 +1377,7 @@ if __name__ == '__main__':
 							if text_to_speech_file_path is not None:
 								delete_file(text_to_speech_file_path)
 
-						if snapshot.IsStandaloneMedia and all(metadata is None for metadata in [snapshot.MediaTitle, snapshot.MediaAuthor]):
+						if snapshot.IsMedia and all(metadata is None for metadata in [snapshot.MediaTitle, snapshot.MediaAuthor]):
 							db.execute(	'UPDATE Snapshot SET MediaTitle = :media_title, MediaAuthor = :media_author WHERE Id = :id;',
 										{'media_title': media_title, 'media_author': media_author, 'id': snapshot.Id})
 						
@@ -1414,12 +1414,12 @@ if __name__ == '__main__':
 				delete_file(path)
 
 			try:
-				standalone_media_download_directory.cleanup()
+				media_download_directory.cleanup()
 			except Exception as error:
-				log.error(f'Failed to delete the temporary standalone media download directory with the error: {repr(error)}')
+				log.error(f'Failed to delete the temporary media download directory with the error: {repr(error)}')
 
-			standalone_media_page_file.close()
-			delete_file(standalone_media_page_file.name)
+			media_page_file.close()
+			delete_file(media_page_file.name)
 			
 			if config.enable_text_to_speech:
 				text_to_speech.cleanup()

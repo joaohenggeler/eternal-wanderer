@@ -39,7 +39,7 @@ class PublishConfig(CommonConfig):
 
 	require_approval: bool
 	flag_sensitive_snapshots: bool
-	show_standalone_media_metadata: bool
+	show_media_metadata: bool
 	reply_with_text_to_speech: bool
 	delete_files_after_upload: bool
 	api_wait: int
@@ -425,13 +425,13 @@ if __name__ == '__main__':
 					log.info(f'[{recording_index+1} of {num_recordings}] Publishing recording #{recording.Id} for snapshot #{snapshot.Id} {snapshot} (approved = {snapshot.State == Snapshot.APPROVED}).')
 					
 					title = snapshot.DisplayTitle
-					display_metadata = snapshot.DisplayMetadata if config.show_standalone_media_metadata else None
-					plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsStandaloneMedia or snapshot.PageUsesPlugins else None
+					display_metadata = snapshot.DisplayMetadata if config.show_media_metadata else None
+					plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsMedia or snapshot.PageUsesPlugins else None
 					body_identifiers = [display_metadata, snapshot.ShortDate, snapshot.WaybackUrl, plugin_identifier]
 					body = '\n'.join(filter(None, body_identifiers))
 
 					# How the date is formatted depends on the current locale.
-					snapshot_type = 'media file' if snapshot.IsStandaloneMedia else 'web page'
+					snapshot_type = 'media file' if snapshot.IsMedia else 'web page'
 					long_date = snapshot.OldestDatetime.strftime('%B %Y')
 					alt_text = f'The {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine.'
 					sensitive = config.flag_sensitive_snapshots and snapshot.IsSensitive

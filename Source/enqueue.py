@@ -32,26 +32,26 @@ if __name__ == '__main__':
 
 	with Database() as db:
 		try:
-			best_snapshot, is_standalone_media, media_extension = find_best_wayback_machine_snapshot(timestamp=args.timestamp, url=args.url)
+			best_snapshot, is_media, media_extension = find_best_wayback_machine_snapshot(timestamp=args.timestamp, url=args.url)
 			last_modified_time = find_extra_wayback_machine_snapshot_info(best_snapshot.archive_url)
 
-			first_state = Snapshot.SCOUTED if is_standalone_media else Snapshot.QUEUED
+			first_state = Snapshot.SCOUTED if is_media else Snapshot.QUEUED
 
-			# Standalone media shouldn't be scouted.
-			if is_standalone_media and priority == Snapshot.SCOUT_PRIORITY:
+			# Media files shouldn't be scouted.
+			if is_media and priority == Snapshot.SCOUT_PRIORITY:
 				priority = Snapshot.NO_PRIORITY
 
 			try:
 				db.execute(	'''
-							INSERT INTO Snapshot (Depth, State, Priority, IsExcluded, IsStandaloneMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
-							VALUES (:depth, :state, :priority, :is_excluded, :is_standalone_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
+							INSERT INTO Snapshot (Depth, State, Priority, IsExcluded, IsMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+							VALUES (:depth, :state, :priority, :is_excluded, :is_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
 							''',
-							{'depth': 0, 'state': first_state, 'priority': priority, 'is_excluded': False, 'is_standalone_media': is_standalone_media,
+							{'depth': 0, 'state': first_state, 'priority': priority, 'is_excluded': False, 'is_media': is_media,
 							 'media_extension': media_extension, 'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
 							 'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest})
 				db.commit()
 				
-				snapshot_type = 'media file' if is_standalone_media else 'web page'
+				snapshot_type = 'media file' if is_media else 'web page'
 				print(f'Added the {snapshot_type} snapshot ({best_snapshot.original}, {best_snapshot.timestamp}) with the "{args.priority}" priority.')
 				
 				if first_state == Snapshot.QUEUED and priority > Snapshot.SCOUT_PRIORITY:
@@ -81,7 +81,7 @@ if __name__ == '__main__':
 						db.execute('UPDATE Snapshot SET State = :state, Priority = :priority WHERE Id = :id;', {'state': new_state, 'priority': priority, 'id': snapshot.Id})
 						db.commit()
 						
-						snapshot_type = 'media file' if snapshot.IsStandaloneMedia else 'web page'
+						snapshot_type = 'media file' if snapshot.IsMedia else 'web page'
 						print(f'Updated the {snapshot_type} snapshot {snapshot} to the "{args.priority}" priority.')
 
 						if new_state == Snapshot.QUEUED and priority > Snapshot.SCOUT_PRIORITY:

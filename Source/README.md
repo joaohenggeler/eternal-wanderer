@@ -161,7 +161,7 @@ Below is a summary of the Python scripts located in [the source directory](Sourc
 
 ## Types Of Snapshots
 
-The bot handles two types of snapshots: regular HTML web pages and standalone media. The first are any snapshots that were successfully archived by the Wayback Machine (i.e. a 200 status code) and whose MIME type is `text/html` or `text/plain`. The second are any other successfully archived snapshots whose MIME type does *not* match the previous criteria. In other words, any standard and non-standard audiovisual media (e.g. `audio/*`, `video/*`, `application/*`, `x-world/*`, `music/*`, etc). This allows the bot to showcase multimedia (e.g. MIDI music, QuickTime videos, VRML worlds) that was linked directly in a page instead of being embedded with the object and embed tags.
+The bot handles two types of snapshots: web pages and media files. The first are any snapshots that were successfully archived by the Wayback Machine (i.e. a 200 status code) and whose MIME type is `text/html` or `text/plain`. The second are any other successfully archived snapshots whose MIME type does *not* match the previous criteria. In other words, any standard and non-standard audiovisual media (e.g. `audio/*`, `video/*`, `application/*`, `x-world/*`, `music/*`, etc). This allows the bot to showcase multimedia (e.g. MIDI music, QuickTime videos, VRML worlds) that was linked directly in a page instead of being embedded with the object and embed tags.
 
 ## How To Use
 
