@@ -139,7 +139,7 @@ Below is a summary of the Python scripts located in [the source directory](Sourc
 
 * `publish.py`: publishes the previously recorded snapshots to Twitter and Mastodon on a set schedule. The publisher script uploads each snapshot's MP4 video and generates a tweet with the web page's title, its date, and a link to its Wayback Machine capture.
 
-* `approve.py`: approves snapshot recordings for publishing. This process is optional and can only be done if the publisher script was started with the `require_approval` option enabled.
+* `approve.py`: approves recordings for publishing. This process is optional and can only be done if the publisher script was started with the `require_approval` option enabled.
 
 * `enqueue.py`: adds a Wayback Machine snapshot to the Eternal Wanderer queue with a given priority. This can be used to scout, record, or publish any existing or new snapshots as soon as possible.
 

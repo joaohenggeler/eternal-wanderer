@@ -9,7 +9,7 @@ Source/Data/*
 
 !Source/Data/Plugins
 Source/Data/Plugins/*
-!Source/Data/Plugins/media.html.template
+!Source/Data/Plugins/*.template
 !Source/Data/Plugins/BrowserPluginExtender
 !Source/Data/Plugins/Java
 Source/Data/Plugins/Java/*

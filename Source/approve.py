@@ -10,7 +10,7 @@ from publish import PublishConfig
 
 if __name__ == '__main__':
 
-	parser = ArgumentParser(description='Approves snapshot recordings for publishing. This process is optional and can only be done if the publisher script was started with the "require_approval" option enabled.')
+	parser = ArgumentParser(description='Approves recordings for publishing. This process is optional and can only be done if the publisher script was started with the "require_approval" option enabled.')
 	parser.add_argument('max_recordings', nargs='?', type=int, default=-1, help='How many recordings to approve. Omit or set to %(default)s to approve all recordings.')
 	parser.add_argument('-tts', action='store_true', help='Play the text-to-speech audio files after each recording.')
 	args = parser.parse_args()
@@ -40,20 +40,24 @@ if __name__ == '__main__':
 								LIMIT :max_recordings;
 								''', {'recorded_state': Snapshot.RECORDED, 'max_recordings': args.max_recordings})
 
+			row_list = [dict(row) for row in cursor]
+			total_recordings = len(row_list)
+
+			if total_recordings > 0:
+				print(f'Approving {total_recordings} recordings.')
+			else:
+				print('Ran out of recordings to approve.')
+
 			snapshot_updates = []
 			recording_updates = []
 
-			total_snapshots = 0
 			num_approved = 0
 			num_rejected = 0
 			num_to_record_again = 0
 			num_missing = 0
 
-			for row in cursor:
+			for row in row_list:
 
-				total_snapshots += 1
-
-				row = dict(row)
 				del row['Id']
 				snapshot = Snapshot(**row, Id=row['SnapshotId'])
 				recording = Recording(**row, Id=row['RecordingId'])
@@ -152,18 +156,15 @@ if __name__ == '__main__':
 					recording_updates.append({'is_processed': is_processed, 'id': recording.Id})
 					break
 
-			if total_snapshots > 0:
+			if total_recordings > 0:
 
 				db.executemany('UPDATE Snapshot SET State = :state, Priority = :priority, IsSensitiveOverride = :is_sensitive_override WHERE Id = :id;', snapshot_updates)
 				db.executemany('UPDATE Recording SET IsProcessed = :is_processed WHERE Id = :id;', recording_updates)
 				db.commit()
 				
 				print()
-				print(f'Evaluated {total_snapshots} snapshots: {num_approved} approved, {num_rejected} rejected, {num_to_record_again} to be recorded again, {num_missing} missing files.')
-
-			else:
-				print('Ran out of snapshots to approve.')
+				print(f'Evaluated {total_recordings} recordings: {num_approved} approved, {num_rejected} rejected, {num_to_record_again} to be recorded again, {num_missing} missing files.')
 
 		except sqlite3.Error as error:
-			print(f'Failed to approve the recorded snapshots with the error: {repr(error)}')
+			print(f'Failed to approve the recordings with the error: {repr(error)}')
 			db.rollback()

@@ -394,7 +394,7 @@
 		{
 			"object": 1000,
 			"embed": 1000,
-			"applet": 1000,
+			"applet": 500,
 			"bgsound": 1000,
 			"audio": 1000,
 			"video": 1000,

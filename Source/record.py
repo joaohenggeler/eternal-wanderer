@@ -163,8 +163,8 @@ class RecordConfig(CommonConfig):
 		self.ffmpeg_text_to_speech_audio_input_args = container_to_lowercase(self.ffmpeg_text_to_speech_audio_input_args)
 		self.ffmpeg_text_to_speech_output_args = container_to_lowercase(self.ffmpeg_text_to_speech_output_args)
 
-		template_path = os.path.join(self.plugins_path, 'media.html.template')
-		with open(template_path, 'r', encoding='utf-8') as file:
+		media_template_path = os.path.join(self.plugins_path, 'media.html.template')
+		with open(media_template_path, 'r', encoding='utf-8') as file:
 			self.media_template = file.read()
 
 		S_OK = 0
