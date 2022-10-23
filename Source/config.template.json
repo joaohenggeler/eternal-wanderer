@@ -359,7 +359,7 @@
 			{"url": "http://www.yahoo.com/", "timestamp": "19961017235908"}
 		],
 
-		"ranking_offset": 0,
+		"ranking_offset": 100,
 		"min_year": null,
 		"max_year": 2010,
 		"max_depth": null,
@@ -416,7 +416,7 @@
 		"scheduler": {"day_of_week": "sun", "hour": 2},
 		"num_snapshots_per_scheduled_batch": 56,
 
-		"ranking_offset": 1500,
+		"ranking_offset": 100,
 		"min_year": null,
 		"max_year": null,
 		"record_sensitive_snapshots": true,

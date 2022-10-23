@@ -2,7 +2,7 @@
 -- Using DB Browser for SQLite: Tools > Load Extension... > "DB Browser for SQLite\extensions\math.dll"
 SELECT
 	S.Id, S.Depth, S.Priority, S.Url, S.Timestamp, PSI.ParentPoints,
-	IFNULL((CASE WHEN PSI.ParentPoints >= 0 THEN 1 ELSE -1 END) * POWER(RANDOM() / 18446744073709551616 + 0.5, 1.0 / (ABS(PSI.ParentPoints) + 1 + 0)), 0) AS Rank,
+	IFNULL((CASE WHEN PSI.ParentPoints >= 0 THEN 1 ELSE -1 END) * POWER(RANDOM() / 18446744073709551616 + 0.5, 1.0 / (ABS(PSI.ParentPoints) + 1 + 100)), 0) AS Rank,
 	ROUND(RANDOM() / 18446744073709551616 + 0.5, 2) AS Random01
 FROM Snapshot S
 LEFT JOIN
