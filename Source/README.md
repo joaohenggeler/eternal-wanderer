@@ -115,7 +115,7 @@ If you're hosting the bot in a remote Windows machine, there are some additional
 
 * It's recommended that you adjust the scale filter dimensions in `ffmpeg_upload_output_args` depending on your screen capture dimensions (or on your display settings if these are set to null in `screen_capture_recorder_settings`). For example, you could change the scale filter width and height to 1920x1080 (16:9) or 1440x1080 (4:3) in order to record 1080p videos.
 
-* Check if your machine can record pages with plugins properly while `plugin_syncing_type` is set to `unload`. If you notice any issues like embedded audio files not being played correctly, set this option to `reload`.
+* Check if your machine can record pages with plugins properly while `plugin_syncing_page_type` is set to `unload`. If you notice any issues like embedded audio files not being played correctly, set this option to `reload`. These steps also apply to `plugin_syncing_media_type`, meaning this option should stay set to `unload` unless you notice a problem while recording media file snapshots.
 
 * Depending on the remote machine you're using to host the bot, it's possible that you won't be able to use the OpenGL renderer when viewing VRML worlds with the Cosmo Player. If that's the case, you should change the renderer to DirectX by setting `cosmo_player_renderer` to `DirectX`. The Shockwave and 3DVIA players are able to choose the best available renderer, meaning `shockwave_renderer` and `3dvia_renderer` can be left to `Auto`.
 

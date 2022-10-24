@@ -56,7 +56,7 @@ if __name__ == '__main__':
 			num_to_record_again = 0
 			num_missing = 0
 
-			for row in row_list:
+			for i, row in enumerate(row_list):
 
 				del row['Id']
 				snapshot = Snapshot(**row, Id=row['SnapshotId'])
@@ -64,7 +64,7 @@ if __name__ == '__main__':
 
 				try:
 					print()
-					print('Approve the following recording:')
+					print(f'[{i+1} of {total_recordings}] Approve the following recording:')
 					print(f'- Snapshot: #{snapshot.Id} {snapshot}')
 					print(f'- Type: {"Media" if snapshot.IsMedia else "Page"}')
 					print(f'- Title: {snapshot.DisplayTitle}')

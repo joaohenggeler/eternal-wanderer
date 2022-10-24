@@ -490,7 +490,7 @@
 
 		"fullscreen_browser": true,
 		
-		"plugin_syncing_page_type": "reload",
+		"plugin_syncing_page_type": "unload",
 		"plugin_syncing_media_type": "unload",
 		"plugin_syncing_unload_delay": 0.2,
 		"plugin_syncing_reload_vrml_from_cache": true,

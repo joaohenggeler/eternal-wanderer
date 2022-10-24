@@ -18,7 +18,7 @@ if __name__ == '__main__':
 	parser.add_argument('-unapproved', action='store_true', help='Delete unapproved recordings (rejected or to be recorded again).')
 	parser.add_argument('-compiled', action='store_true', help='Delete published recordings that are part of a compilation.')
 	parser.add_argument('-temporary', action='store_true', help=f'Delete any temporary files or directories with the "{CommonConfig.TEMPORARY_PATH_PREFIX}" prefix.')
-	parser.add_argument('-registry', action='store_true', help=f'Delete any leftover registry keys used by plugins. This option requires running the script with elevated privileges.')
+	parser.add_argument('-registry', action='store_true', help='Delete any leftover registry keys used by plugins. This option requires running the script with elevated privileges.')
 	args = parser.parse_args()
 
 	if not any(vars(args).values()):
