@@ -169,8 +169,9 @@ class CommonConfig():
 		'media_height',
 		'media_background_color',
 				
-		'plugin_syncing_type',
-		'plugin_syncing_delay',
+		'plugin_syncing_page_type',
+		'plugin_syncing_media_type',
+		'plugin_syncing_unload_delay',
 		'plugin_syncing_reload_vrml_from_cache',
 
 		'enable_plugin_input_repeater', 
@@ -2252,9 +2253,10 @@ def is_url_available(url: str, allow_redirects: bool = False) -> bool:
 	return result
 
 def is_wayback_machine_available() -> bool:
-	""" Checks if the Wayback Machine website is available. """
+	""" Checks if both the Wayback Machine website and the CDX server are available. """
 	global_rate_limiter.wait_for_wayback_machine_rate_limit()
-	return is_url_available('https://web.archive.org/', allow_redirects=True)
+	global_rate_limiter.wait_for_cdx_api_rate_limit()
+	return is_url_available('https://web.archive.org/', allow_redirects=True) and is_url_available('https://web.archive.org/cdx/', allow_redirects=True)
 
 def is_url_from_domain(url: Union[str, ParseResult], domain: str) -> bool:
 	""" Checks if a URL is part of a domain or any of its subdomains. """

@@ -91,8 +91,9 @@ class RecordConfig(CommonConfig):
 
 	fullscreen_browser: bool
 	
-	plugin_syncing_type: str
-	plugin_syncing_delay: float
+	plugin_syncing_page_type: str
+	plugin_syncing_media_type: str
+	plugin_syncing_unload_delay: float
 	plugin_syncing_reload_vrml_from_cache: bool
 	
 	enable_plugin_input_repeater: bool
@@ -147,8 +148,11 @@ class RecordConfig(CommonConfig):
 		if self.proxy_max_cdx_path_components is not None:
 			self.proxy_max_cdx_path_components = max(self.proxy_max_cdx_path_components, 1)
 
-		self.plugin_syncing_type = self.plugin_syncing_type.lower()
-		assert self.plugin_syncing_type in ['none', 'reload', 'unload'], f'Unknown plugin syncing type "{self.plugin_syncing_type}".'
+		self.plugin_syncing_page_type = self.plugin_syncing_page_type.lower()
+		assert self.plugin_syncing_page_type in ['none', 'reload', 'unload'], f'Unknown plugin syncing page type "{self.plugin_syncing_page_type}".'
+
+		self.plugin_syncing_media_type = self.plugin_syncing_media_type.lower()
+		assert self.plugin_syncing_media_type in ['none', 'reload', 'unload'], f'Unknown plugin syncing media type "{self.plugin_syncing_media_type}".'
 
 		self.screen_capture_recorder_settings = container_to_lowercase(self.screen_capture_recorder_settings)
 		
@@ -1137,6 +1141,7 @@ if __name__ == '__main__':
 						# Prepare the recording phase.
 
 						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.max_duration
+						plugin_syncing_type = config.plugin_syncing_media_type if snapshot.IsMedia else config.plugin_syncing_page_type
 
 						plugin_input_repeater: Union[PluginInputRepeater, ContextManager[None]] = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
 						cosmo_player_viewpoint_cycler: Union[CosmoPlayerViewpointCycler, ContextManager[None]] = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
@@ -1173,27 +1178,27 @@ if __name__ == '__main__':
 									log.info(f'Reloading the page from cache since {num_cosmo_player_instances} Cosmo Player instances were found.')
 									browser.reload_page_from_cache()
 
-							if config.plugin_syncing_type == 'reload':
+							if plugin_syncing_type == 'reload':
 								
 								log.debug('Reloading plugin content.')
 								browser.reload_plugin_content()
 							
-							elif config.plugin_syncing_type == 'unload':
+							elif plugin_syncing_type == 'unload':
 								
 								log.debug('Unloading plugin content.')
 								browser.unload_plugin_content(skip_applets=True)
 
 								def delayed_sync_plugins() -> None:
 									""" Reloads any previously unloaded plugin content after a given amount of time has passed. """
-									sleep(config.plugin_syncing_delay)
-									log.debug(f'Reloading plugin content after {config.plugin_syncing_delay:.1f} seconds.')
+									sleep(config.plugin_syncing_unload_delay)
+									log.debug(f'Reloading plugin content after {config.plugin_syncing_unload_delay:.1f} seconds.')
 									browser.reload_plugin_content(skip_applets=True)
 
 								delayed_sync_plugins_thread = Thread(target=delayed_sync_plugins, name='sync_plugins', daemon=True)
 
 							with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
 							
-								if config.plugin_syncing_type == 'unload':
+								if plugin_syncing_type == 'unload':
 									delayed_sync_plugins_thread.start()
 
 								sleep(wait_after_load)
@@ -1205,7 +1210,7 @@ if __name__ == '__main__':
 									
 									sleep(wait_per_scroll)
 					
-						if config.plugin_syncing_type == 'unload':
+						if plugin_syncing_type == 'unload':
 							delayed_sync_plugins_thread.join()
 
 						redirected = False
