@@ -130,7 +130,8 @@ if __name__ == '__main__':
 					mastodon_url = f'https://botsin.space/web/@eternalwanderer/{recording.MastodonStatusId}' if recording.MastodonStatusId is not None else '-'
 
 					print(f'- {name}: {last_time}')
-					print(f'-> Snapshot: {snapshot}')
+					print(f'-> Snapshot: #{snapshot.Id} {snapshot}')
+					print(f'-> Recording: {recording.UploadFilename}')
 					print(f'-> Twitter: {twitter_url}')
 					print(f'-> Mastodon: {mastodon_url}')
 				else:
