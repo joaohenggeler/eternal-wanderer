@@ -43,11 +43,6 @@ if __name__ == '__main__':
 			row_list = [dict(row) for row in cursor]
 			total_recordings = len(row_list)
 
-			if total_recordings > 0:
-				print(f'Approving {total_recordings} recordings.')
-			else:
-				print('Ran out of recordings to approve.')
-
 			snapshot_updates = []
 			recording_updates = []
 
@@ -164,6 +159,8 @@ if __name__ == '__main__':
 				
 				print()
 				print(f'Evaluated {total_recordings} recordings: {num_approved} approved, {num_rejected} rejected, {num_to_record_again} to be recorded again, {num_missing} missing files.')
+			else:
+				print('Ran out of recordings to approve.')
 
 		except sqlite3.Error as error:
 			print(f'Failed to approve the recordings with the error: {repr(error)}')
