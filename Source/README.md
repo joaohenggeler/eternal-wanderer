@@ -71,7 +71,7 @@ If you followed the previous instructions and fastText still fails to install wi
 
 Below is a step-by-step guide on how to obtain and configure all the necessary components in order to run the bot. The [`Data` directory](Data) directory referenced below is located in the source directory.
 
-1. Make a copy of the [`config.template.json`](config.template.json) file and rename it to `config.json`. The next steps will refer to each configuration option in this file as needed. Most of them can be left to their default values.
+1. Make a copy of the [`config.json.template`](config.json.template) file and rename it to `config.json`. The next steps will refer to each configuration option in this file as needed. Most of them can be left to their default values.
 
 2. Download the portable versions of [Firefox 52 ESR](https://portableapps.com/redirect/?a=FirefoxPortableLegacy52&s=s&d=pa&f=FirefoxPortableLegacy52_52.9.0_English.paf.exe) and [Firefox 56](https://sourceforge.net/projects/portableapps/files/Mozilla%20Firefox%2C%20Portable%20Ed./Mozilla%20Firefox%2C%20Portable%20Edition%2056.0.2/FirefoxPortable_56.0.2_English.paf.exe/download) and install them in the `Data/Firefox/52.9.0` and `Data/Firefox/56.0.2`. The path to these directories is specified by `gui_firefox_path` and `headless_firefox_path`  respectively. Note that these options must point to `App/Firefox/firefox.exe` executable inside those two directories since the web plugins require a 32-bit version of Firefox. You may delete the 64-bit subdirectories (`App/Firefox64`) to save disk space.
 
