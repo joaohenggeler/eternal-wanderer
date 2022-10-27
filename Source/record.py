@@ -56,7 +56,7 @@ class RecordConfig(CommonConfig):
 	min_publish_days_for_new_recording: int
 
 	allowed_media_extensions: dict[str, bool] # Different from the config data type.
-	nondownloadable_media_extensions: dict[str, bool] # Different from the config data type.
+	multi_asset_media_extensions: dict[str, bool] # Different from the config data type.
 
 	enable_proxy: bool
 	proxy_port: Optional[int]
@@ -143,7 +143,7 @@ class RecordConfig(CommonConfig):
 		self.scheduler = container_to_lowercase(self.scheduler)
 
 		self.allowed_media_extensions = {extension: True for extension in container_to_lowercase(self.allowed_media_extensions)}
-		self.nondownloadable_media_extensions = {extension: True for extension in container_to_lowercase(self.nondownloadable_media_extensions)}
+		self.multi_asset_media_extensions = {extension: True for extension in container_to_lowercase(self.multi_asset_media_extensions)}
 
 		if self.proxy_max_cdx_path_components is not None:
 			self.proxy_max_cdx_path_components = max(self.proxy_max_cdx_path_components, 1)
@@ -759,7 +759,7 @@ if __name__ == '__main__':
 					# If a media file points to other resources (e.g. VRML worlds or RealMedia metadata), we don't
 					# want to download it since other files from the Wayback Machine may be required to play it.
 					# If it doesn't (i.e. audio and video formats), we'll just download and play it from disk.
-					if media_extension not in config.nondownloadable_media_extensions:
+					if media_extension not in config.multi_asset_media_extensions:
 						
 						try:
 							global_rate_limiter.wait_for_wayback_machine_rate_limit()
