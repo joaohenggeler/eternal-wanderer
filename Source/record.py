@@ -55,8 +55,8 @@ class RecordConfig(CommonConfig):
 	record_sensitive_snapshots: bool
 	min_publish_days_for_new_recording: int
 
-	allowed_media_extensions: dict[str, bool] # Different from the config data type.
-	multi_asset_media_extensions: dict[str, bool] # Different from the config data type.
+	allowed_media_extensions: frozenset[str] # Different from the config data type.
+	multi_asset_media_extensions: frozenset[str] # Different from the config data type.
 
 	enable_proxy: bool
 	proxy_port: Optional[int]
@@ -142,8 +142,9 @@ class RecordConfig(CommonConfig):
 
 		self.scheduler = container_to_lowercase(self.scheduler)
 
-		self.allowed_media_extensions = {extension: True for extension in container_to_lowercase(self.allowed_media_extensions)}
-		self.multi_asset_media_extensions = {extension: True for extension in container_to_lowercase(self.multi_asset_media_extensions)}
+		self.allowed_media_extensions = frozenset(extension for extension in container_to_lowercase(self.allowed_media_extensions))
+		self.multi_asset_media_extensions = frozenset(extension for extension in container_to_lowercase(self.multi_asset_media_extensions))
+		assert self.multi_asset_media_extensions.issubset(self.allowed_media_extensions), 'The multi-asset media extensions must be a subset of the allowed media extensions.'
 
 		if self.proxy_max_cdx_path_components is not None:
 			self.proxy_max_cdx_path_components = max(self.proxy_max_cdx_path_components, 1)
@@ -1237,7 +1238,7 @@ if __name__ == '__main__':
 							
 							# Remove any duplicates to minimize the amount of requests to the Save API
 							# and to improve look up operations when trying to find other missing URLs.
-							extra_missing_urls = {url: True for url in missing_urls}
+							extra_missing_urls = set(url for url in missing_urls)
 
 							# Find other potentially missing URLs if the filename ends in a number.
 							# If a file like "level3.dat" was missing, then we should check the
@@ -1278,7 +1279,7 @@ if __name__ == '__main__':
 
 									if is_url_available(new_url):
 										log.info(f'Found the consecutive missing URL "{new_url}".')
-										extra_missing_urls[new_url] = True
+										extra_missing_urls.add(new_url)
 										num_consecutive_misses = 0
 									else:
 										num_consecutive_misses += 1
@@ -1291,7 +1292,7 @@ if __name__ == '__main__':
 									# for every possible consecutive number.
 									log.warning(f'Stopping the search for more missing URLs after {config.proxy_max_total_save_tries} tries.')
 
-							missing_urls = list(extra_missing_urls)
+							missing_urls = sorted(list(extra_missing_urls))
 							saved_urls = []
 							num_processed = 0
 

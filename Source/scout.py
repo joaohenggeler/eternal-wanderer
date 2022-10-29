@@ -56,7 +56,7 @@ class ScoutConfig(CommonConfig):
 	tag_points: dict[str, int]
 	media_points: int
 	
-	sensitive_words: dict[str, bool] # Different from the config data type.
+	sensitive_words: frozenset[str] # Different from the config data type.
 	
 	detect_page_language: bool
 	language_model_path: str
@@ -72,17 +72,17 @@ class ScoutConfig(CommonConfig):
 		self.word_points = container_to_lowercase(self.word_points)
 		self.tag_points = container_to_lowercase(self.tag_points)
 	
-		decoded_sensitive_words = {}
+		decoded_sensitive_words = set()
 		for word in self.sensitive_words:
 			try:
 				if word.startswith('b64:'):
 					word = b64decode(word.removeprefix('b64:')).decode()
 				
-				decoded_sensitive_words[word.lower()] = True
+				decoded_sensitive_words.add(word.lower())
 			except binascii.Error as error:
 				log.error(f'Failed to decode the sensitive word "{word}" with the error: {repr(error)}')
 		
-		self.sensitive_words = decoded_sensitive_words
+		self.sensitive_words = frozenset(decoded_sensitive_words)
 
 		self.language_model_path = os.path.abspath(self.language_model_path)
 

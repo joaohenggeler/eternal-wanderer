@@ -130,7 +130,9 @@ class CommonConfig():
 	save_api_rate_limit_window: int
 	
 	rate_limit_poll_frequency: float
-	unavailable_wayback_machine_wait: int
+	
+	wayback_machine_retry_backoff: float
+	wayback_machine_retry_max_wait: int
 
 	allowed_domains: list[list[str]] # Different from the config data type.
 	disallowed_domains: list[list[str]] # Different from the config data type.
@@ -1480,9 +1482,10 @@ class Browser():
 	def go_to_wayback_url(self, wayback_url: str, close_windows: bool = False) -> None:
 		""" Navigates to a Wayback Machine URL, taking into account any rate limiting and retrying if the service is unavailable. """
 
-		while True:
+		for i in itertools.count():
 
 			retry = False
+			retry_wait = min(config.wayback_machine_retry_backoff * 2 ** (i-1), config.wayback_machine_retry_max_wait) if i > 0 else 0
 
 			try:
 				if close_windows:
@@ -1500,7 +1503,7 @@ class Browser():
 			except TimeoutException:
 				log.warning(f'Timed out after waiting {config.page_load_timeout} seconds for the page to load: "{wayback_url}".')
 				# This covers the same case as the next exception without passing the error
-				# along to the caller if a regular page took to long to load.
+				# along to the caller if a regular page took too long to load.
 				retry = not is_wayback_machine_available()
 
 			except WebDriverException:
@@ -1515,8 +1518,8 @@ class Browser():
 
 			finally:
 				if retry:
-					log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
-					sleep(config.unavailable_wayback_machine_wait)
+					log.warning(f'Waiting {retry_wait} seconds for the Wayback Machine to become available again.')
+					sleep(retry_wait)
 					continue
 				else:
 					break
@@ -1890,7 +1893,7 @@ class TemporaryRegistry():
 
 	original_state: dict[tuple[int, str, str], tuple[Optional[int], Any]]
 	keys_to_delete: set[tuple[int, str, str]]
-	key_paths_to_delete: dict[tuple[int, str], bool]
+	key_paths_to_delete: set[tuple[int, str]]
 
 	OPEN_HKEYS = {
 		'hkey_classes_root': winreg.HKEY_CLASSES_ROOT,
@@ -1905,7 +1908,7 @@ class TemporaryRegistry():
 	def __init__(self):
 		self.original_state = {}
 		self.keys_to_delete = set()
-		self.key_paths_to_delete = {}
+		self.key_paths_to_delete = set()
 
 	@staticmethod
 	def partition_key(key: str) -> tuple[int, str, str]:
@@ -1966,7 +1969,7 @@ class TemporaryRegistry():
 				else:
 					self.keys_to_delete.add((hkey, intermediate_key_path, intermediate_sub_key))
 
-			self.key_paths_to_delete[(hkey, key_path)] = True
+			self.key_paths_to_delete.add((hkey, key_path))
 
 		original_state_key = (hkey, key_path, sub_key)
 		original_state_value: tuple[Optional[int], Any]
@@ -2101,7 +2104,7 @@ class TemporaryRegistry():
 
 		self.original_state = {}
 		self.keys_to_delete = set()
-		self.key_paths_to_delete = {}
+		self.key_paths_to_delete = set()
 
 	def __enter__(self):
 		return self

@@ -251,7 +251,9 @@
 		"save_api_rate_limit_window": 60,
 		
 		"rate_limit_poll_frequency": 0.5,
-		"unavailable_wayback_machine_wait": 900,
+		
+		"wayback_machine_retry_backoff": 60.0,
+		"wayback_machine_retry_max_wait": 900,
 
 		"allowed_domains": null,
 		"disallowed_domains": ["mil", "java.sun.com"],
