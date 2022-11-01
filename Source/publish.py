@@ -422,7 +422,7 @@ if __name__ == '__main__':
 						sleep(config.database_error_wait)
 						continue
 
-					log.info(f'[{recording_index+1} of {num_recordings}] Publishing recording #{recording.Id} for snapshot #{snapshot.Id} {snapshot} (approved = {snapshot.State == Snapshot.APPROVED}).')
+					log.info(f'[{recording_index+1} of {num_recordings}] Publishing recording #{recording.Id} of snapshot #{snapshot.Id} {snapshot} (approved = {snapshot.State == Snapshot.APPROVED}).')
 					
 					title = snapshot.DisplayTitle
 					display_metadata = snapshot.DisplayMetadata if config.show_media_metadata else None

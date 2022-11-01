@@ -127,7 +127,7 @@ if __name__ == '__main__':
 										''')
 
 			total_recordings = 0
-			num_valid_recordings = 0
+			num_found = 0
 
 			snapshots_and_recordings = []
 			for row in cursor:
@@ -149,9 +149,9 @@ if __name__ == '__main__':
 
 				if recording.CompilationSegmentFilePath is not None and os.path.isfile(recording.CompilationSegmentFilePath):
 					snapshots_and_recordings.append((snapshot, recording))
-					num_valid_recordings += 1
+					num_found += 1
 				else:
-					print(f'- Skipping the recording #{recording.Id} for snapshot #{snapshot.Id} {snapshot} since the file "{recording.CompilationSegmentFilePath}" is missing.')
+					print(f'- Skipping recording #{recording.Id} of snapshot #{snapshot.Id} {snapshot} since the file "{recording.CompilationSegmentFilePath}" is missing.')
 
 			if args.any:
 				tuple_index = 0 if id_type == 'snapshot' else 1
@@ -204,7 +204,7 @@ if __name__ == '__main__':
 					id_identifier = str(compilation_id) if args.published else None
 					type_identifier = 'published' if args.published else f'any_{id_type}'
 					range_identifier = args.any[1] if args.any else f'{begin_date.replace("-", "_").replace(" ", "_").replace(":", "_")}_to_{end_date.replace("-", "_").replace(" ", "_").replace(":", "_")}'
-					total_identifier = f'with_{num_valid_recordings}_of_{total_recordings}'
+					total_identifier = f'with_{num_found}_of_{total_recordings}'
 					text_to_speech_identifier = 'tts' if args.tts else None
 
 					compilation_identifiers = [id_identifier, type_identifier, range_identifier, total_identifier, text_to_speech_identifier]
@@ -219,11 +219,11 @@ if __name__ == '__main__':
 					try:
 						with open(timestamps_path, 'w', encoding='utf-8') as timestamps_file:
 							
-							print(f'Compiling {num_valid_recordings} valid files out of {total_recordings} selected recordings.')
+							print(f'Compiling {num_found} of {total_recordings} recordings.')
 							
 							for snapshot, recording in snapshots_and_recordings:
 								
-								print(f'- Adding the recording #{recording.Id} for snapshot #{snapshot.Id} {snapshot}.')
+								print(f'- Adding recording #{recording.Id} of snapshot #{snapshot.Id} {snapshot}.')
 
 								# The recordings are remuxed to MPEG-TS to try to avoid any errors when concatenating every file.
 								# E.g. "Non-monotonous DTS in output stream"

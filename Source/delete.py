@@ -32,6 +32,8 @@ if __name__ == '__main__':
 
 		def delete(path: Optional[str]) -> None:
 			
+			nonlocal total, num_deleted
+
 			if path is not None:
 				total += 1
 				print(f'- Recording #{recording.Id} ({recording.CreationTime}): {path}')
