@@ -165,7 +165,7 @@ if __name__ == '__main__':
 					stream = stream.global_args(*config.ffmpeg_global_args)
 					stream = stream.overwrite_output()
 					
-					log.debug(f'Splitting the text-to-speech file with the ffmpeg arguments: {stream.get_args()}')
+					log.debug(f'Splitting the text-to-speech file with the FFmpeg arguments: {stream.get_args()}')
 					stream.run()
 
 					segment_search_path = os.path.join(temporary_path, '*.' + recording.TextToSpeechFilename)
@@ -235,7 +235,7 @@ if __name__ == '__main__':
 			log.info('Publishing to Mastodon.')
 
 			def process_video_file(input_path: str) -> str:
-				""" Runs a video file through ffmpeg, potentially reducing its size before uploading it to the Mastodon instance. """
+				""" Runs a video file through FFmpeg, potentially reducing its size before uploading it to the Mastodon instance. """
 				
 				# Closing the file right away makes it easier to delete it later.
 				output_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
@@ -246,7 +246,7 @@ if __name__ == '__main__':
 				stream = stream.global_args(*config.ffmpeg_global_args)
 				stream = stream.overwrite_output()
 				
-				log.debug(f'Processing the video file with the ffmpeg arguments: {stream.get_args()}')
+				log.debug(f'Processing the video file with the FFmpeg arguments: {stream.get_args()}')
 				stream.run()
 
 				return output_file.name

@@ -5,7 +5,6 @@ import sqlite3
 from argparse import ArgumentParser
 from datetime import timedelta
 from tempfile import NamedTemporaryFile
-from typing import cast
 
 import ffmpeg # type: ignore
 
@@ -18,8 +17,8 @@ from record import RecordConfig
 if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Compiles multiple snapshot recordings into a single video. This can be done for published recordings that haven\'t been compiled yet, or for any recordings given their database IDs. A short transition with a user-defined background color, duration, and sound effect is inserted between each recording.')
-	parser.add_argument('-published', nargs=2, metavar=('BEGIN_DATE', 'END_DATE'), help='Which published recordings to compile. Each date must use a format between "YYYY" and "YYYY-MM-DD HH:MM:SS" with different granularities. For example, "2022-07" and "2022-08-15" would compile all published recordings between July 1st (inclusive) and August 15th (exclusive), 2022. The selected recordings are stored in a database to prevent future compilations from showing repeated snapshots. This option cannot be used with -any.')
-	parser.add_argument('-any', nargs=2, metavar=('ID_TYPE', 'ID_LIST'), help='Which recordings to compile, regardless if they have been published or not. The ID_TYPE argument must be either "snapshot" or "recording" depending on the database IDs specified in ID_LIST. The ID_LIST argument specifies which of these IDs to include or exclude from the compilation. For example, "1,5-10,!7,!9-10" would result in the ID list [1, 5, 6, 8]. For ID ranges, if the first value is greater than the second then the range is reversed. For example, "3-1" would result in [3, 2, 1], meaning the recordings would be shown in reverse order. This option cannot be used with -published.')
+	parser.add_argument('-published', nargs=2, metavar=('BEGIN_DATE', 'END_DATE'), help='Which published recordings to compile. Each date must use a format between "YYYY" and "YYYY-MM-DD HH:MM:SS" with different granularities. For example, "2022-07" and "2022-08-15" would compile all published recordings between July 1st (inclusive) and August 15th (exclusive), 2022. This option cannot be used with -any.')
+	parser.add_argument('-any', nargs=2, metavar=('ID_TYPE', 'ID_LIST'), help='Which recordings to compile, regardless if they have been published or not. The ID_TYPE argument must be either "snapshot" or "recording" depending on the database IDs specified in ID_LIST. The ID_LIST argument specifies which of these IDs to include or exclude from the compilation. For example, "1,5-10,!7,!9-10" would result in the ID list [1, 5, 6, 8]. For ID ranges, if the first value is greater than the second then the range is reversed. For example, "3-1" would result in [3, 2, 1], meaning the recordings would be shown in reverse order. If ID_TYPE is "snapshot" and two or more recordings of the same snapshot are found, only the most recently created one is used. You can compile the same snapshot more than once by setting ID_TYPE to "recording". This option cannot be used with -published.')
 	parser.add_argument('-tts', action='store_true', help='Use the text-to-speech video files instead of the snapshot recordings.')
 	parser.add_argument('-color', default='white', help='The background color for the transition. If omitted, this defaults to %(default)s. This may be a hexadecimal color code or a color name defined here: https://ffmpeg.org/ffmpeg-utils.html#Color')
 	parser.add_argument('-duration', type=int, default=2, help='How long the transition lasts for in seconds. If omitted, this defaults to %(default)s.')
@@ -52,10 +51,10 @@ if __name__ == '__main__':
 			for id in id_list.split(','):
 				
 				current_list = exclude_id_list if id.startswith('!') else include_id_list
-				id = id.lstrip('!')
+				id = id.removeprefix('!')
 
 				if '-' in id:
-					begin_id, end_id = id.split('-', 1)
+					begin_id, _, end_id = id.partition('-')
 					begin_id, end_id = int(begin_id), int(end_id)
 
 					if begin_id <= end_id:
@@ -89,19 +88,11 @@ if __name__ == '__main__':
 
 			if args.published:
 				cursor = db.execute('''
-									SELECT S.*, R.*, R.Id AS RecordingId
+									SELECT S.*, SI.IsSensitive, R.*, R.Id AS RecordingId
 									FROM Snapshot S
 									INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 									INNER JOIN Recording R ON S.Id = R.SnapshotId
-									INNER JOIN
-									(
-										SELECT LR.SnapshotId, MAX(LR.PublishTime) AS LastPublishTime
-										FROM Recording LR
-										GROUP BY LR.SnapshotId
-									) LR ON S.Id = LR.SnapshotId AND R.PublishTime = LR.LastPublishTime
-									WHERE 
-										R.PublishTime BETWEEN :begin_date AND :end_date
-										AND NOT EXISTS(SELECT 1 FROM RecordingCompilation RC WHERE RC.SnapshotId = S.Id)
+									WHERE R.PublishTime BETWEEN :begin_date AND :end_date
 									ORDER BY R.PublishTime;
 									''', {'begin_date': begin_date, 'end_date': end_date})
 
@@ -168,8 +159,9 @@ if __name__ == '__main__':
 
 			if snapshots_and_recordings:
 
-				transition_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
+				transition_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.ts', delete=False)
 				concat_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.txt', delete=False)
+				intermediate_file_list = []
 
 				try:
 					try:
@@ -233,12 +225,26 @@ if __name__ == '__main__':
 								
 								print(f'- Adding the recording #{recording.Id} for snapshot #{snapshot.Id} {snapshot}.')
 
-								# See: https://superuser.com/questions/718027/ffmpeg-concat-doesnt-work-with-absolute-path/1551017#1551017
-								recording_path = cast(str, recording.CompilationSegmentFilePath).replace('\\', '/')
-								transition_path = transition_file.name.replace('\\', '/')
+								# The recordings are remuxed to MPEG-TS to try to avoid any errors when concatenating every file.
+								# E.g. "Non-monotonous DTS in output stream"
+								intermediate_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.ts', delete=False)
+								intermediate_file_list.append(intermediate_file)
 
-								concat_file.write(f"file 'file:{recording_path}'\n")
-								concat_file.write(f"file 'file:{transition_path}'\n")
+								# See:
+								# - https://stackoverflow.com/a/47725134/18442724
+								# - https://ffmpeg.org/ffmpeg-bitstream-filters.html#h264_005fmp4toannexb
+								stream = ffmpeg.input(recording.CompilationSegmentFilePath)
+								stream = stream.output(intermediate_file.name, c='copy')
+								stream = stream.global_args(*config.ffmpeg_global_args)
+								stream = stream.overwrite_output()
+								stream.run()
+
+								# See: https://superuser.com/questions/718027/ffmpeg-concat-doesnt-work-with-absolute-path/1551017#1551017
+								recording_concat_path = intermediate_file.name.replace('\\', '/')
+								transition_concat_path = transition_file.name.replace('\\', '/')
+
+								concat_file.write(f"file 'file:{recording_concat_path}'\n")
+								concat_file.write(f"file 'file:{transition_concat_path}'\n")
 
 								timestamp = timedelta(seconds=round(current_duration))
 								formatted_timestamp = str(timestamp).zfill(8)
@@ -249,7 +255,7 @@ if __name__ == '__main__':
 								timestamp_line = ' '.join(filter(None, recording_identifiers))
 								timestamps_file.write(f'{timestamp_line}\n')
 								
-								probe = ffmpeg.probe(recording.CompilationSegmentFilePath)
+								probe = ffmpeg.probe(intermediate_file.name)
 								recording_duration = float(probe['format']['duration'])
 								current_duration += recording_duration + transition_duration
 
@@ -285,7 +291,7 @@ if __name__ == '__main__':
 						# - https://trac.ffmpeg.org/wiki/Concatenate#samecodec
 						# - https://ffmpeg.org/ffmpeg-formats.html#concat
 						stream = ffmpeg.input(concat_file.name, f='concat', safe=0)
-						stream = stream.output(compilation_path, c='copy')
+						stream = stream.output(compilation_path, c='copy', movflags='faststart')
 						stream = stream.global_args(*config.ffmpeg_global_args)
 						stream = stream.overwrite_output()
 						stream.run()
@@ -325,6 +331,10 @@ if __name__ == '__main__':
 					concat_file.close()
 					delete_file(concat_file.name)
 						
+					for file in intermediate_file_list:
+						file.close()
+						delete_file(file.name)
+
 			else:
 				print('Could not find any recordings that match the given criteria.')
 

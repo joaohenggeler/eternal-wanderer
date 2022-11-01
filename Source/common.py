@@ -190,6 +190,8 @@ class CommonConfig():
 
 		'text_to_speech_read_image_alt_text',
 
+		'enable_media_conversion',
+
 		# For the publisher script.
 		'show_media_metadata',
 	]
@@ -382,12 +384,11 @@ def url_key_matches_domain_pattern(url_key: str, domain_patterns: list[list[str]
 	if domain_patterns:
 
 		# E.g. "com,geocities)/hollywood/hills/5988"
-		domain, _ = url_key.lower().split(')', 1)
+		domain, *_ = url_key.lower().partition(')')
 		
 		# E.g. "com,sun,java:8081)/products/javamail/index.html"
-		if ':' in domain:
-			domain, _ = domain.split(':', 1)
-
+		domain, *_ = domain.partition(':')
+			
 		if domain in cache:
 			return cache[domain]
 
@@ -1165,8 +1166,8 @@ class Browser():
 
 		# E.g. "1.8.0" or "1.8.0_11"
 		java_product = re.findall(r'(?:jdk|jre)((?:\d+\.\d+\.\d+)(?:_\d+)?)', java_jre_path, flags=re.IGNORECASE)[-1]
-		java_platform, _ = java_product.rsplit('.', 1) # E.g. "1.8"
-		_, java_version = java_platform.split('.', 1) # E.g. "8"
+		java_platform, *_ = java_product.rpartition('.') # E.g. "1.8"
+		*_, java_version = java_platform.partition('.') # E.g. "8"
 
 		java_web_start_path = os.path.join(self.java_bin_path, 'javaws.exe')
 
@@ -1914,8 +1915,8 @@ class TemporaryRegistry():
 	def partition_key(key: str) -> tuple[int, str, str]:
 		""" Separates a registry key string into its hkey, key path, and sub key components. """
 
-		first_key, key_path = key.split('\\', 1)
-		key_path, sub_key = key_path.rsplit('\\', 1)
+		first_key, _, key_path = key.partition('\\')
+		key_path, _, sub_key = key_path.rpartition('\\')
 
 		first_key = first_key.lower()
 		if first_key not in TemporaryRegistry.OPEN_HKEYS:
@@ -2132,7 +2133,7 @@ def extract_media_extension_from_url(url: str) -> str:
 		extension = 'wrz'
 	else:
 		_, extension = os.path.splitext(path)
-		extension = extension.lstrip('.')
+		extension = extension.removeprefix('.')
 
 	return extension
 

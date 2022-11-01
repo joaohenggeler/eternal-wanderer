@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import binascii
+import itertools
 import os
 import re
 import sqlite3
@@ -123,9 +124,10 @@ if __name__ == '__main__':
 			parent_id = parent_snapshot.Id
 			depth = parent_snapshot.Depth + 1
 
-		while True:
+		for i in itertools.count():
 
 			retry = False
+			retry_wait = min(config.wayback_machine_retry_backoff * 2 ** (i-1), config.wayback_machine_retry_max_wait) if i > 0 else 0
 
 			try:
 				log.debug(f'Locating the snapshot at "{url}" near {timestamp}.')
@@ -153,8 +155,8 @@ if __name__ == '__main__':
 
 				while not is_wayback_machine_available():
 					retry = True
-					log.warning(f'Waiting {config.unavailable_wayback_machine_wait} seconds for the Wayback Machine to become available again.')
-					sleep(config.unavailable_wayback_machine_wait)
+					log.warning(f'Waiting {retry_wait} seconds for the Wayback Machine to become available again.')
+					sleep(retry_wait)
 			
 			finally:
 				if retry:

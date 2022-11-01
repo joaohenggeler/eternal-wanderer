@@ -129,6 +129,11 @@ class RecordConfig(CommonConfig):
 	ffmpeg_text_to_speech_audio_input_args: dict[str, Union[None, int, str]]
 	ffmpeg_text_to_speech_output_args: dict[str, Union[None, int, str]]
 
+	enable_media_conversion: bool
+	convertible_media_extensions: frozenset[str] # Different from the config data type.
+	ffmpeg_media_conversion_input_name: str
+	ffmpeg_media_conversion_input_args: dict[str, Union[None, int, str]]
+
 	# Determined at runtime.
 	media_template: str
 	physical_screen_width: int
@@ -167,6 +172,13 @@ class RecordConfig(CommonConfig):
 		self.ffmpeg_text_to_speech_video_input_args = container_to_lowercase(self.ffmpeg_text_to_speech_video_input_args)
 		self.ffmpeg_text_to_speech_audio_input_args = container_to_lowercase(self.ffmpeg_text_to_speech_audio_input_args)
 		self.ffmpeg_text_to_speech_output_args = container_to_lowercase(self.ffmpeg_text_to_speech_output_args)
+
+		self.convertible_media_extensions = frozenset(extension for extension in container_to_lowercase(self.convertible_media_extensions))
+		assert self.convertible_media_extensions.issubset(self.allowed_media_extensions), 'The convertible media extensions must be a subset of the allowed media extensions.'
+
+		assert self.multi_asset_media_extensions.isdisjoint(self.convertible_media_extensions), 'The multi-asset and convertible media extensions must be mutually exclusive.'
+
+		self.ffmpeg_media_conversion_input_args = container_to_lowercase(self.ffmpeg_media_conversion_input_args)
 
 		media_template_path = os.path.join(self.plugins_path, 'media.html.template')
 		with open(media_template_path, 'r', encoding='utf-8') as file:
@@ -223,7 +235,7 @@ if __name__ == '__main__':
 	try:
 		subprocess.run(['ffmpeg', '-version'], check=True, stdout=DEVNULL)
 	except CalledProcessError:
-		log.error('Could not find the ffmpeg executable in the PATH.')
+		log.error('Could not find the FFmpeg executable in the PATH.')
 		sys.exit(1)
 
 	class Proxy(Thread):
@@ -369,11 +381,11 @@ if __name__ == '__main__':
 			kill_processes_by_path(self.plugin_container_path)
 
 	class ScreenCapture():
-		""" A process that captures the screen and stores the recording on disk using ffmpeg. """
+		""" A process that captures the screen and stores the recording on disk using FFmpeg. """
 
 		raw_recording_path: str
 		upload_recording_path: str
-		archive_recording_path: str
+		archive_recording_path: Optional[str]
 		
 		stream: ffmpeg.Stream
 		process: Popen
@@ -383,7 +395,7 @@ if __name__ == '__main__':
 			
 			self.raw_recording_path = output_path_prefix + '.raw.mkv'
 			self.upload_recording_path = output_path_prefix + '.mp4'
-			self.archive_recording_path = output_path_prefix + '.mkv'
+			self.archive_recording_path = output_path_prefix + '.mkv' if config.keep_archive_copy else None
 
 			stream = ffmpeg.input(config.ffmpeg_recording_input_name, t=config.max_duration, **config.ffmpeg_recording_input_args)
 			stream = stream.output(self.raw_recording_path, **config.ffmpeg_recording_output_args)
@@ -392,26 +404,26 @@ if __name__ == '__main__':
 			self.stream = stream
 
 		def start(self) -> None:
-			""" Starts the ffmpeg screen capture process asynchronously. """
+			""" Starts the FFmpeg screen capture process asynchronously. """
 
-			log.debug(f'Recording with the ffmpeg arguments: {self.stream.get_args()}')
+			log.debug(f'Recording with the FFmpeg arguments: {self.stream.get_args()}')
 			self.failed = False
 			
 			# Connecting a pipe to stdin is required to stop the recording by pressing Q.
 			# See: https://github.com/kkroening/ffmpeg-python/issues/162
-			# Connecting a pipe to stdout and stderr is useful to check for any ffmpeg error messages.
+			# Connecting a pipe to stdout and stderr is useful to check for any FFmpeg error messages.
 			self.process = self.stream.run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)		
 
 		def stop(self) -> None:
-			""" Stops the ffmpeg screen capture process gracefully or kills it doesn't respond. """
+			""" Stops the FFmpeg screen capture process gracefully or kills it doesn't respond. """
 
 			try:
-				output, error = self.process.communicate(b'q', timeout=10)
+				output, errors = self.process.communicate(b'q', timeout=10)
 				
 				for line in output.decode().splitlines():
 					log.info(f'FFmpeg output: {line}')
 				
-				for line in error.decode().splitlines():
+				for line in errors.decode().splitlines():
 					log.warning(f'FFmpeg warning/error: {line}')
 			
 			except TimeoutExpired:
@@ -420,7 +432,7 @@ if __name__ == '__main__':
 				self.process.kill()
 
 			except UnicodeDecodeError as error:
-				log.warning(f'Could not decode the ffmpeg output with the error: {repr(error)}')
+				log.warning(f'Could not decode the FFmpeg output with the error: {repr(error)}')
 
 		def __enter__(self):
 			self.start()
@@ -436,7 +448,7 @@ if __name__ == '__main__':
 
 				output_types = [(self.upload_recording_path, config.ffmpeg_upload_output_args)]
 				
-				if config.keep_archive_copy:
+				if self.archive_recording_path is not None:
 					output_types.append((self.archive_recording_path, config.ffmpeg_archive_output_args))
 
 				for output_path, output_arguments in output_types:
@@ -447,7 +459,7 @@ if __name__ == '__main__':
 					stream = stream.overwrite_output()
 
 					try:
-						log.debug(f'Processing the recording with the ffmpeg arguments: {stream.get_args()}')
+						log.debug(f'Processing the recording with the FFmpeg arguments: {stream.get_args()}')
 						stream.run()
 					except ffmpeg.Error as error:
 						log.error(f'Failed to process "{self.raw_recording_path}" into "{output_path}" with the error: {repr(error)}')
@@ -466,7 +478,7 @@ if __name__ == '__main__':
 		from comtypes.gen import SpeechLib # type: ignore
 
 		class TextToSpeech():
-			""" A wrapper for the Microsoft Speech API and ffmpeg that generates a text-to-speech recording. """
+			""" A wrapper for the Microsoft Speech API and FFmpeg that generates a text-to-speech recording. """
 
 			engine: SpeechLib.ISpeechVoice
 			stream: SpeechLib.ISpeechFileStream
@@ -549,7 +561,7 @@ if __name__ == '__main__':
 					target_stream = target_stream.global_args(*config.ffmpeg_global_args)
 					target_stream = target_stream.overwrite_output()
 					
-					log.debug(f'Generating the text-to-speech file with the ffmpeg arguments: {target_stream.get_args()}')
+					log.debug(f'Generating the text-to-speech file with the FFmpeg arguments: {target_stream.get_args()}')
 					target_stream.run()
 
 				except (COMError, ffmpeg.Error) as error:
@@ -737,11 +749,11 @@ if __name__ == '__main__':
 
 				browser.go_to_blank_page_with_text('\N{Broom} Initializing \N{Broom}')
 
-				def generate_media_page(wayback_url: str, media_extension: Optional[str] = None) -> tuple[float, Optional[str], Optional[str], bool]:
-					""" Generates the page where a media file is embedded using both the
-					information from the configuration as well as the file's metadata. """
+				def generate_media_page(wayback_url: str, media_extension: Optional[str] = None) -> tuple[bool, Optional[str], str, float, Optional[str], Optional[str]]:
+					""" Generates the page where a media file is embedded using both the information from the configuration as well as the file's metadata. """
 
-					download_success = True
+					success = True
+					download_path = None
 
 					wayback_parts = parse_wayback_machine_snapshot_url(wayback_url)
 					parts = urlparse(wayback_parts.Url if wayback_parts is not None else wayback_url)
@@ -749,7 +761,7 @@ if __name__ == '__main__':
 						
 					if media_extension is None:
 						_, media_extension = os.path.splitext(filename)
-						media_extension = media_extension.lower().strip('.')
+						media_extension = media_extension.lower().removeprefix('.')
 
 					embed_url = wayback_url
 					loop = 'true'
@@ -768,33 +780,29 @@ if __name__ == '__main__':
 							response.raise_for_status()
 							
 							# We need to keep the file extension so Firefox can choose the right plugin to play it.
-							downloaded_file_path = os.path.join(media_download_directory.name, filename)
-							with open(downloaded_file_path, 'wb') as file:
+							download_path = os.path.join(media_download_directory.name, filename)
+							with open(download_path, 'wb') as file:
 								file.write(response.content)
 						
-							log.debug(f'Downloaded the media file "{wayback_url}" to "{downloaded_file_path}".')
+							log.debug(f'Downloaded the media file "{wayback_url}" to "{download_path}".')
 							
-							# Two separate URLs because ffmpeg uses "file:path" instead of "file:///path".
-							# See: https://superuser.com/questions/718027/ffmpeg-concat-doesnt-work-with-absolute-path/1551017#1551017
-							embed_url = f'file:///{downloaded_file_path}'
-							probe_url = f'file:{downloaded_file_path}'
+							embed_url = f'file:///{download_path}'
 							loop = 'false'
 
-							probe = ffmpeg.probe(probe_url)
-							format = probe['format']
-							tags = format.get('tags', {})
-							
+							probe = ffmpeg.probe(download_path)
+
 							# See: https://wiki.multimedia.cx/index.php/FFmpeg_Metadata
+							tags = probe['format'].get('tags', {})
 							title = tags.get('title')
 							author = tags.get('author') or tags.get('artist') or tags.get('album_artist') or tags.get('composer') or tags.get('copyright')
 							log.debug(f'The media file "{title}" by "{author}" has the following tags: {tags}')
 
-							duration = float(format['duration'])
+							duration = float(probe['format']['duration'])
 							log.debug(f'The media file has a duration of {duration} seconds.')
 						
 						except RequestException as error:
 							log.error(f'Failed to download the media file "{wayback_url}" with the error: {repr(error)}')
-							download_success = False
+							success = False
 						except (ffmpeg.Error, KeyError, ValueError) as error:
 							log.warning(f'Could not parse the media file\'s metadata with the error: {repr(error)}')
 							
@@ -812,7 +820,7 @@ if __name__ == '__main__':
 					media_page_file.write(content)
 					media_page_file.flush()
 
-					return duration, title, author, download_success
+					return success, download_path, media_extension, duration, title, author
 
 				def abort_snapshot(snapshot: Snapshot) -> None:
 					""" Aborts a snapshot that couldn't be recorded correctly due to a WebDriver error. """
@@ -827,7 +835,7 @@ if __name__ == '__main__':
 
 				def is_media_extension_allowed(media_extension: str) -> bool:
 					""" Checks if a media snapshot should be recorded. """
-					return bool(config.allowed_media_extensions) and media_extension in config.allowed_media_extensions
+					return media_extension in config.allowed_media_extensions
 
 				db.create_function('IS_media_EXTENSION_ALLOWED', 1, is_media_extension_allowed)
 
@@ -956,11 +964,11 @@ if __name__ == '__main__':
 							delete_file(path)
 
 						if snapshot.IsMedia:
-							media_duration, media_title, media_author, download_success = generate_media_page(snapshot.WaybackUrl, snapshot.MediaExtension)
+							media_success, media_path, media_extension, media_duration, media_title, media_author = generate_media_page(snapshot.WaybackUrl, snapshot.MediaExtension)
 							content_url = media_page_url
 
-							if not download_success:
-								log.error('Failed to download the media file.')
+							if not media_success:
+								log.error('Failed to generate the media file\'s page.')
 								abort_snapshot(snapshot)
 								continue
 						else:
@@ -1120,11 +1128,11 @@ if __name__ == '__main__':
 
 						if snapshot.IsMedia and realmedia_url is not None:
 							log.info(f'Regenerating the media page for the RealMedia file "{realmedia_url}".')
-							media_duration, media_title, media_author, download_success = generate_media_page(realmedia_url)
+							media_success, media_path, media_extension, media_duration, media_title, media_author = generate_media_page(realmedia_url)
 							wait_after_load = clamp(config.base_media_wait_after_load + media_duration, config.min_duration, config.max_duration)
 
-							if not download_success:
-								log.error('Failed to download the RealMedia file.')
+							if not media_success:
+								log.error('Failed to generate the RealMedia file\'s page.')
 								abort_snapshot(snapshot)
 								continue
 
@@ -1151,86 +1159,156 @@ if __name__ == '__main__':
 						os.makedirs(subdirectory_path, exist_ok=True)
 
 						parts = urlparse(snapshot.Url)
-						media_identifier = snapshot.MediaExtension if snapshot.IsMedia else ('p' if snapshot.PageUsesPlugins else '')
+						media_identifier = snapshot.MediaExtension if snapshot.IsMedia else ('p' if snapshot.PageUsesPlugins else None)
 						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, str(snapshot.OldestDatetime.year), str(snapshot.OldestDatetime.month).zfill(2), str(snapshot.OldestDatetime.day).zfill(2), media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
-						with PluginCrashTimer(browser, plugin_crash_timeout) as crash_timer:
-							
-							# Record the snapshot. The page should load faster now that its resources are cached.
+						upload_recording_path: str
+						archive_recording_path: Optional[str]
+						text_to_speech_file_path: Optional[str]
+
+						# This media extension differs from the snapshot's extension when recording a RealMedia file
+						# whose URL was extracted from a metadata file. We should only be converting binary media,
+						# and not text files like playlists or metadata.
+						if config.enable_media_conversion and snapshot.IsMedia and media_extension in config.convertible_media_extensions and media_path is not None:
+
+							# Convert a media snapshot directly and skip capturing the screen.
+
+							log.info(f'Converting the media file "{os.path.basename(media_path)}".')
+
+							browser.close_all_windows()
+							browser.go_to_blank_page_with_text('\N{DNA Double Helix} Converting Media \N{DNA Double Helix}', str(snapshot))
+
+							upload_recording_path = recording_path_prefix + '.mp4'
+							archive_recording_path = None
+							text_to_speech_file_path = None
 
 							try:
-								browser.bring_to_front()
-								pywinauto.mouse.move((0, config.physical_screen_height // 2))
-							except Exception as error:
-								log.error(f'Failed to focus on the browser window and move the mouse with the error: {repr(error)}')
-
-							log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
-							browser.go_to_wayback_url(content_url, close_windows=True)
+								probe = ffmpeg.probe(media_path)
+								has_video_stream = any(stream for stream in probe['streams'] if stream['codec_type'] == 'video')
 							
-							if config.plugin_syncing_reload_vrml_from_cache:
-								# Syncing VRML content in some machines can prevent the Cosmo Player from retrieving
-								# any previously cached assets. We'll fix this by reloading the page from cache using
-								# the F5 shortcut if the Cosmo Player is being used. This solution can cause issues
-								# with other plugins like VLC, which is why it's currently limited to VRML content.
-								# E.g. https://web.archive.org/web/20220616010004if_/http://disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/golf/golf.wrl
-								num_cosmo_player_instances = browser.count_plugin_instances('CpWin32RenderWindow')
-								if num_cosmo_player_instances > 0:
-									log.info(f'Reloading the page from cache since {num_cosmo_player_instances} Cosmo Player instances were found.')
-									browser.reload_page_from_cache()
-
-							if plugin_syncing_type == 'reload':
+								# Add a video stream to the recording if the media file doesn't have one.
+								media_stream = ffmpeg.input(media_path, guess_layout_max=0)
+								video_stream = None if has_video_stream else ffmpeg.input(config.ffmpeg_media_conversion_input_name, **config.ffmpeg_media_conversion_input_args)
+								input_streams: list[ffmpeg.Stream] = list(filter(None, [media_stream, video_stream]))
 								
-								log.debug('Reloading plugin content.')
-								browser.reload_plugin_content()
-							
-							elif plugin_syncing_type == 'unload':
+								stream = ffmpeg.output(*input_streams, upload_recording_path, t=config.max_duration, shortest=None, **config.ffmpeg_upload_output_args)
+								stream = stream.global_args(*config.ffmpeg_global_args)
+								stream = stream.overwrite_output()
+
+								log.debug(f'Converting the media file with the FFmpeg arguments: {stream.get_args()}')
+								output, errors = stream.run(capture_stdout=True, capture_stderr=True)
+
+								log.info(f'Saved the media conversion to "{upload_recording_path}".')
+								state = Snapshot.RECORDED
+
+								for line in output.decode().splitlines():
+									log.info(f'FFmpeg output: {line}')
 								
-								log.debug('Unloading plugin content.')
-								browser.unload_plugin_content(skip_applets=True)
+								for line in errors.decode().splitlines():
+									log.warning(f'FFmpeg warning/error: {line}')
 
-								def delayed_sync_plugins() -> None:
-									""" Reloads any previously unloaded plugin content after a given amount of time has passed. """
-									sleep(config.plugin_syncing_unload_delay)
-									log.debug(f'Reloading plugin content after {config.plugin_syncing_unload_delay:.1f} seconds.')
-									browser.reload_plugin_content(skip_applets=True)
-
-								delayed_sync_plugins_thread = Thread(target=delayed_sync_plugins, name='sync_plugins', daemon=True)
-
-							with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
-							
-								if plugin_syncing_type == 'unload':
-									delayed_sync_plugins_thread.start()
-
-								sleep(wait_after_load)
-
-								for _ in range(num_scrolls):
-
-									for _ in browser.traverse_frames():
-										driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
-									
-									sleep(wait_per_scroll)
-					
-						if plugin_syncing_type == 'unload':
-							delayed_sync_plugins_thread.join()
-
-						redirected = False
-						if not snapshot.IsMedia:
-							redirected, url, timestamp = browser.was_wayback_url_redirected(content_url)
-							if redirected:
-								log.error(f'The page was redirected to "{url}" at {timestamp} while recording.')
-
-						browser.close_all_windows()
-						browser.go_to_blank_page_with_text('\N{Film Projector} Post Processing \N{Film Projector}', str(snapshot))
-						capture.perform_post_processing()
-						
-						if crash_timer.crashed or capture.failed or redirected:
-							log.error(f'Aborted the recording (plugins crashed = {crash_timer.crashed}, capture failed = {capture.failed}, redirected = {redirected}).')
-							state = Snapshot.ABORTED
+							except ffmpeg.Error as error:
+								log.error(f'Aborted the media conversion with the error: {repr(error)}.')
+								state = Snapshot.ABORTED
+							except UnicodeDecodeError as error:
+								log.warning(f'Could not decode the FFmpeg output with the error: {repr(error)}')
 						else:
-							log.info(f'Saved the recording to "{capture.upload_recording_path}".')
-							state = Snapshot.RECORDED
 
+							# Record the snapshot. The page should load faster now that its resources are cached.
+
+							with PluginCrashTimer(browser, plugin_crash_timeout) as crash_timer:
+								
+								try:
+									browser.bring_to_front()
+									pywinauto.mouse.move((0, config.physical_screen_height // 2))
+								except Exception as error:
+									log.error(f'Failed to focus on the browser window and move the mouse with the error: {repr(error)}')
+
+								log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
+								browser.go_to_wayback_url(content_url, close_windows=True)
+								
+								if config.plugin_syncing_reload_vrml_from_cache:
+									# Syncing VRML content in some machines can prevent the Cosmo Player from retrieving
+									# any previously cached assets. We'll fix this by reloading the page from cache using
+									# the F5 shortcut if the Cosmo Player is being used. This solution can cause issues
+									# with other plugins like VLC, which is why it's currently limited to VRML content.
+									# E.g. https://web.archive.org/web/20220616010004if_/http://disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/golf/golf.wrl
+									num_cosmo_player_instances = browser.count_plugin_instances('CpWin32RenderWindow')
+									if num_cosmo_player_instances > 0:
+										log.info(f'Reloading the page from cache since {num_cosmo_player_instances} Cosmo Player instances were found.')
+										browser.reload_page_from_cache()
+
+								if plugin_syncing_type == 'reload':
+									
+									log.debug('Reloading plugin content.')
+									browser.reload_plugin_content()
+								
+								elif plugin_syncing_type == 'unload':
+									
+									log.debug('Unloading plugin content.')
+									browser.unload_plugin_content(skip_applets=True)
+
+									def delayed_sync_plugins() -> None:
+										""" Reloads any previously unloaded plugin content after a given amount of time has passed. """
+										sleep(config.plugin_syncing_unload_delay)
+										log.debug(f'Reloading plugin content after {config.plugin_syncing_unload_delay:.1f} seconds.')
+										browser.reload_plugin_content(skip_applets=True)
+
+									delayed_sync_plugins_thread = Thread(target=delayed_sync_plugins, name='sync_plugins', daemon=True)
+
+								with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
+								
+									if plugin_syncing_type == 'unload':
+										delayed_sync_plugins_thread.start()
+
+									sleep(wait_after_load)
+
+									for _ in range(num_scrolls):
+
+										for _ in browser.traverse_frames():
+											driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
+										
+										sleep(wait_per_scroll)
+						
+							if plugin_syncing_type == 'unload':
+								delayed_sync_plugins_thread.join()
+
+							redirected = False
+							if not snapshot.IsMedia:
+								redirected, url, timestamp = browser.was_wayback_url_redirected(content_url)
+								if redirected:
+									log.error(f'The page was redirected to "{url}" at {timestamp} while recording.')
+
+							browser.close_all_windows()
+							browser.go_to_blank_page_with_text('\N{Film Projector} Post Processing \N{Film Projector}', str(snapshot))
+							capture.perform_post_processing()
+							
+							upload_recording_path = capture.upload_recording_path
+							archive_recording_path = capture.archive_recording_path
+
+							if crash_timer.crashed or capture.failed or redirected:
+								log.error(f'Aborted the recording (plugins crashed = {crash_timer.crashed}, capture failed = {capture.failed}, redirected = {redirected}).')
+								state = Snapshot.ABORTED
+							else:
+								log.info(f'Saved the recording to "{upload_recording_path}".')
+								state = Snapshot.RECORDED
+
+							text_to_speech_file_path = None
+							
+							if config.enable_text_to_speech and not snapshot.IsMedia and state == Snapshot.RECORDED:
+								
+								browser.go_to_blank_page_with_text('\N{Speech Balloon} Generating Text-to-Speech \N{Speech Balloon}', str(snapshot))
+								
+								page_text = '.\n'.join(frame_text_list)
+								text_to_speech_file_path = text_to_speech.generate_text_to_speech_file(snapshot.DisplayTitle, snapshot.OldestDatetime, page_text, snapshot.PageLanguage, recording_path_prefix)
+
+								if text_to_speech_file_path is not None:
+									log.info(f'Saved the text-to-speech file to "{text_to_speech_file_path}".')
+						
+						# If enabled, this step should be done even when converting media files directly
+						# since we might need to save a RealMedia file whose URL was extracted from a
+						# metadata file.
 						if config.proxy_save_missing_snapshots_that_still_exist_online:
 
 							if missing_urls:
@@ -1339,17 +1417,6 @@ if __name__ == '__main__':
 								for url in remaining_missing_urls:
 									saved_urls.append({'snapshot_id': snapshot.Id, 'recording_id': recording_id, 'url': url, 'timestamp': None, 'failed': True})
 
-						text_to_speech_file_path = None
-						if state != Snapshot.ABORTED and config.enable_text_to_speech and not snapshot.IsMedia:
-							
-							browser.go_to_blank_page_with_text('\N{Speech Balloon} Generating Text-to-Speech \N{Speech Balloon}', str(snapshot))
-							
-							page_text = '.\n'.join(frame_text_list)
-							text_to_speech_file_path = text_to_speech.generate_text_to_speech_file(snapshot.DisplayTitle, snapshot.OldestDatetime, page_text, snapshot.PageLanguage, recording_path_prefix)
-
-							if text_to_speech_file_path is not None:
-								log.info(f'Saved the text-to-speech file to "{text_to_speech_file_path}".')
-
 					except SessionNotCreatedException as error:
 						log.warning(f'Terminated the WebDriver session abruptly with the error: {repr(error)}')
 						break
@@ -1361,10 +1428,10 @@ if __name__ == '__main__':
 					try:
 						db.execute('UPDATE Snapshot SET State = :state WHERE Id = :id;', {'state': state, 'id': snapshot.Id})
 
-						if state != Snapshot.ABORTED:
+						if state == Snapshot.RECORDED:
 							
-							upload_filename = os.path.basename(capture.upload_recording_path)
-							archive_filename = os.path.basename(capture.archive_recording_path) if config.keep_archive_copy else None
+							upload_filename = os.path.basename(upload_recording_path)
+							archive_filename = os.path.basename(archive_recording_path) if archive_recording_path is not None else None
 							text_to_speech_filename = os.path.basename(text_to_speech_file_path) if text_to_speech_file_path is not None else None
 
 							db.execute(	'''
@@ -1378,8 +1445,11 @@ if __name__ == '__main__':
 								db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
 
 						else:
-							delete_file(capture.upload_recording_path)
-							delete_file(capture.archive_recording_path)
+							delete_file(upload_recording_path)
+							
+							if archive_recording_path is not None:
+								delete_file(archive_recording_path)
+							
 							if text_to_speech_file_path is not None:
 								delete_file(text_to_speech_file_path)
 
@@ -1387,10 +1457,10 @@ if __name__ == '__main__':
 							db.execute(	'UPDATE Snapshot SET MediaTitle = :media_title, MediaAuthor = :media_author WHERE Id = :id;',
 										{'media_title': media_title, 'media_author': media_author, 'id': snapshot.Id})
 						
-						# For cases where looking at the embed tags while scouting isn't enough.
+						# For cases where looking at the plugin tags while scouting isn't enough.
 						# E.g. https://web.archive.org/web/19961221002554if_/http://www.geocities.com:80/Hollywood/Hills/5988/
-						elif not snapshot.PageUsesPlugins and num_plugin_instances > 0:
-							log.info(f'Detected {num_plugin_instances} plugin instances while no embed tags were found during scouting.')
+						if not snapshot.IsMedia and not snapshot.PageUsesPlugins and num_plugin_instances > 0:
+							log.info(f'Detected {num_plugin_instances} plugin instances while no plugin tags were found during scouting.')
 							db.execute('UPDATE Snapshot SET PageUsesPlugins = :page_uses_plugins WHERE Id = :id;', {'page_uses_plugins': True, 'id': snapshot.Id})
 
 						if config.proxy_save_missing_snapshots_that_still_exist_online:
