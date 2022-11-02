@@ -173,10 +173,12 @@ if __name__ == '__main__':
 		
 		log.info(f'Scouting {num_snapshots} snapshots.')
 
-		# We don't want any extensions or user scripts that change the HTML document, but we do need to use the Greasemonkey extension with a user script
-		# that disables the alert(), confirm(), and prompt() JavaScript functions. This prevents the UnexpectedAlertPresentException, which would otherwise
-		# make it impossible to scrape pages that use those functions.
+		# We don't want any extensions or user scripts that change the HTML document, but we do need
+		# to use the Greasemonkey extension with a user script that disables the alert(), confirm(),
+		# prompt(), and print() JavaScript functions. This prevents the UnexpectedAlertPresentException,
+		# which would otherwise make it impossible to scrape pages that call those functions.
 		# E.g. https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html
+		# E.g. https://web.archive.org/web/20041225205249if_/http://www.me.org:80/cotes_print_fr.php?query=WBQ
 		with Database() as db, Browser(headless=True, use_extensions=True, extension_filter=config.extension_filter, user_script_filter=config.user_script_filter) as (browser, driver):
 
 			if args.initial:

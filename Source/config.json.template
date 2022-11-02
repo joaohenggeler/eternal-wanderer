@@ -185,7 +185,7 @@
 
 		"user_scripts":
 		{
-			"Disable Alert Confirm Prompt": true,
+			"Disable Prompt Functions": true,
 			"Add Stylesheets To Wayback Machine Snapshots": true,
 			"Crescendo To Standard Embed": true,
 			"Bgsound To Embed": true,
@@ -309,7 +309,7 @@
 		"num_snapshots_per_scheduled_batch": 300,
 
 		"extension_filter": ["greasemonkey-3.17-fx.xpi"],
-		"user_script_filter": ["Disable Alert Confirm Prompt"],
+		"user_script_filter": ["Disable Prompt Functions"],
 
 		"initial_snapshots":
 		[
