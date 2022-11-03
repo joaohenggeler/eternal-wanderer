@@ -152,14 +152,12 @@ if __name__ == '__main__':
 			
 			except Exception as error:
 				log.error(f'Failed to find the snapshot at "{url}" near {timestamp} with the error: {repr(error)}')
-
-				while not is_wayback_machine_available():
-					retry = True
-					log.warning(f'Waiting {retry_wait} seconds for the Wayback Machine to become available again.')
-					sleep(retry_wait)
+				retry = not is_wayback_machine_available()
 			
 			finally:
 				if retry:
+					log.warning(f'Waiting {retry_wait} seconds for the Wayback Machine to become available again.')
+					sleep(retry_wait)
 					continue
 				else:
 					break
