@@ -16,7 +16,8 @@ from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
 from mastodon import ( # type: ignore
 	Mastodon, MastodonBadGatewayError, MastodonError,
-	MastodonGatewayTimeoutError, MastodonServiceUnavailableError,
+	MastodonGatewayTimeoutError, MastodonNetworkError,
+	MastodonServiceUnavailableError,
 )
 from tweepy.errors import TweepyException # type: ignore
 
@@ -259,7 +260,7 @@ if __name__ == '__main__':
 						media = mastodon_api.media_post(path, **kwargs)
 						media_id = media.id
 						break
-					except (MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
+					except (MastodonNetworkError, MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
 						log.warning(f'Retrying the media post operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
 						sleep(config.mastodon_retry_wait)
 				else:
@@ -275,7 +276,7 @@ if __name__ == '__main__':
 						status = mastodon_api.status_post(text, **kwargs)
 						status_id = status.id
 						break
-					except (MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
+					except (MastodonNetworkError, MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
 						log.warning(f'Retrying the status post operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
 						sleep(config.mastodon_retry_wait)
 				else:
