@@ -15,7 +15,7 @@ if __name__ == '__main__':
 
 	names_to_values = {name.lower(): priority for priority, name in Snapshot.PRIORITY_NAMES.items() if priority != Snapshot.NO_PRIORITY}
 
-	parser = ArgumentParser(description='Adds a Wayback Machine snapshot to the Eternal Wanderer queue with a given priority. This can be used to scout, record, or publish any existing or new snapshots as soon as possible.')
+	parser = ArgumentParser(description='Adds a Wayback Machine snapshot to the queue with a given priority. This can be used to scout, record, or publish any existing or new snapshots as soon as possible.')
 	parser.add_argument('priority', choices=list(names_to_values), help='The priority to assign to the snapshot.')
 	parser.add_argument('url', help='The URL of the snapshot.')
 	parser.add_argument('timestamp', nargs='?', help='The timestamp of the snapshot. May be omitted if the URL already points to a Wayback Machine snapshot.')
