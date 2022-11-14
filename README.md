@@ -1,6 +1,6 @@
 # Eternal Wanderer
- 
-A Python bot that collects archived web page metadata from the Wayback Machine, records short videos of archived web pages, and publishes them to Twitter and Mastodon.
+
+A Python bot that generates videos of old web pages and media files archived by the Wayback Machine to then publish them to Twitter and Mastodon.
 
 With over 682 billion web pages saved since 1996, the [Wayback Machine](https://web.archive.org/) is a great resource for exploring the early internet. One project that takes advantage of this archive is [wayback_exe](https://github.com/muffinista/wayback_exe), a bot that generates images of old web pages. The Eternal Wanderer extends this idea and records videos of these old pages so that any audiovisual media like Flash movies, Java applets, VRML worlds, MIDI music, and QuickTime videos can also be experienced.
 

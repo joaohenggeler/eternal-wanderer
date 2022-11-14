@@ -268,13 +268,13 @@ if __name__ == '__main__':
 
 		@staticmethod
 		def create() -> 'Proxy':
-			""" Starts the proxy while handling any errors at startup (e.g. Python errors or already used ports). """
+			""" Creates the proxy while handling any errors at startup (e.g. Python errors or already used ports). """
 
 			port = free_port() if config.proxy_port is None else config.proxy_port
 
 			while True:
 				try:
-					log.info(f'Starting the proxy on port {port}.')
+					log.info(f'Creating the proxy on port {port}.')
 					proxy = Proxy(port)
 
 					error = proxy.get(timeout=10)

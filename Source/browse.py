@@ -3,8 +3,10 @@
 import os
 import shutil
 from argparse import ArgumentParser
+from subprocess import Popen
 
 from selenium.common.exceptions import WebDriverException # type: ignore
+from selenium.webdriver.common.utils import free_port # type: ignore
 
 from common import CommonConfig, Browser
 
@@ -14,6 +16,7 @@ if __name__ == '__main__':
 	parser.add_argument('url', nargs='?', default='about:support', help='The URL of the page to open. If omitted, it defaults to "%(default)s".')
 	parser.add_argument('-pluginreg', action='store_true', help='Generate the pluginreg.dat file inside the profile template directory.')
 	parser.add_argument('-disable_multiprocess', action='store_false', dest='multiprocess', help='Disable multiprocess Firefox. This should only be used when running the Classic Add-ons Archive extension since disabling this mode may crash some plugins.')
+	parser.add_argument('-dump', action='store_true', help='Generate a dump file containing all HTTP/HTTPS responses received by the browser.')
 	args = parser.parse_args()
 
 	config = CommonConfig()
@@ -22,7 +25,29 @@ if __name__ == '__main__':
 		parser.error('The "use_master_plugin_registry" option must be disabled in order to generate the pluginreg.dat file.')
 
 	try:
-		with Browser(multiprocess=args.multiprocess, use_extensions=True, use_plugins=True) as (browser, driver):
+		extra_preferences = {}
+
+		if args.dump:
+			port = free_port()
+			process = Popen(['mitmdump', '--quiet', '--listen-port', str(port), '--script', 'dump_proxy_addon.py'])
+			
+			extra_preferences.update({
+				'network.proxy.type': 1, # Manual proxy configuration (see below).
+				'network.proxy.share_proxy_settings': False,
+				'network.proxy.http': '127.0.0.1',
+				'network.proxy.http_port': port,
+				'network.proxy.ssl': '127.0.0.1',
+				'network.proxy.ssl_port': port,
+				'network.proxy.ftp': '127.0.0.1',
+				'network.proxy.ftp_port': port,
+				'network.proxy.socks': '127.0.0.1',
+				'network.proxy.socks_port': port,
+				'network.proxy.no_proxies_on': 'localhost, 127.0.0.1',
+			})
+		
+			print(f'Created the dump proxy on port {port}.')
+
+		with Browser(multiprocess=args.multiprocess, extra_preferences=extra_preferences, use_extensions=True, use_plugins=True) as (browser, driver):
 			
 			if args.pluginreg:
 				
@@ -67,7 +92,12 @@ if __name__ == '__main__':
 
 			input('>>>>> Press enter to close the browser <<<<<')
 
+	except OSError as error:
+		print(f'Failed to create the dump proxy with the error: {repr(error)}')
 	except KeyboardInterrupt:
 		print('Detected a keyboard interrupt when these should not be used to terminate the scout due to a bug when using both Windows and the Firefox WebDriver.')
+	finally:
+		if args.dump:
+			process.terminate()
 
 	print('Finished running.')

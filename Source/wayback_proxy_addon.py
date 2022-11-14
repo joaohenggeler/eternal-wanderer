@@ -3,8 +3,7 @@
 """
 	This mitmproxy script tells the recorder script if the page is still making requests while also
 	checking if any missing files are available in a different subdomain. This script should not be
-	run directly and is instead started automatically by the recorder if the "use_proxy" option is
-	true.
+	run directly and is instead started automatically by the recorder if enable_proxy is enabled.
 """
 
 import os
