@@ -95,7 +95,7 @@ if __name__ == '__main__':
 	except OSError as error:
 		print(f'Failed to create the dump proxy with the error: {repr(error)}')
 	except KeyboardInterrupt:
-		print('Detected a keyboard interrupt when these should not be used to terminate the scout due to a bug when using both Windows and the Firefox WebDriver.')
+		print('Detected a keyboard interrupt when these should not be used to terminate the browser due to a bug when using both Windows and the Firefox WebDriver.')
 	finally:
 		if args.dump:
 			process.terminate()

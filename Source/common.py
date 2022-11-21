@@ -289,10 +289,17 @@ for option in ['encoding', 'hide_title' 'notes']:
 	assert option not in CommonConfig.MUTABLE_OPTIONS, f'The mutable option name "{option}" is reserved.'
 
 config = CommonConfig()
-locale.setlocale(locale.LC_ALL, config.locale)
 
 if config.debug:
 	sqlite3.enable_callback_tracebacks(True)
+
+locale.setlocale(locale.LC_ALL, config.locale)
+
+# Allow Selenium to set any Firefox preference. Otherwise, certain preferences couldn't be changed.
+# See: https://github.com/SeleniumHQ/selenium/blob/selenium-3.141.0/py/selenium/webdriver/firefox/firefox_profile.py
+FirefoxProfile.DEFAULT_PREFERENCES = {}
+FirefoxProfile.DEFAULT_PREFERENCES['frozen'] = {}
+FirefoxProfile.DEFAULT_PREFERENCES['mutable'] = config.preferences
 
 if config.ffmpeg_path is not None:
 	path = os.environ.get('PATH', '')
@@ -768,7 +775,7 @@ class Snapshot():
 		self.DisplayTitle = self.PageTitle
 		if self.HideTitle or not self.DisplayTitle:
 			
-			parts = urlparse(self.Url)
+			parts = urlparse(unquote(self.Url))
 			self.DisplayTitle = os.path.basename(parts.path)
 			
 			if not self.DisplayTitle:
@@ -841,18 +848,6 @@ class Recording():
 		self.TextToSpeechFilePath = os.path.join(subdirectory_path, self.TextToSpeechFilename) if self.TextToSpeechFilename is not None else None
 		self.CompilationSegmentFilePath = None # Set in the compilation script.
 
-class CustomFirefoxProfile(FirefoxProfile):
-	""" A custom Firefox profile used to bypass the frozen Mozilla preferences dictionary defined by Selenium. """
-
-	def __init__(self, profile_directory: Optional[str] = None):
-		
-		if not FirefoxProfile.DEFAULT_PREFERENCES:
-			FirefoxProfile.DEFAULT_PREFERENCES = {}
-			FirefoxProfile.DEFAULT_PREFERENCES['frozen'] = {}
-			FirefoxProfile.DEFAULT_PREFERENCES['mutable'] = config.preferences
-
-		super().__init__(profile_directory)
-
 class Browser():
 	""" A Firefox browser instance created by Selenium. """
 
@@ -909,7 +904,7 @@ class Browser():
 		else:
 			log.info(f'Using a temporary Firefox profile.')
 
-		profile = CustomFirefoxProfile(config.profile_path)
+		profile = FirefoxProfile(config.profile_path)
 		
 		if not config.use_master_plugin_registry:
 			plugin_reg_path = os.path.join(profile.profile_dir, 'pluginreg.dat')

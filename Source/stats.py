@@ -127,7 +127,7 @@ if __name__ == '__main__':
 
 					last_time = row['LastTime']
 					twitter_url = f'https://twitter.com/waybackwanderer/status/{recording.TwitterStatusId}' if recording.TwitterStatusId is not None else '-'
-					mastodon_url = f'https://botsin.space/web/@eternalwanderer/{recording.MastodonStatusId}' if recording.MastodonStatusId is not None else '-'
+					mastodon_url = f'https://botsin.space/@eternalwanderer/{recording.MastodonStatusId}' if recording.MastodonStatusId is not None else '-'
 
 					print(f'- {name}: {last_time}')
 					print(f'-> Snapshot: #{snapshot.Id} {snapshot}')

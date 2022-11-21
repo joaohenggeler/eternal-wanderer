@@ -2,6 +2,7 @@
 
 import subprocess
 from argparse import ArgumentParser
+from subprocess import CalledProcessError
 from time import sleep
 
 from record import RecordConfig
@@ -97,5 +98,5 @@ if __name__ == '__main__':
 
 			print(f'Exported the installed voices registry keys to "{filename}".')
 
-		except subprocess.CalledProcessError as error:
+		except CalledProcessError as error:
 			print(f'Failed to export the installed voices registry keys with the error: "{error.stderr}"')

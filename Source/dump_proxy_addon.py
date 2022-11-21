@@ -8,7 +8,7 @@
 
 from datetime import datetime, timezone
 
-from mitmproxy import io, http # type: ignore
+from mitmproxy import http, io # type: ignore
 
 # See: https://github.com/mitmproxy/mitmproxy/blob/v8.0.0/examples/addons/io-write-flow-file.py
 
