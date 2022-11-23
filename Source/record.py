@@ -1035,10 +1035,15 @@ if __name__ == '__main__':
 								for _ in browser.traverse_frames():
 									
 									frame_scroll_height = driver.execute_script('return document.body.scrollHeight;')
-									if frame_scroll_height > scroll_height:
+									frame_client_height = driver.execute_script('return document.body.clientHeight;')
+									
+									# The second condition is for rare cases where the largest scroll height
+									# has a client height of zero.
+									# E.g. https://web.archive.org/web/20071012232916if_/http://profile.myspace.com:80/index.cfm?fuseaction=user.viewprofile&friendid=15134349
+									if frame_scroll_height > scroll_height and frame_client_height > 0:
 
 										scroll_height = frame_scroll_height
-										client_height = driver.execute_script('return document.body.clientHeight;')
+										client_height = frame_client_height
 
 									if config.enable_text_to_speech:
 
