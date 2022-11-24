@@ -130,7 +130,7 @@ def request(flow: http.HTTPFlow) -> None:
 						parts = parts._replace(scheme='http')
 						url = urlunparse(parts)
 					
-						wayback_parts = wayback_parts._replace(Url=url)
+						wayback_parts.Url = url
 						request.url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
 
 			except (RequestException, UnicodeError):
@@ -222,7 +222,8 @@ def request(flow: http.HTTPFlow) -> None:
 					# Queries to the CDX API cost twice as much here as the queries sent from other scripts.
 					global_rate_limiter.wait_for_cdx_api_rate_limit(cost=2)
 					snapshot = cdx.near(wayback_machine_timestamp=timestamp)
-					wayback_parts = wayback_parts._replace(Timestamp=snapshot.timestamp, Url=snapshot.original)
+					wayback_parts.Timestamp = snapshot.timestamp
+					wayback_parts.Url = snapshot.original
 					found_snapshot = True
 					cdx_mark = f'{identifier} CDX {wayback_response.status_code} -> {snapshot.statuscode}'
 					break
@@ -242,7 +243,7 @@ def request(flow: http.HTTPFlow) -> None:
 
 	# Avoid showing the toolbar in frame pages that are missing their modifier.
 	if wayback_parts.Modifier is None:
-		wayback_parts = wayback_parts._replace(Modifier=Snapshot.IFRAME_MODIFIER)
+		wayback_parts.Modifier = Snapshot.IFRAME_MODIFIER
 
 	# This is used to redirect the request in the majority of cases. For VRML
 	# worlds, we'll create the response ourselves (see below).

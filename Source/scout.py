@@ -545,7 +545,7 @@ if __name__ == '__main__':
 							# Convert the URL to the unmodified page archive.
 							wayback_parts = parse_wayback_machine_snapshot_url(frame_url)
 							if wayback_parts is not None:
-								wayback_parts = wayback_parts._replace(Modifier=Snapshot.IDENTICAL_MODIFIER)
+								wayback_parts.Modifier = Snapshot.IDENTICAL_MODIFIER
 								raw_frame_url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
 								raw_frame_url_list.append(raw_frame_url)
 							else:

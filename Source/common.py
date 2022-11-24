@@ -5,6 +5,7 @@
 	connecting to the database, and interfacing with Firefox.
 """
 
+import dataclasses
 import itertools
 import json
 import locale
@@ -18,7 +19,7 @@ import tempfile
 import warnings
 import winreg
 from base64 import b64encode
-from collections import namedtuple
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from glob import iglob
@@ -280,9 +281,9 @@ class CommonConfig():
 				else:
 					setattr(self, option, self.default_options[option])
 
-	def get_recording_subdirectory_path(self, id: int) -> str:
+	def get_recording_subdirectory_path(self, id_: int) -> str:
 		""" Retrieves the absolute path of a snapshot recording given its ID. """
-		bucket = ceil(id / self.max_recordings_per_directory) * self.max_recordings_per_directory
+		bucket = ceil(id_ / self.max_recordings_per_directory) * self.max_recordings_per_directory
 		return os.path.join(self.recordings_path, str(bucket))
 
 for option in ['encoding', 'hide_title' 'notes']:
@@ -1677,9 +1678,9 @@ class Browser():
 				wayback_parts = parse_wayback_machine_snapshot_url(current_url)
 
 				if wayback_parts is not None:
-					wayback_parts = wayback_parts._replace(Modifier=root_wayback_parts.Modifier)
+					wayback_parts.Modifier = root_wayback_parts.Modifier
 				else:
-					wayback_parts = root_wayback_parts._replace(Url=current_url)
+					wayback_parts = dataclasses.replace(root_wayback_parts, Url=current_url)
 				
 				current_url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
 
@@ -1932,16 +1933,16 @@ class TemporaryRegistry():
 
 		return value
 
-	def set(self, key: str, value: Union[int, str], type: Optional[int] = None) -> Any:
+	def set(self, key: str, value: Union[int, str], type_: Optional[int] = None) -> Any:
 		""" Sets the value of a registry key. Any missing intermediate keys are automatically created. """
 
 		hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
 		
-		if type is None:
+		if type_ is None:
 			if isinstance(value, int):
-				type = winreg.REG_DWORD
+				type_ = winreg.REG_DWORD
 			elif isinstance(value, str):
-				type = winreg.REG_SZ
+				type_ = winreg.REG_SZ
 			else:
 				raise ValueError(f'The type of the value "{value}" could not be autodetected for the registry key "{key}".')	
 	
@@ -1979,7 +1980,7 @@ class TemporaryRegistry():
 				original_state_value = (None, None)
 				result = None
 
-			SetValueEx(key_handle, sub_key, 0, type, value)
+			SetValueEx(key_handle, sub_key, 0, type_, value)
 
 		if original_state_key not in self.original_state:
 			self.original_state[original_state_key] = original_state_value
@@ -2032,8 +2033,8 @@ class TemporaryRegistry():
 
 				for i in range(num_values):
 					try:
-						name, data, type = EnumValue(key_handle, i)
-						yield f'{key}\\{name}', data, type
+						name, data, type_ = EnumValue(key_handle, i)
+						yield f'{key}\\{name}', data, type_
 					except OSError as error:
 						log.error(f'Failed to enumerate value {i+1} of {num_values} in the registry key "{key}" with the error: {repr(error)}')
 
@@ -2080,15 +2081,15 @@ class TemporaryRegistry():
 	def restore(self) -> None:
 		""" Restores the Windows registry to its original state by undoing any changes, additions, and deletions. """
 
-		for (hkey, key_path, sub_key), (type, value) in self.original_state.items():
+		for (hkey, key_path, sub_key), (type_, value) in self.original_state.items():
 			try:
 				with OpenKey(hkey, key_path, access=winreg.KEY_WRITE | winreg.KEY_WOW64_32KEY) as key_handle:
-					if type is None:
+					if type_ is None:
 						DeleteValue(key_handle, sub_key)
 					else:
-						SetValueEx(key_handle, sub_key, 0, type, value)
+						SetValueEx(key_handle, sub_key, 0, type_, value)
 			except OSError as error:
-				log.error(f'Failed to restore the original value "{value}" type {type} of the registry key "{hkey}\\{key_path}\\{sub_key}" with the error: {repr(error)}')
+				log.error(f'Failed to restore the original value "{value}" type {type_} of the registry key "{hkey}\\{key_path}\\{sub_key}" with the error: {repr(error)}')
 
 		keys_to_delete = sorted(self.keys_to_delete, key=lambda x: len(x[1]), reverse=True)
 		for (hkey, key_path, sub_key) in keys_to_delete:
@@ -2207,7 +2208,12 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 	
 	return last_modified_time
 
-WaybackParts = namedtuple('WaybackParts', ['Timestamp', 'Modifier', 'Url'])
+@dataclass
+class WaybackParts:
+	Timestamp: str
+	Modifier: Optional[str]
+	Url: str
+
 WAYBACK_MACHINE_SNAPSHOT_URL_REGEX = re.compile(r'https?://web\.archive\.org/web/(?P<timestamp>\d+)(?P<modifier>[a-z]+_)?/(?P<url>.+)', re.IGNORECASE)
 
 def parse_wayback_machine_snapshot_url(url: str) -> Optional[WaybackParts]:
@@ -2225,8 +2231,8 @@ def parse_wayback_machine_snapshot_url(url: str) -> Optional[WaybackParts]:
 
 	return result
 
-def compose_wayback_machine_snapshot_url(	timestamp: Optional[str] = None, modifier: Optional[str] = None, url: Optional[str] = None,
-											parts: Optional[WaybackParts] = None) -> str:
+def compose_wayback_machine_snapshot_url(*, timestamp: Optional[str] = None, modifier: Optional[str] = None,
+										 url: Optional[str] = None, parts: Optional[WaybackParts] = None) -> str:
 	""" Combines the basic components of a Wayback Machine snapshot into a URL. """
 
 	if parts is not None:

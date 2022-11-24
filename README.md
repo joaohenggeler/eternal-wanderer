@@ -18,7 +18,7 @@ Available on [Twitter](https://twitter.com/waybackwanderer) and [Mastodon](https
 
 * Designed with now obsolete web plugins in mind. The bot will automatically perform the necessary steps so that old web media plays smoothly (e.g. Flash, Shockwave, Java, VRML, MIDI, RealAudio, QuickTime, etc).
 
-* Supports web media that is linked directly instead of being embedded on the page (e.g. VRML worlds, MIDI music, QuickTime videos).
+* Supports web media that is linked directly instead of being embedded on the page (e.g. VRML worlds, MIDI music, QuickTime videos, etc).
 
 * Monitors all HTTP/HTTPS requests and archives files that still exist online using the Wayback Machine's Save API.
 
