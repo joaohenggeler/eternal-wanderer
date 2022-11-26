@@ -258,7 +258,6 @@ if __name__ == '__main__':
 				for i in range(config.mastodon_max_retries):
 					try:
 						media = mastodon_api.media_post(path, **kwargs)
-						media_id = media.id
 						break
 					except (MastodonNetworkError, MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
 						log.warning(f'Retrying the media post operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
@@ -266,7 +265,7 @@ if __name__ == '__main__':
 				else:
 					raise
 
-				return media_id
+				return media.id
 
 			def try_status_post(text: str, **kwargs) -> int:
 				""" Posts a status to the Mastodon instance, retrying if it fails with a 502, 503, or 504 HTTP error. """
@@ -274,7 +273,6 @@ if __name__ == '__main__':
 				for i in range(config.mastodon_max_retries):
 					try:
 						status = mastodon_api.status_post(text, **kwargs)
-						status_id = status.id
 						break
 					except (MastodonNetworkError, MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
 						log.warning(f'Retrying the status post operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
@@ -282,7 +280,7 @@ if __name__ == '__main__':
 				else:
 					raise
 
-				return status_id
+				return status.id
 
 			media_id = None
 			status_id = None
@@ -389,11 +387,11 @@ if __name__ == '__main__':
 												-- Select only the latest recording if multiple files exist.
 												-- Processed recordings must be excluded here since we only
 												-- care about the unpublished ones.
-												SELECT LR.SnapshotId, MAX(LR.CreationTime) AS LastCreationTime
-												FROM Recording LR
-												WHERE NOT LR.IsProcessed
-												GROUP BY LR.SnapshotId
-											) LR ON S.Id = LR.SnapshotId AND R.CreationTime = LR.LastCreationTime
+												SELECT R.SnapshotId, MAX(R.CreationTime) AS LastCreationTime
+												FROM Recording R
+												WHERE NOT R.IsProcessed
+												GROUP BY R.SnapshotId
+											) LCR ON S.Id = LCR.SnapshotId AND R.CreationTime = LCR.LastCreationTime
 											WHERE
 												(S.State = :approved_state OR (S.State = :recorded_state AND NOT :require_approval))
 												AND NOT R.IsProcessed

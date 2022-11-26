@@ -111,10 +111,10 @@ if __name__ == '__main__':
 										INNER JOIN Recording R ON S.Id = R.SnapshotId
 										INNER JOIN
 										(
-											SELECT LR.SnapshotId, MAX(LR.CreationTime) AS LastCreationTime
-											FROM Recording LR
-											GROUP BY LR.SnapshotId
-										) LR ON S.Id = LR.SnapshotId AND R.CreationTime = LR.LastCreationTime
+											SELECT R.SnapshotId, MAX(R.CreationTime) AS LastCreationTime
+											FROM Recording R
+											GROUP BY R.SnapshotId
+										) LCR ON S.Id = LCR.SnapshotId AND R.CreationTime = LCR.LastCreationTime
 										WHERE IS_RECORDING_PART_OF_COMPILATION(S.Id);
 										''')
 				else:

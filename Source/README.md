@@ -327,7 +327,9 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `record_sensitive_snapshots`: @TODO.
 
-* `min_publish_days_for_new_recording`: @TODO.
+* `min_creation_days_for_same_host`: @TODO.
+
+* `min_publish_days_for_same_snapshot`: @TODO.
 
 * `allowed_media_extensions`: @TODO.
 

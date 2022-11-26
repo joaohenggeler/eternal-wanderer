@@ -53,7 +53,8 @@ class RecordConfig(CommonConfig):
 	min_year: Optional[int]
 	max_year: Optional[int]
 	record_sensitive_snapshots: bool
-	min_publish_days_for_new_recording: int
+	min_recordings_for_same_host: Optional[int]
+	min_publish_days_for_same_snapshot: int
 
 	allowed_media_extensions: frozenset[str] # Different from the config data type.
 	multi_asset_media_extensions: frozenset[str] # Different from the config data type.
@@ -837,7 +838,7 @@ if __name__ == '__main__':
 					""" Checks if a media snapshot should be recorded. """
 					return media_extension in config.allowed_media_extensions
 
-				db.create_function('IS_media_EXTENSION_ALLOWED', 1, is_media_extension_allowed)
+				db.create_function('IS_MEDIA_EXTENSION_ALLOWED', 1, is_media_extension_allowed)
 
 				if config.fullscreen_browser:
 					browser.toggle_fullscreen()
@@ -891,34 +892,51 @@ if __name__ == '__main__':
 													CAST(MIN(SUBSTR(S.Timestamp, 1, 4), IFNULL(SUBSTR(S.LastModifiedTime, 1, 4), '9999')) AS INTEGER) AS OldestYear,
 													RANK_SNAPSHOT_BY_POINTS(SI.Points, :ranking_offset) AS Rank,
 													SI.Points,
-													LR.DaysSinceLastPublished
+													LCR.RecordingsSinceSameHost,
+													LPR.DaysSinceLastPublished
 											FROM Snapshot S
 											INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 											LEFT JOIN
 											(
-												SELECT R.SnapshotId, JulianDay('now') - JulianDay(MAX(R.PublishTime)) AS DaysSinceLastPublished
+												SELECT 	SUBSTR(S.UrlKey, 1, INSTR(S.UrlKey, ')') - 1) AS UrlHost,
+														(SELECT COUNT(*) FROM Recording) - MAX(R.RowNum) AS RecordingsSinceSameHost
+												FROM Snapshot S
+												INNER JOIN
+												(
+													SELECT 	R.SnapshotId,
+															(ROW_NUMBER() OVER (ORDER BY R.CreationTime)) AS RowNum
+													FROM Recording R
+												) R ON S.Id = R.SnapshotId
+												GROUP BY UrlHost
+											) LCR ON SUBSTR(S.UrlKey, 1, INSTR(S.UrlKey, ')') - 1) = LCR.UrlHost
+											LEFT JOIN
+											(
+												SELECT 	R.SnapshotId,
+														JulianDay('now') - JulianDay(MAX(R.PublishTime)) AS DaysSinceLastPublished
 												FROM Recording R
 												GROUP BY R.SnapshotId
-											) LR ON S.Id = LR.SnapshotId
+											) LPR ON S.Id = LPR.SnapshotId
 											WHERE
 												(
 													S.State = :scouted_state
 													OR
-													(S.State = :published_state AND LR.DaysSinceLastPublished >= :min_publish_days_for_new_recording)
+													(S.State = :published_state AND LPR.DaysSinceLastPublished >= :min_publish_days_for_same_snapshot)
 												)
 												AND NOT S.IsExcluded
 												AND (:min_year IS NULL OR OldestYear >= :min_year)
 												AND (:max_year IS NULL OR OldestYear <= :max_year)
 												AND (:record_sensitive_snapshots OR NOT SI.IsSensitive)
-												AND (NOT S.IsMedia OR IS_media_EXTENSION_ALLOWED(S.MediaExtension))
+												AND (LCR.RecordingsSinceSameHost IS NULL OR :min_recordings_for_same_host IS NULL OR LCR.RecordingsSinceSameHost >= :min_recordings_for_same_host)
+												AND (NOT S.IsMedia OR IS_MEDIA_EXTENSION_ALLOWED(S.MediaExtension))
 												AND IS_URL_KEY_ALLOWED(S.UrlKey)
 											ORDER BY
 												S.Priority DESC,
 												Rank DESC
 											LIMIT 1;
 											''', {'ranking_offset': config.ranking_offset, 'scouted_state': Snapshot.SCOUTED, 'published_state': Snapshot.PUBLISHED,
-												  'min_publish_days_for_new_recording': config.min_publish_days_for_new_recording, 'min_year': config.min_year,
-												  'max_year': config.max_year, 'record_sensitive_snapshots': config.record_sensitive_snapshots})
+												  'min_publish_days_for_same_snapshot': config.min_publish_days_for_same_snapshot, 'min_year': config.min_year,
+												  'max_year': config.max_year, 'record_sensitive_snapshots': config.record_sensitive_snapshots,
+												  'min_recordings_for_same_host': config.min_recordings_for_same_host})
 						
 						row = cursor.fetchone()
 						if row is not None:
@@ -928,6 +946,11 @@ if __name__ == '__main__':
 							
 							config.apply_snapshot_options(snapshot)
 							browser.set_fallback_encoding_for_snapshot(snapshot)
+
+							recordings_since_same_host = row['RecordingsSinceSameHost']
+
+							if recordings_since_same_host is not None:
+								recordings_since_same_host = round(recordings_since_same_host)
 
 							days_since_last_published = row['DaysSinceLastPublished']
 
@@ -958,7 +981,7 @@ if __name__ == '__main__':
 					# recorded.
 
 					try:
-						log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} with {snapshot.Points} points (last published = {days_since_last_published} days ago).')
+						log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} with {snapshot.Points} points (same host = {recordings_since_same_host} recordings, last published = {days_since_last_published} days).')
 
 						for path in iglob(media_download_search_path):
 							delete_file(path)

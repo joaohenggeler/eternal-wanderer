@@ -2217,7 +2217,7 @@ class WaybackParts:
 WAYBACK_MACHINE_SNAPSHOT_URL_REGEX = re.compile(r'https?://web\.archive\.org/web/(?P<timestamp>\d+)(?P<modifier>[a-z]+_)?/(?P<url>.+)', re.IGNORECASE)
 
 def parse_wayback_machine_snapshot_url(url: str) -> Optional[WaybackParts]:
-	""" Divides the URL to a Wayback Machine snapshot into its basic components. """
+	""" Divides the URL of a Wayback Machine snapshot into its basic components. """
 	
 	result = None
 

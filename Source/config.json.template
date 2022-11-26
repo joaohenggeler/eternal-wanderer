@@ -422,7 +422,8 @@
 		"min_year": null,
 		"max_year": null,
 		"record_sensitive_snapshots": true,
-		"min_publish_days_for_new_recording": 365,
+		"min_recordings_for_same_host": null,
+		"min_publish_days_for_same_snapshot": 365,
 
 		"allowed_media_extensions":
 		[

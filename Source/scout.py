@@ -370,7 +370,7 @@ if __name__ == '__main__':
 												AND IS_URL_KEY_ALLOWED(S.UrlKey)
 											ORDER BY
 												S.Priority DESC,
-												CASE WHEN S.Depth <= :max_required_depth THEN S.Depth ELSE (SELECT MAX(Depth) + 1 FROM Snapshot) END,
+												IIF(S.Depth <= :max_required_depth, S.Depth, (SELECT MAX(S.Depth) + 1 FROM Snapshot S)),
 												Rank DESC
 											LIMIT 1;
 											''', {'ranking_offset': config.ranking_offset, 'queued_state': Snapshot.QUEUED, 'min_year': config.min_year,
