@@ -2224,9 +2224,9 @@ def parse_wayback_machine_snapshot_url(url: str) -> Optional[WaybackParts]:
 	match = WAYBACK_MACHINE_SNAPSHOT_URL_REGEX.fullmatch(url)
 	if match is not None:
 		
-		timestamp = match.group('timestamp')
-		modifier = match.group('modifier')
-		url = match.group('url')
+		timestamp = match['timestamp']
+		modifier = match['modifier']
+		url = match['url']
 		result = WaybackParts(timestamp, modifier, url)
 
 	return result
