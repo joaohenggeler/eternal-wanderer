@@ -1161,7 +1161,7 @@ class Browser():
 			content = file.read()
 
 		# E.g. "1.8.0" or "1.8.0_11"
-		java_product = re.findall(r'(?:jdk|jre)((?:\d+\.\d+\.\d+)(?:_\d+)?)', java_jre_path, flags=re.IGNORECASE)[-1]
+		java_product = re.findall(r'(?:jdk|jre)((?:\d+\.\d+\.\d+)(?:_\d+)?)', java_jre_path, re.IGNORECASE)[-1]
 		java_platform, *_ = java_product.rpartition('.') # E.g. "1.8"
 		*_, java_version = java_platform.partition('.') # E.g. "8"
 
@@ -1197,7 +1197,7 @@ class Browser():
 		with open(java_security_path, encoding='utf-8') as file:
 			content = file.read()
 
-		content = re.sub(r'^jdk\.certpath\.disabledAlgorithms=.*', 'jdk.certpath.disabledAlgorithms=', content, flags=re.MULTILINE | re.IGNORECASE)
+		content = re.sub(r'^jdk\.certpath\.disabledAlgorithms=.*', 'jdk.certpath.disabledAlgorithms=', content, re.IGNORECASE | re.MULTILINE)
 
 		with open(java_security_path, 'w', encoding='utf-8') as file:
 			file.write(content)
