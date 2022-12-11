@@ -59,8 +59,7 @@ if __name__ == '__main__':
 				priority = max(snapshot.Priority, Snapshot.RECORD_PRIORITY)
 				is_sensitive_override = snapshot.IsSensitiveOverride
 				is_processed = True
-				num_missing += 1
-
+				
 				snapshot_updates.append({'state': state, 'priority': priority, 'is_sensitive_override': is_sensitive_override, 'id': snapshot.Id})
 				recording_updates.append({'is_processed': is_processed, 'id': recording.Id})
 
@@ -72,6 +71,7 @@ if __name__ == '__main__':
 
 				if args.redo:
 					record_snapshot_again(snapshot, recording)
+					num_to_record_again += 1
 					continue
 
 				try:
@@ -102,6 +102,7 @@ if __name__ == '__main__':
 				except FileNotFoundError:
 					print('The recording file does not exist.')
 					record_snapshot_again(snapshot, recording)
+					num_missing += 1
 					continue
 
 				while True:
