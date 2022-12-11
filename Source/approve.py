@@ -13,6 +13,7 @@ if __name__ == '__main__':
 	parser = ArgumentParser(description='Approves recordings for publishing. This process is optional and can only be done if the publisher script was started with the "require_approval" option enabled.')
 	parser.add_argument('max_recordings', nargs='?', type=int, default=-1, help='How many recordings to approve. Omit or set to %(default)s to approve all recordings.')
 	parser.add_argument('-tts', action='store_true', help='Play the text-to-speech audio files after each recording.')
+	parser.add_argument('-redo', action='store_true', help='Record every snapshot again.')
 	args = parser.parse_args()
 
 	config = PublishConfig()
@@ -51,11 +52,27 @@ if __name__ == '__main__':
 			num_to_record_again = 0
 			num_missing = 0
 
+			def record_snapshot_again(snapshot: Snapshot, recording: Recording) -> None:
+				""" Tells the other scripts that this snapshot must be recorded again as soon as possible. """
+
+				state = Snapshot.SCOUTED
+				priority = max(snapshot.Priority, Snapshot.RECORD_PRIORITY)
+				is_sensitive_override = snapshot.IsSensitiveOverride
+				is_processed = True
+				num_missing += 1
+
+				snapshot_updates.append({'state': state, 'priority': priority, 'is_sensitive_override': is_sensitive_override, 'id': snapshot.Id})
+				recording_updates.append({'is_processed': is_processed, 'id': recording.Id})
+
 			for i, row in enumerate(row_list):
 
 				del row['Id']
 				snapshot = Snapshot(**row, Id=row['SnapshotId'])
 				recording = Recording(**row, Id=row['RecordingId'])
+
+				if args.redo:
+					record_snapshot_again(snapshot, recording)
+					continue
 
 				try:
 					print()
@@ -84,17 +101,7 @@ if __name__ == '__main__':
 				
 				except FileNotFoundError:
 					print('The recording file does not exist.')
-					
-					# This is the same as telling it to record the snapshot again (see below).
-					state = Snapshot.SCOUTED
-					priority = max(snapshot.Priority, Snapshot.RECORD_PRIORITY)
-					is_sensitive_override = snapshot.IsSensitiveOverride
-					is_processed = True
-					num_missing += 1
-
-					snapshot_updates.append({'state': state, 'priority': priority, 'is_sensitive_override': is_sensitive_override, 'id': snapshot.Id})
-					recording_updates.append({'is_processed': is_processed, 'id': recording.Id})
-					
+					record_snapshot_again(snapshot, recording)
 					continue
 
 				while True:
