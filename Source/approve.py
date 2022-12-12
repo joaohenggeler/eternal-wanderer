@@ -3,6 +3,7 @@
 import os
 import sqlite3
 from argparse import ArgumentParser
+from collections.abc import Iterator
 from typing import Optional
 
 from common import Database, Recording, Snapshot
@@ -13,6 +14,7 @@ if __name__ == '__main__':
 	parser = ArgumentParser(description='Approves recordings for publishing. This process is optional and can only be done if the publisher script was started with the "require_approval" option enabled.')
 	parser.add_argument('max_recordings', nargs='?', type=int, default=-1, help='How many recordings to approve. Omit or set to %(default)s to approve all recordings.')
 	parser.add_argument('-tts', action='store_true', help='Play the text-to-speech audio files after each recording.')
+	parser.add_argument('-alternate', action='store_true', help='Alternate recordings between the beginning and the end.')
 	parser.add_argument('-redo', action='store_true', help='Record every snapshot again.')
 	args = parser.parse_args()
 
@@ -52,6 +54,11 @@ if __name__ == '__main__':
 			num_to_record_again = 0
 			num_missing = 0
 
+			def alternate(items: list) -> Iterator:
+				""" Alternates elements between the beginning and the end of a list. """
+				for i in range(len(items)):
+					yield items[i//2] if i % 2 == 0 else items[-i//2]
+
 			def record_snapshot_again(snapshot: Snapshot, recording: Recording) -> None:
 				""" Tells the other scripts that this snapshot must be recorded again as soon as possible. """
 
@@ -63,7 +70,9 @@ if __name__ == '__main__':
 				snapshot_updates.append({'state': state, 'priority': priority, 'is_sensitive_override': is_sensitive_override, 'id': snapshot.Id})
 				recording_updates.append({'is_processed': is_processed, 'id': recording.Id})
 
-			for i, row in enumerate(row_list):
+			row_iter = alternate(row_list) if args.alternate else row_list
+			
+			for i, row in enumerate(row_iter):
 
 				del row['Id']
 				snapshot = Snapshot(**row, Id=row['SnapshotId'])

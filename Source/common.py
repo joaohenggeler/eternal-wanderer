@@ -19,6 +19,7 @@ import tempfile
 import warnings
 import winreg
 from base64 import b64encode
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -27,7 +28,7 @@ from math import ceil
 from random import random
 from subprocess import Popen
 from time import sleep
-from typing import Any, Iterator, Optional, Union
+from typing import Any, Optional, Union
 from urllib.parse import ParseResult, unquote, urlparse, urlunparse
 from winreg import (
 	CreateKeyEx, DeleteKey, DeleteValue, EnumKey, EnumValue,

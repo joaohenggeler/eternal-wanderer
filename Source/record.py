@@ -9,7 +9,7 @@ import subprocess
 import sys
 from argparse import ArgumentParser
 from collections import Counter, defaultdict
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime
 from glob import iglob
 from math import ceil
@@ -18,7 +18,7 @@ from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, STDOUT, Timeout
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from threading import Thread, Timer
 from time import monotonic, sleep
-from typing import BinaryIO, ContextManager, Optional, Union, cast
+from typing import BinaryIO, Optional, Union, cast
 from urllib.parse import urljoin, urlparse, urlunparse
 
 import ffmpeg # type: ignore
@@ -1180,8 +1180,8 @@ if __name__ == '__main__':
 						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.max_duration
 						plugin_syncing_type = config.plugin_syncing_media_type if snapshot.IsMedia else config.plugin_syncing_page_type
 
-						plugin_input_repeater: Union[PluginInputRepeater, ContextManager[None]] = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
-						cosmo_player_viewpoint_cycler: Union[CosmoPlayerViewpointCycler, ContextManager[None]] = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
+						plugin_input_repeater: Union[PluginInputRepeater, AbstractContextManager[None]] = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
+						cosmo_player_viewpoint_cycler: Union[CosmoPlayerViewpointCycler, AbstractContextManager[None]] = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
 
 						subdirectory_path = config.get_recording_subdirectory_path(recording_id)
 						os.makedirs(subdirectory_path, exist_ok=True)
