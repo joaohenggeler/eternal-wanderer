@@ -43,6 +43,7 @@ class ScoutConfig(CommonConfig):
 	
 	initial_snapshots: list[dict[str, str]]
 	
+	ranking_max_points: Optional[int]
 	ranking_offset: Optional[int]
 	min_year: Optional[int]
 	max_year: Optional[int]
@@ -349,7 +350,7 @@ if __name__ == '__main__':
 						cursor = db.execute('''
 											SELECT 	S.*,
 													CAST(MIN(SUBSTR(S.Timestamp, 1, 4), IFNULL(SUBSTR(S.LastModifiedTime, 1, 4), '9999')) AS INTEGER) AS OldestYear,
-													RANK_SNAPSHOT_BY_POINTS(PSI.ParentPoints, :ranking_offset) AS Rank,
+													RANK_SNAPSHOT_BY_POINTS(IFNULL(MIN(PSI.ParentPoints, :ranking_max_points), PSI.ParentPoints), :ranking_offset) AS Rank,
 													PSI.ParentPoints
 											FROM Snapshot S
 											LEFT JOIN
@@ -373,8 +374,9 @@ if __name__ == '__main__':
 												IIF(S.Depth <= :max_required_depth, S.Depth, (SELECT MAX(S.Depth) + 1 FROM Snapshot S)),
 												Rank DESC
 											LIMIT 1;
-											''', {'ranking_offset': config.ranking_offset, 'queued_state': Snapshot.QUEUED, 'min_year': config.min_year,
-												  'max_year': config.max_year, 'max_depth': config.max_depth, 'max_required_depth': config.max_required_depth})
+											''', {'ranking_max_points': config.ranking_max_points, 'ranking_offset': config.ranking_offset,
+												  'queued_state': Snapshot.QUEUED, 'min_year': config.min_year, 'max_year': config.max_year,
+												  'max_depth': config.max_depth, 'max_required_depth': config.max_required_depth})
 						
 						row = cursor.fetchone()
 						if row is not None:

@@ -361,6 +361,7 @@
 			{"url": "http://www.yahoo.com/", "timestamp": "19961017235908"}
 		],
 
+		"ranking_max_points": 5000,
 		"ranking_offset": 100,
 		"min_year": null,
 		"max_year": 2010,

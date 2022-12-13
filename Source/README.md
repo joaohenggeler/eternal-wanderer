@@ -283,6 +283,8 @@ Used by `scout.py`.
 
 * `initial_snapshots`: a list of snapshots (URL and timestamp) to be used as the starting point when scouting. Only used if the `-initial` argument is passed to the script.
 
+* `ranking_max_points`: the maximum amount of points to use when ranking a snapshot. May be null if there's no maximum.
+
 * `ranking_offset`: how much to increase the likelihood that a snapshot with no points is scouted next. If this is zero, snapshots whose parents have a positive total amount of points are more likely to be chosen by the weighted random sampling algorithm. In this case, snapshots whose total is zero points are ranked last. As this option increases, these zero-point snapshots can be ranked higher than other ones and may be chosen by the algorithm. If this option is null, snapshots are picked at random regardless of their parents' point total.
 
 * `min_year`: the minimum year for a snapshot to be scouted (inclusive). May be null if there's no minimum.
