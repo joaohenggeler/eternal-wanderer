@@ -295,6 +295,8 @@ Used by `scout.py`.
 
 * `max_required_depth`: the maximum depth for which snapshots are prioritized (inclusive). Snapshots in this range are always scouted first until they're exhausted. May be null if there's no maximum.
 
+* `min_snapshots_for_same_host`: the minimum amount of snapshots that have to be scouted before the same host is visited again. May be null if there's no minimum.
+
 * `excluded_url_tags`: which HTML tags to skip when collecting URLs from their attributes.
 
 * `store_all_words_and_tags`: enable to store every word and tag from a snapshot's page in the database. Note that this will substantially increase the database's size. If disabled, only the words and tags in `word_points` and `tag_points` are stored. 
@@ -305,7 +307,7 @@ Used by `scout.py`.
 
 * `media_points`: how many points each media snapshot is worth.
 
-* `sensitive_words`: a list of words that would label a snapshot as sensitive. A word may be prefixed with `b64:` if its encoded in Base64.
+* `sensitive_words`: a list of words that would label a snapshot as sensitive. A word may be prefixed with `b64:` if it's encoded in Base64.
 
 * `detect_page_language`: enable to automatically detect each page's language using its content. Requires a language identification model in `language_model_path`.
 

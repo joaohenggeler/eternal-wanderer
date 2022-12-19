@@ -940,6 +940,7 @@ if __name__ == '__main__':
 						
 						row = cursor.fetchone()
 						if row is not None:
+							
 							snapshot = Snapshot(**dict(row))
 
 							assert snapshot.Points is not None, 'The Points column is not being computed properly.'

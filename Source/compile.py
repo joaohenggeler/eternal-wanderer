@@ -250,7 +250,7 @@ if __name__ == '__main__':
 								formatted_timestamp = str(timestamp).zfill(8)
 								plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsMedia or snapshot.PageUsesPlugins else None
 								sensitive_identifier = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
-								recording_identifiers = [formatted_timestamp, f'"{snapshot.DisplayTitle}"', f'({snapshot.ShortDate})', plugin_identifier, sensitive_identifier]
+								recording_identifiers = [formatted_timestamp, snapshot.DisplayTitle, f'({snapshot.ShortDate})', plugin_identifier, sensitive_identifier]
 								
 								timestamp_line = ' '.join(filter(None, recording_identifiers))
 								timestamps_file.write(f'{timestamp_line}\n')

@@ -12,7 +12,7 @@ from argparse import ArgumentParser
 from base64 import b64decode
 from collections import Counter
 from time import sleep
-from typing import Optional, Union
+from typing import Optional, Union, cast
 from urllib.parse import parse_qsl, unquote, urlparse, urlunparse
 
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
@@ -49,6 +49,7 @@ class ScoutConfig(CommonConfig):
 	max_year: Optional[int]
 	max_depth: Optional[int]
 	max_required_depth: Optional[int]
+	min_snapshots_for_same_host: Optional[int]
 
 	excluded_url_tags: list[str]
 	
@@ -167,9 +168,14 @@ if __name__ == '__main__':
 
 	scheduler = BlockingScheduler()
 
+	last_scouted_hosts: dict[str, int] = {}
+	total_scouted = 0
+
 	def scout_snapshots(num_snapshots: int) -> None:
 		""" Scouts a given number of snapshots in a single batch. """
 		
+		global total_scouted
+
 		log.info(f'Scouting {num_snapshots} snapshots.')
 
 		# We don't want any extensions or user scripts that change the HTML document, but we do need
@@ -380,9 +386,24 @@ if __name__ == '__main__':
 						
 						row = cursor.fetchone()
 						if row is not None:
+							
 							snapshot = Snapshot(**dict(row))
+							
 							browser.set_fallback_encoding_for_snapshot(snapshot)
 							parent_points = row['ParentPoints']
+
+							host, *_ = cast(str, snapshot.UrlKey).lower().partition(')')
+							host, *_ = host.partition(':')
+							
+							can_scout = snapshot.Priority != Snapshot.NO_PRIORITY \
+									 or host not in last_scouted_hosts \
+									 or config.min_snapshots_for_same_host is None \
+									 or total_scouted - last_scouted_hosts[host] >= config.min_snapshots_for_same_host
+
+							if not can_scout:
+								log.debug(f'Skipping snapshot #{snapshot.Id} {snapshot} since it was scouted fewer than {config.min_snapshots_for_same_host} snapshots ago.')
+								continue
+
 						else:
 							log.info('Ran out of snapshots to scout.')
 							break
@@ -728,6 +749,9 @@ if __name__ == '__main__':
 						db.rollback()
 						sleep(config.database_error_wait)
 						continue
+
+					total_scouted += 1
+					last_scouted_hosts[host] = total_scouted
 
 			except KeyboardInterrupt:
 				log.warning('Detected a keyboard interrupt when these should not be used to terminate the scout due to a bug when using both Windows and the Firefox WebDriver.')

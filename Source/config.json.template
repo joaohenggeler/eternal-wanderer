@@ -367,6 +367,7 @@
 		"max_year": 2010,
 		"max_depth": null,
 		"max_required_depth": null,
+		"min_snapshots_for_same_host": 100,
 
 		"excluded_url_tags": ["link"],
 
