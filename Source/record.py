@@ -889,6 +889,7 @@ if __name__ == '__main__':
 					try:
 						cursor = db.execute('''
 											SELECT 	S.*,
+													S.Priority <> :no_priority AS IsHighPriority,
 													CAST(MIN(SUBSTR(S.Timestamp, 1, 4), IFNULL(SUBSTR(S.LastModifiedTime, 1, 4), '9999')) AS INTEGER) AS OldestYear,
 													RANK_SNAPSHOT_BY_POINTS(SI.Points, :ranking_offset) AS Rank,
 													SI.Points,
@@ -922,21 +923,23 @@ if __name__ == '__main__':
 													OR
 													(S.State = :published_state AND LPR.DaysSinceLastPublished >= :min_publish_days_for_same_snapshot)
 												)
-												AND NOT S.IsExcluded
-												AND (:min_year IS NULL OR OldestYear >= :min_year)
-												AND (:max_year IS NULL OR OldestYear <= :max_year)
-												AND (:record_sensitive_snapshots OR NOT SI.IsSensitive)
-												AND (S.Priority <> :no_priority OR LCR.RecordingsSinceSameHost IS NULL OR :min_recordings_for_same_host IS NULL OR LCR.RecordingsSinceSameHost >= :min_recordings_for_same_host)
 												AND (NOT S.IsMedia OR IS_MEDIA_EXTENSION_ALLOWED(S.MediaExtension))
-												AND IS_URL_KEY_ALLOWED(S.UrlKey)
+												AND NOT S.IsExcluded
+												AND (IsHighPriority OR :min_year IS NULL OR OldestYear >= :min_year)
+												AND (IsHighPriority OR :max_year IS NULL OR OldestYear <= :max_year)
+												AND (IsHighPriority OR :record_sensitive_snapshots OR NOT SI.IsSensitive)
+												AND (IsHighPriority OR LCR.RecordingsSinceSameHost IS NULL OR :min_recordings_for_same_host IS NULL OR LCR.RecordingsSinceSameHost >= :min_recordings_for_same_host)
+												AND (IsHighPriority OR IS_URL_KEY_ALLOWED(S.UrlKey))
 											ORDER BY
 												S.Priority DESC,
 												Rank DESC
 											LIMIT 1;
-											''', {'ranking_offset': config.ranking_offset, 'scouted_state': Snapshot.SCOUTED, 'published_state': Snapshot.PUBLISHED,
-												  'min_publish_days_for_same_snapshot': config.min_publish_days_for_same_snapshot, 'min_year': config.min_year,
-												  'max_year': config.max_year, 'record_sensitive_snapshots': config.record_sensitive_snapshots,
-												  'no_priority': Snapshot.NO_PRIORITY, 'min_recordings_for_same_host': config.min_recordings_for_same_host})
+											''', {'no_priority': Snapshot.NO_PRIORITY, 'ranking_offset': config.ranking_offset,
+												  'scouted_state': Snapshot.SCOUTED, 'published_state': Snapshot.PUBLISHED,
+												  'min_publish_days_for_same_snapshot': config.min_publish_days_for_same_snapshot,
+												  'min_year': config.min_year, 'max_year': config.max_year,
+												  'record_sensitive_snapshots': config.record_sensitive_snapshots,
+												  'min_recordings_for_same_host': config.min_recordings_for_same_host})
 						
 						row = cursor.fetchone()
 						if row is not None:

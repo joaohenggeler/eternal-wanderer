@@ -3,7 +3,6 @@
 import os
 import sqlite3
 from argparse import ArgumentParser
-from datetime import timedelta
 from tempfile import NamedTemporaryFile
 
 import ffmpeg # type: ignore
@@ -48,13 +47,13 @@ if __name__ == '__main__':
 			include_id_list: list[int] = []
 			exclude_id_list: list[int] = []
 			
-			for id in id_list.split(','):
+			for id_ in id_list.split(','):
 				
-				current_list = exclude_id_list if id.startswith('!') else include_id_list
-				id = id.removeprefix('!')
+				current_list = exclude_id_list if id_.startswith('!') else include_id_list
+				id_ = id_.removeprefix('!')
 
-				if '-' in id:
-					begin_id, _, end_id = id.partition('-')
+				if '-' in id_:
+					begin_id, _, end_id = id_.partition('-')
 					begin_id, end_id = int(begin_id), int(end_id)
 
 					if begin_id <= end_id:
@@ -64,12 +63,12 @@ if __name__ == '__main__':
 
 					current_list.extend(range_id_list)
 				else:
-					current_list.append(int(id))
+					current_list.append(int(id_))
 
 			include_id_list = list(dict.fromkeys(include_id_list))
 			exclude_id_list = list(dict.fromkeys(exclude_id_list))
 
-			id_list = [id for id in include_id_list if id not in exclude_id_list]
+			id_list = [id_ for id_ in include_id_list if id_ not in exclude_id_list]
 
 		except ValueError:
 			parser.error(f'Could not convert the snapshot IDs "{id_list}" into a list of integers.')
@@ -97,9 +96,9 @@ if __name__ == '__main__':
 									''', {'begin_date': begin_date, 'end_date': end_date})
 
 			else:
-				def is_recording_part_of_compilation(id: int) -> bool:
+				def is_recording_part_of_compilation(id_: int) -> bool:
 					""" Checks if a recording should be compiled given its snapshot or recording ID. """
-					return id in id_list
+					return id_ in id_list
 
 				db.create_function('IS_RECORDING_PART_OF_COMPILATION', 1, is_recording_part_of_compilation)
 
@@ -246,11 +245,13 @@ if __name__ == '__main__':
 								concat_file.write(f"file 'file:{recording_concat_path}'\n")
 								concat_file.write(f"file 'file:{transition_concat_path}'\n")
 
-								timestamp = timedelta(seconds=round(current_duration))
-								formatted_timestamp = str(timestamp).zfill(8)
+								minutes, seconds = divmod(current_duration, 60)
+								hours, minutes = divmod(minutes, 60)
+								timestamp = f'{hours:02}:{minutes:02}:{seconds:02}'
 								plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsMedia or snapshot.PageUsesPlugins else None
 								sensitive_identifier = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
-								recording_identifiers = [formatted_timestamp, snapshot.DisplayTitle, f'({snapshot.ShortDate})', plugin_identifier, sensitive_identifier]
+								
+								recording_identifiers = [timestamp, snapshot.DisplayTitle, f'({snapshot.ShortDate})', plugin_identifier, sensitive_identifier]
 								
 								timestamp_line = ' '.join(filter(None, recording_identifiers))
 								timestamps_file.write(f'{timestamp_line}\n')

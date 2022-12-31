@@ -355,6 +355,7 @@ if __name__ == '__main__':
 					try:
 						cursor = db.execute('''
 											SELECT 	S.*,
+													S.Priority <> :no_priority AS IsHighPriority,
 													CAST(MIN(SUBSTR(S.Timestamp, 1, 4), IFNULL(SUBSTR(S.LastModifiedTime, 1, 4), '9999')) AS INTEGER) AS OldestYear,
 													RANK_SNAPSHOT_BY_POINTS(IFNULL(MIN(PSI.ParentPoints, :ranking_max_points), PSI.ParentPoints), :ranking_offset) AS Rank,
 													PSI.ParentPoints
@@ -371,17 +372,18 @@ if __name__ == '__main__':
 												S.State = :queued_state
 												AND NOT S.IsMedia
 												AND NOT S.IsExcluded
-												AND (:min_year IS NULL OR OldestYear >= :min_year)
-												AND (:max_year IS NULL OR OldestYear <= :max_year)
-												AND (:max_depth IS NULL OR S.Depth <= :max_depth)
-												AND IS_URL_KEY_ALLOWED(S.UrlKey)
+												AND (IsHighPriority OR :min_year IS NULL OR OldestYear >= :min_year)
+												AND (IsHighPriority OR :max_year IS NULL OR OldestYear <= :max_year)
+												AND (IsHighPriority OR :max_depth IS NULL OR S.Depth <= :max_depth)
+												AND (IsHighPriority OR IS_URL_KEY_ALLOWED(S.UrlKey))
 											ORDER BY
 												S.Priority DESC,
 												IIF(S.Depth <= :max_required_depth, S.Depth, (SELECT MAX(S.Depth) + 1 FROM Snapshot S)),
 												Rank DESC
 											LIMIT 1;
-											''', {'ranking_max_points': config.ranking_max_points, 'ranking_offset': config.ranking_offset,
-												  'queued_state': Snapshot.QUEUED, 'min_year': config.min_year, 'max_year': config.max_year,
+											''', {'no_priority': Snapshot.NO_PRIORITY, 'ranking_max_points': config.ranking_max_points,
+												  'ranking_offset': config.ranking_offset, 'queued_state': Snapshot.QUEUED,
+												  'min_year': config.min_year, 'max_year': config.max_year,
 												  'max_depth': config.max_depth, 'max_required_depth': config.max_required_depth})
 						
 						row = cursor.fetchone()
