@@ -144,7 +144,9 @@ if __name__ == '__main__':
 					sleep(config.api_wait)
 					twitter_api.create_media_metadata(media_id, alt_text)
 				
-				max_title_length = max(config.twitter_max_status_length - len(body), 0)
+				# We need to take into account the extra newline and the plugin identifier emoji.
+				# Note that emojis count as two characters on Twitter.
+				max_title_length = max(config.twitter_max_status_length - len(body) - 2, 0)
 				text = f'{title[:max_title_length]}\n{body}'
 
 				sleep(config.api_wait)
@@ -192,7 +194,7 @@ if __name__ == '__main__':
 								if len(segment_file_paths) > 1:
 									segment_body += f'\n{i+1} of {len(segment_file_paths)}'
 								
-								max_title_length = max(config.twitter_max_status_length - len(segment_body), 0)
+								max_title_length = max(config.twitter_max_status_length - len(segment_body) - 2, 0)
 								tts_text = f'{title[:max_title_length]}\n{segment_body}'
 
 								sleep(config.api_wait)
@@ -300,7 +302,7 @@ if __name__ == '__main__':
 
 					media_id = try_media_post(recording_path, mime_type='video/mp4', description=alt_text)
 
-					max_title_length = max(config.mastodon_max_status_length - len(body), 0)
+					max_title_length = max(config.mastodon_max_status_length - len(body) - 1, 0)
 					text = f'{title[:max_title_length]}\n{body}'
 
 					sleep(config.api_wait)
@@ -321,7 +323,7 @@ if __name__ == '__main__':
 								sleep(config.api_wait)
 								tts_media_id = try_media_post(tts_path, mime_type='video/mp4', description=tts_alt_text)
 
-								max_title_length = max(config.mastodon_max_status_length - len(tts_body), 0)
+								max_title_length = max(config.mastodon_max_status_length - len(tts_body) - 1, 0)
 								tts_text = f'{title[:max_title_length]}\n{tts_body}'
 
 								sleep(config.api_wait)

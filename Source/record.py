@@ -921,7 +921,7 @@ if __name__ == '__main__':
 												(
 													S.State = :scouted_state
 													OR
-													(S.State = :published_state AND LPR.DaysSinceLastPublished >= :min_publish_days_for_same_snapshot)
+													(S.State = :published_state AND (IsHighPriority OR LPR.DaysSinceLastPublished >= :min_publish_days_for_same_snapshot))
 												)
 												AND (NOT S.IsMedia OR IS_MEDIA_EXTENSION_ALLOWED(S.MediaExtension))
 												AND NOT S.IsExcluded
