@@ -3,6 +3,7 @@
 import os
 import sqlite3
 from argparse import ArgumentParser
+from hashlib import sha256
 from tempfile import NamedTemporaryFile
 
 import ffmpeg # type: ignore
@@ -202,7 +203,16 @@ if __name__ == '__main__':
 					
 					id_identifier = str(compilation_id) if args.published else None
 					type_identifier = 'published' if args.published else f'any_{id_type}'
-					range_identifier = args.any[1] if args.any else f'{begin_date.replace("-", "_").replace(" ", "_").replace(":", "_")}_to_{end_date.replace("-", "_").replace(" ", "_").replace(":", "_")}'
+
+					if args.any:
+						id_list_bytes = str(id_list).encode()
+						id_list_hash = sha256(id_list_bytes).hexdigest()
+						range_identifier = id_list_hash[:6]
+					else:
+						formatted_begin_date = begin_date.replace('-', '_').replace(' ', '_').replace(':', '_')
+						formatted_end_date = end_date.replace('-', '_').replace(' ', '_').replace(':', '_')
+						range_identifier = f'{formatted_begin_date}_to_{formatted_end_date}'
+
 					total_identifier = f'with_{num_found}_of_{total_recordings}'
 					text_to_speech_identifier = 'tts' if args.tts else None
 
@@ -274,7 +284,7 @@ if __name__ == '__main__':
 							if args.published:
 								timestamps_file.write(f'Type: Published ({begin_date} to {end_date})\n')
 							else:
-								timestamps_file.write(f'Type: Any {id_type.title()} ({args.any[1]})\n')
+								timestamps_file.write(f'Type: Any {id_type.title()} ({range_identifier})\n')
 							
 							timestamps_file.write(f'Text-to-Speech: {"Yes" if args.tts else "No"}\n')
 							timestamps_file.write(f'Transition Color: {args.color}\n')
