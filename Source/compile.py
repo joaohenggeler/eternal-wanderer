@@ -276,9 +276,12 @@ if __name__ == '__main__':
 							recording_ids = ','.join(str(recording.Id) for _, recording in snapshots_and_recordings)
 							
 							timestamps_file.write(f'Snapshots: {snapshot_ids}\n')
-							timestamps_file.write(f'Recordings: {recording_ids}\n')
-							timestamps_file.write(f'Total: {len(snapshots_and_recordings)}\n')
+							timestamps_file.write('\n')
 
+							timestamps_file.write(f'Recordings: {recording_ids}\n')
+							timestamps_file.write('\n')
+
+							timestamps_file.write(f'Total: {len(snapshots_and_recordings)}\n')
 							timestamps_file.write('\n')
 							
 							if args.published:
