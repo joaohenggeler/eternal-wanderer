@@ -245,7 +245,7 @@ if __name__ == '__main__':
 								concat_file.write(f"file 'file:{recording_concat_path}'\n")
 								concat_file.write(f"file 'file:{transition_concat_path}'\n")
 
-								minutes, seconds = divmod(current_duration, 60)
+								minutes, seconds = divmod(round(current_duration), 60)
 								hours, minutes = divmod(minutes, 60)
 								timestamp = f'{hours:02}:{minutes:02}:{seconds:02}'
 								plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsMedia or snapshot.PageUsesPlugins else None
