@@ -98,7 +98,7 @@ class PublishConfig(CommonConfig):
 
 if __name__ == '__main__':
 
-	parser = ArgumentParser(description='Publishes the previously recorded snapshots to Twitter and Mastodon on a set schedule. The publisher script uploads each snapshot\'s MP4 video and generates a tweet with the web page\'s title, its date, and a link to its Wayback Machine capture.')
+	parser = ArgumentParser(description='Publishes the previously recorded snapshots to Twitter and Mastodon on a set schedule. The publisher script uploads the recordings and generates posts with the web page\'s title, its date, and a link to its Wayback Machine capture.')
 	parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to publish. Omit or set to %(default)s to run forever on a set schedule.')
 	args = parser.parse_args()
 

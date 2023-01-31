@@ -511,7 +511,7 @@
 
 		"min_duration": 2,
 		"max_duration": 138,
-		"keep_archive_copy": false,
+		"save_archive_copy": false,
 
 		"screen_capture_recorder_settings":
 		{

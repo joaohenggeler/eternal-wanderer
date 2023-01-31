@@ -109,7 +109,7 @@ class RecordConfig(CommonConfig):
 
 	min_duration: int
 	max_duration: int
-	keep_archive_copy: bool
+	save_archive_copy: bool
 	screen_capture_recorder_settings: dict[str, Optional[int]]
 	
 	ffmpeg_recording_input_name: str
@@ -396,7 +396,7 @@ if __name__ == '__main__':
 			
 			self.raw_recording_path = output_path_prefix + '.raw.mkv'
 			self.upload_recording_path = output_path_prefix + '.mp4'
-			self.archive_recording_path = output_path_prefix + '.mkv' if config.keep_archive_copy else None
+			self.archive_recording_path = output_path_prefix + '.mkv' if config.save_archive_copy else None
 
 			stream = ffmpeg.input(config.ffmpeg_recording_input_name, t=config.max_duration, **config.ffmpeg_recording_input_args)
 			stream = stream.output(self.raw_recording_path, **config.ffmpeg_recording_output_args)

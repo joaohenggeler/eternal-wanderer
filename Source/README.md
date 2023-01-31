@@ -41,9 +41,9 @@ The following Python packages are used:
 
 * [ffmpeg-python](https://github.com/kkroening/ffmpeg-python): to record the screen and manipulate audio/video files.
 
-* [Tweepy](https://github.com/tweepy/tweepy): to upload the recorded videos to Twitter and publish tweets.
+* [Tweepy](https://github.com/tweepy/tweepy): to upload the recorded videos to Twitter and create posts.
 
-* [Mastodon.py](https://github.com/halcy/Mastodon.py): to upload the recorded videos to Mastodon and publish toots.
+* [Mastodon.py](https://github.com/halcy/Mastodon.py): to upload the recorded videos to Mastodon and create posts.
 
 * [APScheduler](https://github.com/agronholm/apscheduler): to schedule the scouting, recording, and publishing scripts.
 
@@ -89,7 +89,7 @@ Below is a step-by-step guide on how to obtain and configure all the necessary c
 
 9. Download the latest [FFmpeg](https://ffmpeg.org/download.html#build-windows) version and place the `ffmpeg.exe`, `ffprobe.exe`, and `ffplay.exe` executables in `Data/FFmpeg/bin` as specified by `ffmpeg_path`. It's recommended that you download the latest full GPL git master branch build. The scripts will automatically add this FFmpeg version to the PATH before running. If you already have FFmpeg in your PATH and don't want to use a different version, you can ignore this step and set `ffmpeg_path` to null.
 
-10. Download and install the [Screen Capturer Recorder](https://github.com/rdp/screen-capture-recorder-to-video-windows-free/releases) device in order to capture the screen using FFmpeg. Note that this program requires Java. You can either use a modern Java install or reuse the local Java install from step 7. If you choose the latter, make sure to enable `java_add_to_path` so that the Java directory path (e.g. `Data/Plugins/Java/jdk1.8.0_11/jre/bin` or `Data/Plugins/Java/jre1.8.0_11/bin`) is added to the PATH automatically.
+10. Download and install the [Screen Capture Recorder](https://github.com/rdp/screen-capture-recorder-to-video-windows-free/releases) device in order to capture the screen using FFmpeg. Note that this program requires Java. You can either use a modern Java install or reuse the local Java install from step 7. If you choose the latter, make sure to enable `java_add_to_path` so that the Java directory path (e.g. `Data/Plugins/Java/jdk1.8.0_11/jre/bin` or `Data/Plugins/Java/jre1.8.0_11/bin`) is added to the PATH automatically.
 
 11. If you want to automatically detect a page's language, enable `detect_page_language`, download a [language identification model](https://fasttext.cc/docs/en/language-identification.html) to `Data`, and enter its path in `language_model_path`.
 
@@ -137,7 +137,7 @@ Below is a summary of the Python scripts located in [the source directory](Sourc
 
 * `record.py`: records the previously scouted snapshots on a set schedule by opening their pages in Firefox and scrolling through them at a set pace. If the recorder script detects that any plugins crashed or that the page was redirected while capturing the screen, the recording is aborted. **This script is inherently unsafe since it relies on web plugins (e.g. Flash, Shockwave, Java, etc).**
 
-* `publish.py`: publishes the previously recorded snapshots to Twitter and Mastodon on a set schedule. The publisher script uploads each snapshot's MP4 video and generates a tweet with the web page's title, its date, and a link to its Wayback Machine capture.
+* `publish.py`: publishes the previously recorded snapshots to Twitter and Mastodon on a set schedule. The publisher script uploads the recordings and generates posts with the web page's title, its date, and a link to its Wayback Machine capture.
 
 * `approve.py`: approves recordings for publishing. This process is optional and can only be done if the publisher script was started with the `require_approval` option enabled.
 
@@ -213,7 +213,7 @@ Used by all scripts.
 
 * `java_show_console`: enable to show a console for each Java applet. Only used in debug mode.
 
-* `java_add_to_path`: enable to add the path of the autodetected Java directory directory to the PATH environment variable. Used by the Screen Capturer Recorder device when recording the screen with FFmpeg.
+* `java_add_to_path`: enable to add the path of the autodetected Java directory directory to the PATH environment variable. Used by the Screen Capture Recorder device when recording the screen with FFmpeg.
 
 * `java_arguments`: any Java command line arguments to pass to every applet.
 
@@ -309,9 +309,9 @@ Used by `scout.py`.
 
 * `sensitive_words`: a list of words that would label a snapshot as sensitive. A word may be prefixed with `b64:` if it's encoded in Base64.
 
-* `detect_page_language`: enable to automatically detect each page's language using its content. Requires a language identification model in `language_model_path`.
+* `detect_page_language`: enable to automatically detect each page's language from its content.
 
-* `language_model_path`: the path to the language identification model file.
+* `language_model_path`: the path to the language identification model file. Only used if `detect_page_language` is enabled.
 
 * `tokenize_japanese_text`: enable to tokenize Japanese text before storing the collected words.
 
@@ -319,204 +319,204 @@ Used by `scout.py`.
 
 Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
-* `scheduler`: @TODO.
+* `scheduler`: a cron-like scheduler used when recording snapshots in batches (in UTC). See [this page](https://apscheduler.readthedocs.io/en/3.x/modules/triggers/cron.html) for more details.
 
-* `num_snapshots_per_scheduled_batch`: @TODO.
+* `num_snapshots_per_scheduled_batch`: how many snapshots to record when executing a scheduled batch.
 
-* `ranking_offset`: @TODO.
+* `ranking_offset`: how much to increase the likelihood that a snapshot with no points is recorded next. If this is zero, snapshots with a positive amount of points are more likely to be chosen by the weighted random sampling algorithm. In this case, snapshots with zero points are ranked last. As this option increases, these zero-point snapshots can be ranked higher than other ones and may be chosen by the algorithm. If this option is null, snapshots are picked at random regardless of their points.
 
-* `min_year`: @TODO.
+* `min_year`: the minimum year for a snapshot to be recorded (inclusive). May be null if there's no minimum.
 
-* `max_year`: @TODO.
+* `max_year`: the maximum year for a snapshot to be recorded (inclusive). May be null if there's no maximum.
 
-* `record_sensitive_snapshots`: @TODO.
+* `record_sensitive_snapshots`: enable to allow sensitive snapshots to be recorded.
 
-* `min_creation_days_for_same_host`: @TODO.
+* `min_creation_days_for_same_host`: the minimum amount of days after recording a snapshot before the same host can be selected again. May be null if there's no minimum.
 
-* `min_publish_days_for_same_snapshot`: @TODO.
+* `min_publish_days_for_same_snapshot`: the minimum amount of days after publishing a recording before the same snapshot can be selected again. May be null if there's no minimum.
 
-* `allowed_media_extensions`: @TODO.
+* `allowed_media_extensions`: a list of file extensions that are allowed when recording a media snapshot. This must only include media formats supported by FFmpeg or the browser's plugins.
 
-* `multi_asset_media_extensions`: @TODO.
+* `multi_asset_media_extensions`: a list of file extensions whose media format may request additional assets when played. For example, VRML worlds fit this category since they may require textures and sounds. Conversely, playing MIDI music only requires the file itself. Must be a subset of `allowed_media_extensions`.
 
-* `enable_proxy`: @TODO.
+* `enable_proxy`: enable to pass all browser and plugin traffic through an HTTP proxy. Used for various purposes, including waiting for slow-loading plugin media to finish requesting assets (e.g. Java applets) and locating missing assets in other subdomains via the Wayback Machine CDX API.
 
-* `proxy_port`: @TODO.
+* `proxy_port`: the proxy's port. Set to null to automatically find a free port. Only used if `enable_proxy` is enabled.
 
-* `proxy_queue_timeout`: @TODO.
+* `proxy_queue_timeout`: how long to wait between HTTP requests before assuming the page has finished loading (in seconds). Only used if `enable_proxy` is enabled.
 
-* `proxy_total_timeout`: @TODO.
+* `proxy_total_timeout`: how long to wait after starting monitoring the HTTP traffic before assuming the page has finished loading (in seconds). Only used if `enable_proxy` is enabled.
 
-* `proxy_block_requests_outside_internet_archive`: @TODO.
+* `proxy_block_requests_outside_internet_archive`: enable to block any requests outside the `archive.org` domain. Only used if `enable_proxy` is enabled.
 
-* `proxy_convert_realmedia_metadata_snapshots`: @TODO.
+* `proxy_convert_realmedia_metadata_snapshots`: enable to convert a RealMedia metadata file (.RAM) to its corresponding audio or video file (.RA or .RM). Useful when recording media snapshots that would otherwise point to a text file instead of the binary media files. Only used if `enable_proxy` is enabled.
 
-* `proxy_find_missing_snapshots_using_cdx`: @TODO.
+* `proxy_find_missing_snapshots_using_cdx`: enable to try to locate missing assets via the Wayback Machine CDX API. This includes searching different paths in all archived subdomains or using the same URL without the query and fragment. Only used if `enable_proxy` is enabled.
 
-* `proxy_max_cdx_path_components`: @TODO.
+* `proxy_max_cdx_path_components`: the maximum amount of components to use starting from the end of the path when performing the previous search. For example, if this value is two and the missing URL is `http://www.example.com/path/to/the/file.ext`, then the proxy will search all `example.com` subdomains for the nearest snapshot whose path ends with `/the/file.ext`. May be null if the whole path should be used (`/path/to/the/file.ext` using the previous example). Only used if `enable_proxy` and `proxy_find_missing_snapshots_using_cdx` are enabled.
 
-* `proxy_save_missing_snapshots_that_still_exist_online`: @TODO.
+* `proxy_save_missing_snapshots_that_still_exist_online`: enable to save any assets that were not archived by the Wayback Machine but that are still available online. Only used if `enable_proxy` is enabled.
 
-* `proxy_max_consecutive_save_tries`: @TODO.
+* `proxy_max_consecutive_save_tries`: the maximum amount of consecutive tries when saving a live URL with a numbered filename. After recording a snapshot, the script goes through any missing URLs and checks if their filenames contain numbers between the name and extension. If so, it increments this value and also tries to archive the new URL (e.g. if `file01.ext` exists, then we check for `file02.ext` and so on). If a new URL cannot be found online after this many tries, the process stops. Only used if `enable_proxy` and `proxy_save_missing_snapshots_that_still_exist_online` are enabled.
 
-* `proxy_max_total_save_tries`: @TODO.
+* `proxy_max_total_save_tries`: the maximum amount of total tries when saving a live URL with a numbered filename. The process described above stops if the script exceeds this many tries, even if we keep finding consecutive live URLs. This is done to prevent infinite loops when dealing with parked domains, i.e., when there's a valid response for every possible consecutive number. Only used if `enable_proxy` and `proxy_save_missing_snapshots_that_still_exist_online` are enabled.
 
-* `proxy_cache_missing_responses`: @TODO.
+* `proxy_cache_missing_responses`: enable to try to cache 404 and 410 responses from the Wayback Machine. Used to potentially speed up the loading times when recording a snapshot. Only used if `enable_proxy` is enabled.
 
-* `page_cache_wait`: @TODO.
+* `page_cache_wait`: how long to wait for a page snapshot to finish requesting and caching assets before recording (in seconds).
 
-* `media_cache_wait`: @TODO.
+* `media_cache_wait`: how long to wait for a media snapshot to finish requesting and caching assets before recording (in seconds).
 
-* `plugin_load_wait`: @TODO.
+* `plugin_load_wait`: how long to wait for plugins to start running after loading the snapshot (in seconds). This should be a small value to make sure that most plugins have time to load.
 
-* `base_plugin_crash_timeout`: @TODO.
+* `base_plugin_crash_timeout`: how long to wait without receiving a response from the browser before killing all plugin processes (in seconds). Used to force the script to continue when a plugin crashes. The script waits this amount plus the expected caching or recording duration.
 
-* `viewport_scroll_percentage`: @TODO.
+* `viewport_scroll_percentage`: how much to scroll the browser window based on the viewport's height when recording. Only used by page snapshots.
 
-* `base_wait_after_load`: @TODO.
+* `base_wait_after_load`: how long to wait after loading the page when recording (in seconds). Only used by page snapshots.
 
-* `wait_after_load_per_plugin_instance`: @TODO.
+* `wait_after_load_per_plugin_instance`: how much longer to wait after loading the page per plugin instance when recording (in seconds). Only used by page snapshots.
 
-* `base_wait_per_scroll`: @TODO.
+* `base_wait_per_scroll`: how long to wait after scrolling the page when recording (in seconds). Only used by page snapshots.
 
-* `wait_after_scroll_per_plugin_instance`: @TODO.
+* `wait_after_scroll_per_plugin_instance`: how much longer to wait after scrolling the page per plugin instance when recording (in seconds). Only used by page snapshots.
 
-* `base_media_wait_after_load`: @TODO.
+* `base_media_wait_after_load`: how long to wait after loading the page that embeds the media when recording (in seconds). The scripts waits this amount plus the total media file's duration. This should be a small value to prevent the final recording from being too short. Only used by media snapshots.
 
-* `media_fallback_duration`: @TODO.
+* `media_fallback_duration`: the fallback value used when the media file's duration cannot be determined (in seconds). This is mostly used by Flash movies, Shockwave movies, and VRML worlds. Only used by media snapshots.
 
-* `media_width`: @TODO.
+* `media_width`: the width of the embedded media file as a percentage of the page's width. This should be slightly lower than `100%` to avoid showing scrollbars. Only used by media snapshots.
 
-* `media_height`: @TODO.
+* `media_height`: the height of the embedded media file as a percentage of the page's height. This should be slightly lower than `100%` to avoid showing scrollbars. Only used by media snapshots.
 
-* `media_background_color`: @TODO.
+* `media_background_color`: the background color of the page that embeds the media file (in hexadecimal). For Flash movies and any file formats supported by VLC, this value also sets the background color of the media itself. Only used by media snapshots.
 
-* `fullscreen_browser`: @TODO.
+* `fullscreen_browser`: enable to display the browser window in fullscreen before recording.
 
-* `plugin_syncing_page_type`: @TODO.
+* `plugin_syncing_page_type`: the method used to sync plugin media so that different page elements start playing at the same time. Set to `reload` to restart all plugin media before recording. Set to `unload` to only start playing plugin media after the recording starts. Set to `none` to disable this feature. No other values are allowed. While `unload` is meant to be a more robust version of `reload`, the underlying implementation may not always work correctly.
 
-* `plugin_syncing_media_type`: @TODO.
+* `plugin_syncing_media_type`: same as `plugin_syncing_page_type` but for media snapshots.
 
-* `plugin_syncing_unload_delay`: @TODO.
+* `plugin_syncing_unload_delay`: how long to wait to start playing plugin media after the recording begins (in seconds). This should be a small value, preferably under one second. Only used when `plugin_syncing_page_type` or `plugin_syncing_media_type` are set to `unload`.
 
-* `plugin_syncing_reload_vrml_from_cache`: @TODO.
+* `plugin_syncing_reload_vrml_from_cache`: enable to force VRML worlds to be reloaded from cache before recording. This is done to prevent some issues between the Cosmo Player and the previous plugin syncing methods. If enabled, this action is only performed if one or more Cosmo Player instances are running. This option is not affected by `plugin_syncing_page_type` or `plugin_syncing_media_type`.
 
-* `enable_plugin_input_repeater`: @TODO.
+* `enable_plugin_input_repeater`: enable to periodically interact with Flash movies and Java applets by sending them keyboard events.
 
-* `plugin_input_repeater_initial_wait`: @TODO.
+* `plugin_input_repeater_initial_wait`: how long to wait before sending the first keyboard event (in seconds). Only used if `enable_plugin_input_repeater` is enabled.
 
-* `plugin_input_repeater_wait_per_cycle`: @TODO.
+* `plugin_input_repeater_wait_per_cycle`: how long to wait between keyboard events (in seconds). Only used if `enable_plugin_input_repeater` is enabled.
 
-* `plugin_input_repeater_min_window_size`: @TODO.
+* `plugin_input_repeater_min_window_size`: the minimum plugin instance dimensions for the media to be considered interactable. Used to exclude plugin media that redirects the browser to a different page when clicked (e.g. small Flash ads). Only used if `enable_plugin_input_repeater` is enabled.
 
-* `plugin_input_repeater_keystrokes`: @TODO.
+* `plugin_input_repeater_keystrokes`: which keyboard events to send. This must be a string containing each key code in order as documented on [this page](https://pywinauto.readthedocs.io/en/latest/code/pywinauto.keyboard.html). Only used if `enable_plugin_input_repeater` is enabled.
 
-* `plugin_input_repeater_debug`: @TODO.
+* `plugin_input_repeater_debug`: enable to display debug information about each plugin instance. If an instance is interactable, a green rectangle is drawn around the plugin media. Otherwise, a red rectangle is used. The plugin media's width and height are also shown on top of it. Only used if `debug` is enabled.
 
-* `enable_cosmo_player_viewpoint_cycler`: @TODO.
+* `enable_cosmo_player_viewpoint_cycler`: enable to periodically cycle through all viewpoints in VRML worlds.
 
-* `cosmo_player_viewpoint_wait_per_cycle`: @TODO.
+* `cosmo_player_viewpoint_wait_per_cycle`: how long to wait between viewpoints (in seconds). Only used if `enable_cosmo_player_viewpoint_cycler` is enabled.
 
-* `min_duration`: @TODO.
+* `min_duration`: the minimum recording duration (in seconds). Used to stay within the Twitter and Mastodon media guidelines.
 
-* `max_duration`: @TODO.
+* `max_duration`: the maximum recording duration (in seconds). Used to stay within the Twitter and Mastodon media guidelines.
 
-* `keep_archive_copy`: @TODO.
+* `save_archive_copy`: enable to save a lossless copy of the raw recording for archival purposes. Although this copy is smaller than the raw footage, it's still significantly larger than the lossy recording.
 
-* `screen_capture_recorder_settings`: @TODO.
+* `screen_capture_recorder_settings`: the Screen Capture Recorder device settings. Any previous settings are temporarily cleared from the registry before applying these changes. As such, you should only change a setting if you don't want its default value. If `capture_width` or `capture_height` are null, these will be set to the screen's physical width and height, respectively, in order to record the entire screen. If `default_max_fps` is null, it will be set to the `framerate` parameter from `ffmpeg_recording_input_args`. If this parameter isn't specified, then the setting is set to 60. Note that this is just the device's maximum frame rate. The recording frame rate is specified in `ffmpeg_recording_input_args`. Refer to [the device's documentation](https://github.com/rdp/screen-capture-recorder-to-video-windows-free#configuration) for a list of all possible settings.
 
-* `ffmpeg_recording_input_name`: @TODO.
+* `ffmpeg_recording_input_name`: the input device used to capture the screen. This should be the Screen Capture Recorder device.
 
-* `ffmpeg_recording_input_args`: @TODO.
+* `ffmpeg_recording_input_args`: the input arguments used to capture the screen. Set a parameter to null if it's meant to be used as a flag (e.g. `-shortest`). Refer to [FFmpeg's documentation](https://ffmpeg.org/ffmpeg-all.html) for a list of all possible parameters. In particular, see [this tutorial](https://trac.ffmpeg.org/wiki/Capture/Desktop) to learn about the best parameters to use when capturing the screen with FFmpeg.
 
-* `ffmpeg_recording_output_args`: @TODO.
+* `ffmpeg_recording_output_args`: the output arguments used to generate the raw recording footage.
 
-* `ffmpeg_archive_output_args`: @TODO.
+* `ffmpeg_archive_output_args`: the output arguments used to generate a lossless recording from the raw footage. Only used if `save_archive_copy` is enabled.
 
-* `ffmpeg_upload_output_args`: @TODO.
+* `ffmpeg_upload_output_args`: the output arguments used to generate a lossy recording from the raw footage.
 
-* `enable_text_to_speech`: @TODO.
+* `enable_text_to_speech`: enable to generate a text-to-speech recording of a page snapshot's content.
 
-* `text_to_speech_read_image_alt_text`: @TODO.
+* `text_to_speech_read_image_alt_text`: enable to include the alt text from images in the text-to-speech recording. Only used if `enable_text_to_speech` is enabled.
 
-* `text_to_speech_audio_format_type`: @TODO.
+* `text_to_speech_audio_format_type`: the text-to-speech audio format. Must be an enum name from [this page](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ee125189(v=vs.85)) (e.g. `SAFT22kHz16BitMono`). Set to null to use the default format. Only used if `enable_text_to_speech` is enabled. 
 
-* `text_to_speech_rate`: @TODO.
+* `text_to_speech_rate`: the text-to-speech voice's speaking rate. Must be a number between -10 and 10 as mentioned in [this page](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ms723606(v=vs.85)). Set to null to use the default rate. Only used if `enable_text_to_speech` is enabled.
 
-* `text_to_speech_default_voice`: @TODO.
+* `text_to_speech_default_voice`: the name of the Microsoft Speech API voice to use for an unsupported language. In most cases, the English (United States) voices (`David`, `Mark`, `Zira`) should be available. Set to null to leave the default voice unchanged. Only used if `enable_text_to_speech` is enabled.
 
-* `text_to_speech_language_voices`: @TODO.
+* `text_to_speech_language_voices`: the names of the Microsoft Speech API voices to use for the supported languages. Each language's voice package must be installed first. Otherwise, the default voice is used. Note that this feature requires enabling `detect_page_language` before scouting snapshots. Only used if `enable_text_to_speech` is enabled.
 
-* `ffmpeg_text_to_speech_video_input_name`: @TODO.
+* `ffmpeg_text_to_speech_video_input_name`: the input video stream shown during the text-to-speech recording. Although this recording only requires an audio stream, the video component is added for platforms that don't support the former (e.g. Twitter). Only used if `enable_text_to_speech` is enabled.
 
-* `ffmpeg_text_to_speech_video_input_args`: @TODO.
+* `ffmpeg_text_to_speech_video_input_args`: the input video arguments used when generating a text-to-speech recording. Only used if `enable_text_to_speech` is enabled.
 
-* `ffmpeg_text_to_speech_audio_input_args`: @TODO.
+* `ffmpeg_text_to_speech_audio_input_args`: the input audio arguments used when generating a text-to-speech recording. Only used if `enable_text_to_speech` is enabled.
 
-* `ffmpeg_text_to_speech_output_args`: @TODO.
+* `ffmpeg_text_to_speech_output_args`: the output arguments used to generate a text-to-speech recording. Only used if `enable_text_to_speech` is enabled.
 
-* `enable_media_conversion`: @TODO.
+* `enable_media_conversion`: enable to convert media snapshots into the final recording format without capturing the screen. Used to save time and avoid synchronization issues when recording audio and video file formats.
 
-* `convertible_media_extensions`: @TODO.
+* `convertible_media_extensions`: a list of file extensions whose format can be directly converted into the recording. Must be a subset of `allowed_media_extensions` and mutually exclusive from `multi_asset_media_extensions`. Only used if `enable_media_conversion` is enabled.
 
-* `ffmpeg_media_conversion_input_name`: @TODO.
+* `ffmpeg_media_conversion_input_name`: the input video stream shown during audio-only media formats. The same platform restrictions from `ffmpeg_text_to_speech_video_input_name` also apply here. Only used if `enable_media_conversion` is enabled.
 
-* `ffmpeg_media_conversion_input_args`: @TODO.
+* `ffmpeg_media_conversion_input_args`: the input video arguments used when converting the media snapshot. The corresponding output arguments are defined in `ffmpeg_upload_output_args`. Only used if `enable_media_conversion` is enabled.
 
 ### Publish
 
 Used by `publish.py` and `approve.py`.
 
-* `scheduler`: @TODO.
+* `scheduler`: a cron-like scheduler used when publishing recordings in batches (in UTC). See [this page](https://apscheduler.readthedocs.io/en/3.x/modules/triggers/cron.html) for more details.
 
-* `num_recordings_per_scheduled_batch`: @TODO.
+* `num_recordings_per_scheduled_batch`: how many recordings to publish when executing a scheduled batch.
 
-* `enable_twitter`: @TODO.
+* `enable_twitter`: enable to publish on Twitter.
 
-* `enable_mastodon`: @TODO.
+* `enable_mastodon`: enable to publish on Mastodon.
 
-* `require_approval`: @TODO.
+* `require_approval`: enable to only publish recordings that have been manually approved using `approve.py`.
 
-* `flag_sensitive_snapshots`: @TODO.
+* `flag_sensitive_snapshots`: enable to flag any posts whose snapshot contains sensitive content.
 
-* `show_media_metadata`: @TODO.
+* `show_media_metadata`: enable to show the title and author metadata of a media snapshot in the post.
 
-* `reply_with_text_to_speech`: @TODO.
+* `reply_with_text_to_speech`: enable to add the text-to-speech recordings as a reply to the post. When publishing on Twitter, the recording may have to be split into multiple replies.
 
-* `delete_files_after_upload`: @TODO.
+* `delete_files_after_upload`: enable to delete the recording file after being uploaded to all platforms.
 
-* `api_wait`: @TODO.
+* `api_wait`: how long to wait after making a request to the Twitter and Mastodon APIs (in seconds). This was added to reduce the chance of being flagged by the Twitter spam algorithm, though it probably doesn't do too much in practice.
 
-* `twitter_api_key`: @TODO.
+* `twitter_api_key`: the API key obtained in the [setup guide](#Setup%20Guide). **Must be changed before publishing on Twitter.**
 
-* `twitter_api_secret`: @TODO.
+* `twitter_api_secret`: the API secret obtained in the [setup guide](#Setup%20Guide). **Must be changed before publishing on Twitter.**
 
-* `twitter_access_token`: @TODO.
+* `twitter_access_token`: the access token obtained in the [setup guide](#Setup%20Guide). **Must be changed before publishing on Twitter.**
 
-* `twitter_access_token_secret`: @TODO.
+* `twitter_access_token_secret`: the access token secret obtained in the [setup guide](#Setup%20Guide). **Must be changed before publishing on Twitter.**
 
-* `twitter_max_retries`: @TODO.
+* `twitter_max_retries`: the maximum amount of times to retry a Twitter API request when an unexpected error occurs.
 
-* `twitter_retry_wait`: @TODO.
+* `twitter_retry_wait`: how long to wait before retrying a Twitter API request (in seconds).
 
-* `twitter_max_status_length`: @TODO.
+* `twitter_max_status_length`: the maximum amount of characters in a Twitter post. This should be set to the current Twitter character limit.
 
-* `twitter_text_to_speech_segment_duration`: @TODO.
+* `twitter_text_to_speech_segment_duration`: the maximum duration of each segment when splitting the text-to-speech recordings (in seconds). This should be set to slightly under the current Twitter video duration limit.
 
-* `twitter_max_text_to_speech_segments`: @TODO.
+* `twitter_max_text_to_speech_segments`: the maximum amount of text-to-speech segments (i.e. replies) to post. If the recording requires more than this amount, the text-to-speech replies are skipped. May be null if there's no maximum.
 
-* `mastodon_instance_url`: @TODO.
+* `mastodon_instance_url`: the instance's URL decided in the [setup guide](#Setup%20Guide). **Must be changed before publishing on Mastodon.**
 
-* `mastodon_access_token`: @TODO.
+* `mastodon_access_token`: the access token obtained in the [setup guide](#Setup%20Guide). **Must be changed before publishing on Mastodon.**
 
-* `mastodon_max_retries`: @TODO.
+* `mastodon_max_retries`: the maximum amount of times to retry a Mastodon API request when an unexpected error occurs.
 
-* `mastodon_retry_wait`: @TODO.
+* `mastodon_retry_wait`: how long to wait before retrying a Mastodon API request (in seconds).
 
-* `mastodon_max_status_length`: @TODO.
+* `mastodon_max_status_length`: the maximum amount of characters in a Mastodon post. This should be set to the instance's character limit.
 
-* `mastodon_max_file_size`: @TODO.
+* `mastodon_max_file_size`: the maximum size of each recording file (in megabytes). This should be set to the instance's video size limit. May be null if there's no maximum.
 
-* `mastodon_enable_ffmpeg`: @TODO.
+* `mastodon_enable_ffmpeg`: enable to run every recording through FFmpeg in order to reduce the file size. It's strongly recommended that you enable this option since Mastodon's default limit would otherwise exclude a lot of recordings. Additionally, this reduces the total amount of disk space used by the bot in the instance.
 
-* `mastodon_ffmpeg_output_args`: @TODO.
+* `mastodon_ffmpeg_output_args`: the output arguments used to reduce the file size. Aside from using filters, one trick is to avoid specifying any output bitrates so that FFmpeg reencodes the files using the default values. In most cases, this should lower the file size significantly. Only used if `mastodon_enable_ffmpeg` is enabled.

@@ -6,6 +6,8 @@ With over 682 billion web pages saved since 1996, the [Wayback Machine](https://
 
 Available on [Twitter](https://twitter.com/waybackwanderer) and [Mastodon](https://botsin.space/@eternalwanderer).
 
+![The web page "http://www.geocities.com:80/Hollywood/Hills/5988/" as seen on December 1996 via the Wayback Machine.](Images/page.gif)
+
 ## Features
 
 * Visits archived web pages and collects metadata from their content and from the Wayback Machine's CDX API.
