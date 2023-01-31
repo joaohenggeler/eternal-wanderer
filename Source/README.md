@@ -163,7 +163,7 @@ Below is a summary of the Python scripts located in [the source directory](Sourc
 
 ## Types Of Snapshots
 
-The bot handles two types of snapshots: web pages and media files. The first are any snapshots that were successfully archived by the Wayback Machine (i.e. a 200 status code) and whose MIME type is `text/html` or `text/plain`. The second are any other successfully archived snapshots whose MIME type does *not* match the previous criteria. In other words, any standard and non-standard audiovisual media (e.g. `audio/*`, `video/*`, `application/*`, `x-world/*`, `music/*`, etc). This allows the bot to showcase multimedia (e.g. MIDI music, QuickTime videos, VRML worlds) that was linked directly in a page instead of being embedded with the object and embed tags.
+The bot handles two types of snapshots: web pages and media files. The first are any snapshots that were successfully archived by the Wayback Machine (i.e. a 200 status code) and whose MIME type is `text/html` or `text/plain`. The second are any other successfully archived snapshots whose MIME type does *not* match the previous criteria. In other words, any standard and non-standard audiovisual media (e.g. `audio/*`, `video/*`, `application/*`, `x-world/*`, `music/*`, etc). This allows the bot to showcase multimedia (e.g. MIDI music, QuickTime videos, VRML worlds, etc) that was linked directly in a page instead of being embedded with the object and embed tags.
 
 ## Configuration
 
@@ -487,13 +487,13 @@ Used by `publish.py` and `approve.py`.
 
 * `api_wait`: how long to wait after making a request to the Twitter and Mastodon APIs (in seconds). This was added to reduce the chance of being flagged by the Twitter spam algorithm, though it probably doesn't do too much in practice.
 
-* `twitter_api_key`: the API key obtained in the [setup guide](#Setup%20Guide). **Must be changed before publishing on Twitter.**
+* `twitter_api_key`: the API key obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Twitter.**
 
-* `twitter_api_secret`: the API secret obtained in the [setup guide](#Setup%20Guide). **Must be changed before publishing on Twitter.**
+* `twitter_api_secret`: the API secret obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Twitter.**
 
-* `twitter_access_token`: the access token obtained in the [setup guide](#Setup%20Guide). **Must be changed before publishing on Twitter.**
+* `twitter_access_token`: the access token obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Twitter.**
 
-* `twitter_access_token_secret`: the access token secret obtained in the [setup guide](#Setup%20Guide). **Must be changed before publishing on Twitter.**
+* `twitter_access_token_secret`: the access token secret obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Twitter.**
 
 * `twitter_max_retries`: the maximum amount of times to retry a Twitter API request when an unexpected error occurs.
 
@@ -505,9 +505,9 @@ Used by `publish.py` and `approve.py`.
 
 * `twitter_max_text_to_speech_segments`: the maximum amount of text-to-speech segments (i.e. replies) to post. If the recording requires more than this amount, the text-to-speech replies are skipped. May be null if there's no maximum.
 
-* `mastodon_instance_url`: the instance's URL decided in the [setup guide](#Setup%20Guide). **Must be changed before publishing on Mastodon.**
+* `mastodon_instance_url`: the instance's URL decided in the [setup guide](#setup-guide). **Must be changed before publishing on Mastodon.**
 
-* `mastodon_access_token`: the access token obtained in the [setup guide](#Setup%20Guide). **Must be changed before publishing on Mastodon.**
+* `mastodon_access_token`: the access token obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Mastodon.**
 
 * `mastodon_max_retries`: the maximum amount of times to retry a Mastodon API request when an unexpected error occurs.
 
