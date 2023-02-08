@@ -702,7 +702,7 @@
 
 		"twitter_max_status_length": 280,
 		"twitter_text_to_speech_segment_duration": 138,
-		"twitter_max_text_to_speech_segments": 3,
+		"twitter_max_text_to_speech_segments": 2,
 
 		"mastodon_instance_url": "<Instance URL>",
 		"mastodon_access_token": "<Access Token>",

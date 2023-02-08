@@ -423,6 +423,7 @@ if __name__ == '__main__':
 						else:
 							raise Exception(f'Tumblr Response: {response}')
 					else:
+						log.info(f'Posted the recording status #{status_id} using {len(text)} characters.')
 						break
 				else:
 					raise Exception(f'Tumblr Response: {response}')
