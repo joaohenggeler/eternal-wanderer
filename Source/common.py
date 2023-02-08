@@ -611,6 +611,7 @@ class Database():
 									TwitterStatusId INTEGER,
 									MastodonMediaId INTEGER,
 									MastodonStatusId INTEGER,
+									TumblrStatusId INTEGER,
 
 									FOREIGN KEY (SnapshotId) REFERENCES Snapshot (Id)
 								);
@@ -833,6 +834,7 @@ class Recording():
 	TwitterStatusId: Optional[int]
 	MastodonMediaId: Optional[int]
 	MastodonStatusId: Optional[int]
+	TumblrStatusId: Optional[int]
 
 	# Determined at runtime.
 	UploadFilePath: str

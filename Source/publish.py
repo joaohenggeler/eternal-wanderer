@@ -19,6 +19,7 @@ from mastodon import ( # type: ignore
 	MastodonGatewayTimeoutError, MastodonNetworkError,
 	MastodonServiceUnavailableError,
 )
+from pytumblr import TumblrRestClient # type: ignore
 from tweepy.errors import TweepyException # type: ignore
 
 from common import (
@@ -37,6 +38,7 @@ class PublishConfig(CommonConfig):
 	
 	enable_twitter: bool
 	enable_mastodon: bool
+	enable_tumblr: bool
 
 	require_approval: bool
 	flag_sensitive_snapshots: bool
@@ -70,6 +72,16 @@ class PublishConfig(CommonConfig):
 	mastodon_enable_ffmpeg: bool
 	mastodon_ffmpeg_output_args: dict[str, Union[None, int, str]]
 
+	tumblr_api_key: str
+	tumblr_api_secret: str
+	tumblr_access_token: str
+	tumblr_access_token_secret: str
+
+	tumblr_max_retries: int
+	tumblr_retry_wait: int
+
+	tumblr_max_status_length: int
+
 	def __init__(self):
 		super().__init__()
 		self.load_subconfig('publish')
@@ -96,16 +108,28 @@ class PublishConfig(CommonConfig):
 
 		self.mastodon_ffmpeg_output_args = container_to_lowercase(self.mastodon_ffmpeg_output_args)
 
+		if self.tumblr_api_key is None:
+			self.tumblr_api_key = os.environ['WANDERER_TUMBLR_API_KEY']
+
+		if self.tumblr_api_secret is None:
+			self.tumblr_api_secret = os.environ['WANDERER_TUMBLR_API_SECRET']
+
+		if self.tumblr_access_token is None:
+			self.tumblr_access_token = os.environ['WANDERER_TUMBLR_ACCESS_TOKEN']
+
+		if self.tumblr_access_token_secret is None:
+			self.tumblr_access_token_secret = os.environ['WANDERER_TUMBLR_ACCESS_TOKEN_SECRET']
+
 if __name__ == '__main__':
 
-	parser = ArgumentParser(description='Publishes the previously recorded snapshots to Twitter and Mastodon on a set schedule. The publisher script uploads the recordings and generates posts with the web page\'s title, its date, and a link to its Wayback Machine capture.')
+	parser = ArgumentParser(description='Publishes the previously recorded snapshots on Twitter, Mastodon, and Tumblr on a set schedule. The publisher script uploads the recordings and generates posts with the web page\'s title, its date, and a link to its Wayback Machine capture.')
 	parser.add_argument('max_iterations', nargs='?', type=int, default=-1, help='How many snapshots to publish. Omit or set to %(default)s to run forever on a set schedule.')
 	args = parser.parse_args()
 
 	config = PublishConfig()
 	log = setup_logger('publish')
 
-	if not config.enable_twitter and not config.enable_mastodon:
+	if not config.enable_twitter and not config.enable_mastodon and not config.enable_tumblr:
 		parser.error('The configuration must enable publishing to at least one platform.')
 
 	log.info('Initializing the publisher.')
@@ -125,11 +149,11 @@ if __name__ == '__main__':
 			sys.exit(1)
 
 		def publish_to_twitter(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str, tts_alt_text: str) -> tuple[Optional[int], Optional[int]]:
-			""" Publishes a snapshot recording and text-to-speech file to Twitter. The video recording is added to the main tweet along
+			""" Publishes a snapshot recording and text-to-speech file on Twitter. The video recording is added to the main post along
 			with a message whose content is generated using the remaining arguments. The text-to-speech file is added as a reply to the
-			main tweet. If this file is too long for Twitter's video duration limit, then it's split across multiple replies. """
+			main post. If this file is too long for Twitter's video duration limit, then it's split across multiple replies. """
 			
-			log.info('Publishing to Twitter.')
+			log.info('Publishing on Twitter.')
 
 			media_id = None
 			status_id = None
@@ -230,12 +254,12 @@ if __name__ == '__main__':
 			sys.exit(1)
 
 		def publish_to_mastodon(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str, tts_alt_text: str) -> tuple[Optional[int], Optional[int]]:
-			""" Publishes a snapshot recording and text-to-speech file to a given Mastodon instance. The video recording is added to the
-			main toot along with a message whose content is generated using the remaining arguments. The text-to-speech file is added
-			as a reply to the main toot. This function can optionally attempt to reduce both files' size before uploading them. If a
+			""" Publishes a snapshot recording and text-to-speech file on a given Mastodon instance. The video recording is added to the
+			main post along with a message whose content is generated using the remaining arguments. The text-to-speech file is added
+			as a reply to the main post. This function can optionally attempt to reduce both files' size before uploading them. If a
 			file exceeds the user-defined size limit, then it will be skipped. """
 
-			log.info('Publishing to Mastodon.')
+			log.info('Publishing on Mastodon.')
 
 			def process_video_file(input_path: str) -> str:
 				""" Runs a video file through FFmpeg, potentially reducing its size before uploading it to the Mastodon instance. """
@@ -355,6 +379,59 @@ if __name__ == '__main__':
 
 			return media_id, status_id
 
+	if config.enable_tumblr:
+
+		try:
+			log.info('Initializing the Tumblr API interface.')
+			tumblr_api = TumblrRestClient(config.tumblr_api_key, config.tumblr_api_secret, 
+										  config.tumblr_access_token, config.tumblr_access_token_secret)
+			info = tumblr_api.info()
+			tumblr_blog_name = info['user']['name']
+		except Exception as error:
+			log.error(f'Failed to initialize the Tumblr API interface with the error: {repr(error)}')
+			sys.exit(1)
+
+		def publish_to_tumblr(recording: Recording, title: str, body: str) -> Optional[int]:
+			""" Publishes a snapshot recording on Tumblr. The video recording is added to the main post along
+			with a message whose content is generated using the remaining arguments. Unlike the Twitter and
+			Mastodon counterparts, posting text-to-speech files is not supported. It's also not possible to
+			mark a post as sensitive or add any alt text. """
+
+			log.info('Publishing on Tumblr.')
+
+			status_id = None
+
+			try:
+				max_title_length = max(config.tumblr_max_status_length - len(body) - 4, 0)
+				text = f'{title[:max_title_length]}<br>{body}'
+
+				for i in range(config.tumblr_max_retries):
+
+					# The official Tumblr library doesn't have any package-specific exceptions so
+					# we'll catch all of them to be safe.
+					# See: https://www.tumblr.com/docs/en/api/v2#post--create-a-new-blog-post-legacy
+					response = tumblr_api.create_video(tumblr_blog_name, caption=text, data=recording.UploadFilePath)
+					status_id = response.get('id')
+
+					if status_id is None:
+						status_code = response['meta']['status']
+						
+						if status_code in [408, 502, 503, 504]:
+							log.warning(f'Retrying the status post operation ({i+1} of {config.tumblr_max_retries}) after failing with the error: {repr(response)}')
+							sleep(config.tumblr_retry_wait)
+							continue
+						else:
+							raise Exception(f'Tumblr Response: {response}')
+					else:
+						break
+				else:
+					raise Exception(f'Tumblr Response: {response}')
+			
+			except Exception as error:
+				log.error(f'Failed to post the recording status with the error: {repr(error)}')
+
+			return status_id
+
 	scheduler = BlockingScheduler()
 
 	def publish_recordings(num_recordings: int) -> None:
@@ -431,8 +508,14 @@ if __name__ == '__main__':
 					body_identifiers = [display_metadata, snapshot.ShortDate, snapshot.WaybackUrl, plugin_identifier]
 					body = '\n'.join(filter(None, body_identifiers))
 
-					# How the date is formatted depends on the current locale.
 					snapshot_type = 'media file' if snapshot.IsMedia else 'web page'
+
+					# We have to format the link ourselves since the Tumblr API treats the post as HTML by default.
+					tumblr_wayback_url = f'<a href="{snapshot.WaybackUrl}">Archived {snapshot_type.title()}</a>'
+					tumblr_body_identifiers = [display_metadata, snapshot.ShortDate, tumblr_wayback_url, plugin_identifier]
+					tumblr_body = '<br>'.join(filter(None, tumblr_body_identifiers))
+
+					# How the date is formatted depends on the current locale.
 					long_date = snapshot.OldestDatetime.strftime('%B %Y')
 					alt_text = f'The {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine.'
 					sensitive = config.flag_sensitive_snapshots and snapshot.IsSensitive
@@ -444,6 +527,7 @@ if __name__ == '__main__':
 
 					twitter_media_id, twitter_status_id = publish_to_twitter(recording, title, body, alt_text, sensitive, tts_body, tts_alt_text) if config.enable_twitter else (None, None)
 					mastodon_media_id, mastodon_status_id = publish_to_mastodon(recording, title, body, alt_text, sensitive, tts_body, tts_alt_text) if config.enable_mastodon else (None, None)
+					tumblr_status_id = publish_to_tumblr(recording, title, tumblr_body) if config.enable_tumblr else None
 
 					if config.delete_files_after_upload:
 						delete_file(recording.UploadFilePath)
@@ -459,12 +543,13 @@ if __name__ == '__main__':
 									SET
 										IsProcessed = :is_processed, PublishTime = :publish_time,
 										TwitterMediaId = :twitter_media_id, TwitterStatusId = :twitter_status_id,
-										MastodonMediaId = :mastodon_media_id, MastodonStatusId = :mastodon_status_id
+										MastodonMediaId = :mastodon_media_id, MastodonStatusId = :mastodon_status_id,
+										TumblrStatusId = :tumblr_status_id
 									WHERE Id = :id;
 									''', {'is_processed': True, 'publish_time': get_current_timestamp(),
 										  'twitter_media_id': twitter_media_id, 'twitter_status_id': twitter_status_id,
 										  'mastodon_media_id': mastodon_media_id, 'mastodon_status_id': mastodon_status_id,
-										  'id': recording.Id})
+										  'tumblr_status_id': tumblr_status_id, 'id': recording.Id})
 
 						# Mark any earlier recordings as processed so the same snapshot isn't published multiple times in
 						# cases where there is more than one video file. See the LastCreationTime part in the main query.

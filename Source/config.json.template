@@ -678,11 +678,12 @@
 
 	"publish":
 	{
-		"scheduler": {"day_of_week": "mon-sat", "hour": "*/3"},
+		"scheduler": {"day_of_week": "mon-sat", "hour": "*/3", "jitter": 600},
 		"num_recordings_per_scheduled_batch": 1,
 		
 		"enable_twitter": true,
 		"enable_mastodon": true,
+		"enable_tumblr": true,
 
 		"require_approval": true,
 		"flag_sensitive_snapshots": true,
@@ -716,6 +717,16 @@
 		"mastodon_ffmpeg_output_args":
 		{
 			"vf": "fps=30"
-		}
+		},
+
+		"tumblr_api_key": "<API Key>",
+		"tumblr_api_secret": "<API Secret>",
+		"tumblr_access_token": "<Access Token>",
+		"tumblr_access_token_secret": "<Access Token Secret>",
+
+		"tumblr_max_retries": 10,
+		"tumblr_retry_wait": 30,
+
+		"tumblr_max_status_length": 4096
 	}
 }

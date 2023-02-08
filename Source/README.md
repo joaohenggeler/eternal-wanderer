@@ -45,6 +45,8 @@ The following Python packages are used:
 
 * [Mastodon.py](https://github.com/halcy/Mastodon.py): to upload the recorded videos to Mastodon and create posts.
 
+* [PyTumblr](https://github.com/tumblr/pytumblr): to upload the recorded videos to Tumblr and create posts.
+
 * [APScheduler](https://github.com/agronholm/apscheduler): to schedule the scouting, recording, and publishing scripts.
 
 * [fastText](https://github.com/facebookresearch/fastText): to detect a page's language from its text. Only used if `detect_page_language` is enabled.
@@ -95,11 +97,13 @@ Below is a step-by-step guide on how to obtain and configure all the necessary c
 
 12.	If you want to generate the text-to-speech audio recordings, enable `enable_text_to_speech` and install any missing voice packages in the Windows settings by going to `Ease of Access > Speech (under Interaction) > Additional speech settings (under Related settings) > Add Voices (under Manage voices)`. Note that just installing the packages isn't enough to make the voices visible to the Microsoft Speech API. You can run the following script to generate a REG file that will automatically add all installed voices to the appropriate registry key: `voices.py -registry`. Execute the resulting `voices.reg` file and then run the following script to list every visible voice: `voices.py -list`. The script will warn you if it can't find a voice specified in `text_to_speech_language_voices`. The configuration template lists every language available in the Windows 10 speech menu at the time of writing. You can also use the `-speak` argument together with `-list` to test each voice and make sure it works properly. Run `voices.py -list -speak all` to test all voices or `voices.py -list -speak "spanish (mexico)"` (for example) to test a specific language. If a voice test fails with the error `COMError -2147200966`, you must install that voice's language package in the Window settings by going to `Time & Language > Language > Add a language (under Preferred languages)`. You only have to install the text-to-speech feature in each package.
 
-13. If you want to approve the recordings before publishing them to Twitter or Mastodon (i.e. if `require_approval` is enabled), you can set the portable VLC version installed in step 6 as the default MP4 file viewer.
+13. If you want to approve the recordings before publishing them on Twitter, Mastodon, or Tumblr (i.e. if `require_approval` is enabled), you can set the portable VLC version installed in step 6 as the default MP4 file viewer.
 
-14. To publish the recorded videos on Twitter, create an account for the bot, log into the [Twitter Developer Platform](https://developer.twitter.com/en), and apply for elevated access on the dashboard. Then, create a new project and application, set up OAuth 1.0a authentication with at least read and write permissions, and generate an access token and access token secret. Enter your application's API key, API secret, and the previous tokens into `twitter_api_key`, `twitter_api_secret`, `twitter_access_token`, and `twitter_access_token_secret`, respectively. Alternatively, you can set these options to null and place the tokens in the `WANDERER_TWITTER_API_KEY`, `WANDERER_TWITTER_API_SECRET`, `WANDERER_TWITTER_ACCESS_TOKEN`, and `WANDERER_TWITTER_ACCESS_TOKEN_SECRET` environment variables. At the time of writing, you need to use the standard Twitter API version 1.1 to upload videos. This requires having both elevated access and using OAuth 1.0a.
+14. To publish the recorded videos on Twitter, create an account for the bot, log into the [Twitter Developer Platform](https://developer.twitter.com/en), and apply for elevated access on the dashboard. Then, create a new project and application, set up OAuth 1.0a authentication with at least read and write permissions, and generate an access token and access token secret. Enter your application's API key, API secret, and the previous tokens into `twitter_api_key`, `twitter_api_secret`, `twitter_access_token`, and `twitter_access_token_secret`, respectively. Alternatively, you can set these options to null and place the credentials in the `WANDERER_TWITTER_API_KEY`, `WANDERER_TWITTER_API_SECRET`, `WANDERER_TWITTER_ACCESS_TOKEN`, and `WANDERER_TWITTER_ACCESS_TOKEN_SECRET` environment variables. At the time of writing, you need to use the standard Twitter API version 1.1 to upload videos. This requires having both elevated access and using OAuth 1.0a.
 
 15. To publish the recorded videos on Mastodon, create an account for the bot in an appropriate instance. Choose either an instance your hosting yourself or one that was designed specifically for bots. Then, go to `Settings > Development` and create a new application. While doing so, select the `write:media` and `write:statuses` scopes and uncheck any others. Save these changes and copy the generated access token to `mastodon_access_token`. Alternatively, you can set this option to null and place the token in the `WANDERER_MASTODON_ACCESS_TOKEN` environment variable. Finally, set `mastodon_instance_url` to the instance's URL. It's strongly recommended that you enable automated post deletion on your account with a threshold of one or two weeks.
+
+16. To publish the recorded videos on Tumblr, create an account for the bot and register a new application on [this page](https://www.tumblr.com/oauth/apps). Then, go to [this page](https://api.tumblr.com/console) and authenticate using your application's consumer key and secret. Agree to any necessary permissions, make sure `OAuth 1.0a` authentication is selected, and click on `Show keys`. Enter your application's consumer key, consumer secret, token, and token secret into `tumblr_api_key`, `tumblr_api_secret`, `tumblr_access_token`, and `tumblr_access_token_secret`, respectively. Alternatively, you can set these options to null and place the credentials in the `WANDERER_TUMBLR_API_KEY`, `WANDERER_TUMBLR_API_SECRET`, `WANDERER_TUMBLR_ACCESS_TOKEN`, and `WANDERER_TUMBLR_ACCESS_TOKEN_SECRET` environment variables.
 
 ### Additional Steps For Remote Machines
 
@@ -123,11 +127,11 @@ If you're hosting the bot in a remote Windows machine, there are some additional
 
 * If you installed a Windows version without a product key, you should activate it to prevent the watermark from appearing in the recordings.
 
-* If you want Windows to automatically sign into your account after booting then run the command `netplwiz`, uncheck `Users must enter a user name and password to use this computer` in the User Accounts window, and enter your credentials after pressing ok.
+* If you want Windows to automatically sign into your account after booting then run the command `netplwiz`, uncheck `Users must enter a user name and password to use this computer` in the User Accounts window, and enter your credentials after clicking ok.
 
-* It's recommended that you set your machine's time zone to UTC in the Windows settings by going to `Time & Language > Time zone (under Current data and time) > (UTC) Coordinated Universal Time` and pressing `Sync now`. This should make it easier to track the scheduled jobs executed by the scout, recorder, and publisher scripts.
+* It's recommended that you set your machine's time zone to UTC in the Windows settings by going to `Time & Language > Time zone (under Current data and time) > (UTC) Coordinated Universal Time` and clicking `Sync now`. This should make it easier to track the scheduled jobs executed by the scout, recorder, and publisher scripts.
 
-* It's recommended that you disable any automatic Windows updates to prevent any unwanted restarts while the bot is running. You can do this in the Services settings by going to the `Windows Update` service's properties, setting the startup type to `Disabled`, and then pressing `Stop`. Note that you should only do this after setting up the bot and confirming that it works properly. This is because some of the previous steps may require the Windows Update service. For example, if you tried to install the voice packages after disabling this service, it would fail with the error `The voice package couldn't be installed`.
+* It's recommended that you disable any automatic Windows updates to prevent any unwanted restarts while the bot is running. You can do this in the Services settings by going to the `Windows Update` service's properties, setting the startup type to `Disabled`, and then clicking `Stop`. Note that you should only do this after setting up the bot and confirming that it works properly. This is because some of the previous steps may require the Windows Update service. For example, if you tried to install the voice packages after disabling this service, it would fail with the error `The voice package couldn't be installed`.
 
 ## Scripts
 
@@ -137,7 +141,7 @@ Below is a summary of the Python scripts located in [the source directory](Sourc
 
 * `record.py`: records the previously scouted snapshots on a set schedule by opening their pages in Firefox and scrolling through them at a set pace. If the recorder script detects that any plugins crashed or that the page was redirected while capturing the screen, the recording is aborted. **This script is inherently unsafe since it relies on web plugins (e.g. Flash, Shockwave, Java, etc).**
 
-* `publish.py`: publishes the previously recorded snapshots to Twitter and Mastodon on a set schedule. The publisher script uploads the recordings and generates posts with the web page's title, its date, and a link to its Wayback Machine capture.
+* `publish.py`: publishes the previously recorded snapshots on Twitter, Mastodon, and Tumblr on a set schedule. The publisher script uploads the recordings and generates posts with the web page's title, its date, and a link to its Wayback Machine capture.
 
 * `approve.py`: approves recordings for publishing. This process is optional and can only be done if the publisher script was started with the `require_approval` option enabled.
 
@@ -417,9 +421,9 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `cosmo_player_viewpoint_wait_per_cycle`: how long to wait between viewpoints (in seconds). Only used if `enable_cosmo_player_viewpoint_cycler` is enabled.
 
-* `min_duration`: the minimum recording duration (in seconds). Used to stay within the Twitter and Mastodon media guidelines.
+* `min_duration`: the minimum recording duration (in seconds). Used to stay within the Twitter, Mastodon, and Tumblr media guidelines.
 
-* `max_duration`: the maximum recording duration (in seconds). Used to stay within the Twitter and Mastodon media guidelines.
+* `max_duration`: the maximum recording duration (in seconds). Used to stay within the Twitter, Mastodon, and Tumblr media guidelines.
 
 * `save_archive_copy`: enable to save a lossless copy of the raw recording for archival purposes. Although this copy is smaller than the raw footage, it's still significantly larger than the lossy recording.
 
@@ -441,7 +445,7 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `text_to_speech_audio_format_type`: the text-to-speech audio format. Must be an enum name from [this page](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ee125189(v=vs.85)) (e.g. `SAFT22kHz16BitMono`). Set to null to use the default format. Only used if `enable_text_to_speech` is enabled. 
 
-* `text_to_speech_rate`: the text-to-speech voice's speaking rate. Must be a number between -10 and 10 as mentioned in [this page](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ms723606(v=vs.85)). Set to null to use the default rate. Only used if `enable_text_to_speech` is enabled.
+* `text_to_speech_rate`: the text-to-speech voice's speaking rate. Must be a number between -10 and 10 as mentioned on [this page](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ms723606(v=vs.85)). Set to null to use the default rate. Only used if `enable_text_to_speech` is enabled.
 
 * `text_to_speech_default_voice`: the name of the Microsoft Speech API voice to use for an unsupported language. In most cases, the English (United States) voices (`David`, `Mark`, `Zira`) should be available. Set to null to leave the default voice unchanged. Only used if `enable_text_to_speech` is enabled.
 
@@ -475,13 +479,15 @@ Used by `publish.py` and `approve.py`.
 
 * `enable_mastodon`: enable to publish on Mastodon.
 
+* `enable_tumblr`: enable to publish on Tumblr.
+
 * `require_approval`: enable to only publish recordings that have been manually approved using `approve.py`.
 
-* `flag_sensitive_snapshots`: enable to flag any posts whose snapshot contains sensitive content.
+* `flag_sensitive_snapshots`: enable to flag any posts whose snapshot contains sensitive content. Not supported when publishing on Tumblr.
 
 * `show_media_metadata`: enable to show the title and author metadata of a media snapshot in the post.
 
-* `reply_with_text_to_speech`: enable to add the text-to-speech recordings as a reply to the post. When publishing on Twitter, the recording may have to be split into multiple replies.
+* `reply_with_text_to_speech`: enable to add the text-to-speech recordings as a reply to the post. When publishing on Twitter, the recording may have to be split into multiple replies. Not supported when publishing on Tumblr.
 
 * `delete_files_after_upload`: enable to delete the recording file after being uploaded to all platforms.
 
@@ -520,3 +526,17 @@ Used by `publish.py` and `approve.py`.
 * `mastodon_enable_ffmpeg`: enable to run every recording through FFmpeg in order to reduce the file size. It's strongly recommended that you enable this option since Mastodon's default limit would otherwise exclude a lot of recordings. Additionally, this reduces the total amount of disk space used by the bot in the instance.
 
 * `mastodon_ffmpeg_output_args`: the output arguments used to reduce the file size. Aside from using filters, one trick is to avoid specifying any output bitrates so that FFmpeg reencodes the files using the default values. In most cases, this should lower the file size significantly. Only used if `mastodon_enable_ffmpeg` is enabled.
+
+* `tumblr_api_key`: the consumer key obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Tumblr.**
+
+* `tumblr_api_secret`: the consumer secret obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Tumblr.**
+
+* `tumblr_access_token`: the token obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Tumblr.**
+
+* `tumblr_access_token_secret`: the token secret obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Tumblr.**
+
+* `tumblr_max_retries`: the maximum amount of times to retry a Tumblr API request when an unexpected error occurs.
+
+* `tumblr_retry_wait`: how long to wait before retrying a Tumblr API request (in seconds).
+
+* `tumblr_max_status_length`: the maximum amount of characters in a Tumblr post. This should be set to the current Tumblr character limit.
