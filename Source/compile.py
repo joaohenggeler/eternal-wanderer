@@ -262,7 +262,6 @@ if __name__ == '__main__':
 								sensitive_identifier = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
 								
 								recording_identifiers = [timestamp, snapshot.DisplayTitle, f'({snapshot.ShortDate})', plugin_identifier, sensitive_identifier]
-								
 								timestamp_line = ' '.join(filter(None, recording_identifiers))
 								timestamps_file.write(f'{timestamp_line}\n')
 								

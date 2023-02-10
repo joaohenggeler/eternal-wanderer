@@ -10,6 +10,7 @@ import sys
 from argparse import ArgumentParser
 from collections import Counter, defaultdict
 from contextlib import AbstractContextManager, nullcontext
+from copy import deepcopy
 from datetime import datetime
 from glob import iglob
 from math import ceil
@@ -134,6 +135,8 @@ class RecordConfig(CommonConfig):
 	convertible_media_extensions: frozenset[str] # Different from the config data type.
 	ffmpeg_media_conversion_input_name: str
 	ffmpeg_media_conversion_input_args: dict[str, Union[None, int, str]]
+	ffmpeg_media_conversion_enable_subtitles: bool
+	ffmpeg_media_conversion_subtitles_style: str
 
 	# Determined at runtime.
 	media_template: str
@@ -713,6 +716,12 @@ if __name__ == '__main__':
 		media_download_search_path = os.path.join(media_download_directory.name, '*')
 		log.debug(f'Created the temporary media download directory "{media_download_directory.name}".')
 
+		# The subtitles path needs to be escaped before being passed to the subtitles filter.
+		# See: https://superuser.com/a/1251305
+		subtitles_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.srt', delete=False)
+		escaped_subtitles_path = subtitles_file.name.replace('\\', r'\\').replace(':', r'\:')
+		log.debug(f'Created the temporary subtitles file "{subtitles_file.name}".')
+
 		try:
 			extra_preferences: dict = {
 				# Always use cached page.
@@ -1224,7 +1233,29 @@ if __name__ == '__main__':
 								video_stream = None if has_video_stream else ffmpeg.input(config.ffmpeg_media_conversion_input_name, **config.ffmpeg_media_conversion_input_args)
 								input_streams: list[ffmpeg.Stream] = list(filter(None, [media_stream, video_stream]))
 								
-								stream = ffmpeg.output(*input_streams, upload_recording_path, t=config.max_duration, shortest=None, **config.ffmpeg_upload_output_args)
+								if config.ffmpeg_media_conversion_enable_subtitles and not has_video_stream:
+
+									preposition = 'by' if media_author is not None else None
+									subtitles = '\n'.join(filter(None, [snapshot.DisplayTitle, media_title, preposition, media_author]))
+
+									# Set a high enough duration so the subtitles last the entire recording.
+									subtitles_file.seek(0)
+									subtitles_file.truncate(0)
+									subtitles_file.write(f'1\n00:00:00,000 --> 99:00:00,000\n{subtitles}')
+									subtitles_file.flush()
+
+									# Take into account any previous filters from the configuration file.
+									output_args = deepcopy(config.ffmpeg_upload_output_args)
+									subtitles_filter = f"subtitles='{escaped_subtitles_path}':force_style='{config.ffmpeg_media_conversion_subtitles_style}'"
+
+									if 'vf' in output_args:
+										output_args['vf'] += ',' + subtitles_filter # type: ignore
+									else:
+										output_args['vf'] = subtitles_filter
+								else:
+									output_args = config.ffmpeg_upload_output_args
+
+								stream = ffmpeg.output(*input_streams, upload_recording_path, t=config.max_duration, shortest=None, **output_args)
 								stream = stream.global_args(*config.ffmpeg_global_args)
 								stream = stream.overwrite_output()
 
@@ -1529,6 +1560,9 @@ if __name__ == '__main__':
 			media_page_file.close()
 			delete_file(media_page_file.name)
 			
+			subtitles_file.close()
+			delete_file(subtitles_file.name)
+
 			if config.enable_text_to_speech:
 				text_to_speech.cleanup()
 

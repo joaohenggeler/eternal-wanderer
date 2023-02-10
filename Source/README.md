@@ -135,7 +135,7 @@ If you're hosting the bot in a remote Windows machine, there are some additional
 
 ## Scripts
 
-Below is a summary of the Python scripts located in [the source directory](Source). The first three scripts are the most important ones as they handle the metadata collection, the screen recording, and the video publishing. These were designed to either run forever or only a set number of times. Pass the `-h` command line argument to learn how to use each script.
+Below is a summary of the Python scripts located in the [source directory](Source). The first three scripts are the most important ones as they handle the metadata collection, the screen recording, and the video publishing. These were designed to either run forever or only a set number of times. Pass the `-h` command line argument to learn how to use each script.
 
 * `scout.py`: traverses web pages archived by the Wayback Machine (snapshots) and collects metadata from their content and from the CDX API. The scout script prioritizes pages that were manually added by the user through the configuration file as well as pages whose parent snapshot contains specific words and plugin media.
 
@@ -427,17 +427,17 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `save_archive_copy`: enable to save a lossless copy of the raw recording for archival purposes. Although this copy is smaller than the raw footage, it's still significantly larger than the lossy recording.
 
-* `screen_capture_recorder_settings`: the Screen Capture Recorder device settings. Any previous settings are temporarily cleared from the registry before applying these changes. As such, you should only change a setting if you don't want its default value. If `capture_width` or `capture_height` are null, these will be set to the screen's physical width and height, respectively, in order to record the entire screen. If `default_max_fps` is null, it will be set to the `framerate` parameter from `ffmpeg_recording_input_args`. If this parameter isn't specified, then the setting is set to 60. Note that this is just the device's maximum frame rate. The recording frame rate is specified in `ffmpeg_recording_input_args`. Refer to [the device's documentation](https://github.com/rdp/screen-capture-recorder-to-video-windows-free#configuration) for a list of all possible settings.
+* `screen_capture_recorder_settings`: the Screen Capture Recorder device settings. Any previous settings are temporarily cleared from the registry before applying these changes. As such, you should only change a setting if you don't want its default value. If `capture_width` or `capture_height` are null, these will be set to the screen's physical width and height, respectively, in order to record the entire screen. If `default_max_fps` is null, it will be set to the `framerate` parameter from `ffmpeg_recording_input_args`. If this parameter isn't specified, then the setting is set to 60. Note that this is just the device's maximum frame rate. The recording frame rate is specified in `ffmpeg_recording_input_args`. Refer to the [Screen Capture Recorder documentation](https://github.com/rdp/screen-capture-recorder-to-video-windows-free#configuration) for a list of all possible settings.
 
 * `ffmpeg_recording_input_name`: the input device used to capture the screen. This should be the Screen Capture Recorder device.
 
-* `ffmpeg_recording_input_args`: the input arguments used to capture the screen. Set a parameter to null if it's meant to be used as a flag (e.g. `-shortest`). Refer to [FFmpeg's documentation](https://ffmpeg.org/ffmpeg-all.html) for a list of all possible parameters. In particular, see [this tutorial](https://trac.ffmpeg.org/wiki/Capture/Desktop) to learn about the best parameters to use when capturing the screen with FFmpeg.
+* `ffmpeg_recording_input_args`: the input arguments used to capture the screen. Set a parameter to null if it's meant to be used as a flag (e.g. `-shortest`). Refer to the [FFmpeg documentation](https://ffmpeg.org/ffmpeg-all.html) for a list of all possible parameters. In particular, see [this tutorial](https://trac.ffmpeg.org/wiki/Capture/Desktop) to learn about the best parameters to use when capturing the screen with FFmpeg.
 
 * `ffmpeg_recording_output_args`: the output arguments used to generate the raw recording footage.
 
 * `ffmpeg_archive_output_args`: the output arguments used to generate a lossless recording from the raw footage. Only used if `save_archive_copy` is enabled.
 
-* `ffmpeg_upload_output_args`: the output arguments used to generate a lossy recording from the raw footage.
+* `ffmpeg_upload_output_args`: the output arguments used to generate a lossy recording from the raw footage. Refer to the recommended audio and video encoding settings of the supported platforms before changing any parameters: [YouTube](https://support.google.com/youtube/answer/1722171), [Twitter](https://developer.twitter.com/en/docs/twitter-api/v1/media/upload-media/uploading-media/media-best-practices), [Mastodon](https://docs.joinmastodon.org/user/posting/#attachments), [Tumblr](https://help.tumblr.com/hc/en-us/articles/231455628-Adding-Video).
 
 * `enable_text_to_speech`: enable to generate a text-to-speech recording of a page snapshot's content.
 
@@ -467,6 +467,10 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `ffmpeg_media_conversion_input_args`: the input video arguments used when converting the media snapshot. The corresponding output arguments are defined in `ffmpeg_upload_output_args`. Only used if `enable_media_conversion` is enabled.
 
+* `ffmpeg_media_conversion_enable_subtitles`: enable to add subtitles with the file's metadata to the video stream when converting audio-only media formats. Used to make media snapshots without a video component more interesting.
+
+* `ffmpeg_media_conversion_subtitles_style`: how to style the media snapshot's subtitles. This must be a string containing Advanced Substation Alpha / Substation Alpha (ASS/SSA) style fields separated by commas. Refer to the [libass source code](https://github.com/libass/libass/blob/master/libass/ass_types.h) and the [Sub Station Alpha v4.00+ Script Format](https://web.archive.org/web/20230209193228if_/https://forum.videohelp.com/attachment.php?attachmentid=33290&d=1440307546) for a list of all possible fields. Only used if `enable_media_conversion` and `ffmpeg_media_conversion_enable_subtitles` are enabled.
+
 ### Publish
 
 Used by `publish.py` and `approve.py`.
@@ -491,8 +495,6 @@ Used by `publish.py` and `approve.py`.
 
 * `delete_files_after_upload`: enable to delete the recording file after being uploaded to all platforms.
 
-* `api_wait`: how long to wait after making a request to the Twitter and Mastodon APIs (in seconds). This was added to reduce the chance of being flagged by the Twitter spam algorithm, though it probably doesn't do too much in practice.
-
 * `twitter_api_key`: the API key obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Twitter.**
 
 * `twitter_api_secret`: the API secret obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Twitter.**
@@ -500,6 +502,8 @@ Used by `publish.py` and `approve.py`.
 * `twitter_access_token`: the access token obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Twitter.**
 
 * `twitter_access_token_secret`: the access token secret obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Twitter.**
+
+* `twitter_api_wait`: how long to wait after making a request to the Twitter API (in seconds). This was added to reduce the chance of being flagged by the Twitter spam algorithm, though it probably doesn't do too much in practice.
 
 * `twitter_max_retries`: the maximum amount of times to retry a Twitter API request when an unexpected error occurs.
 
