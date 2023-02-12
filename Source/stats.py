@@ -119,8 +119,6 @@ if __name__ == '__main__':
 				row = cursor.fetchone()
 
 				if row is not None:
-					row = dict(row)
-							
 					# Avoid naming conflicts with each table's primary key.
 					del row['Id']
 					snapshot = Snapshot(**row, Id=row['SnapshotId'])

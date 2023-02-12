@@ -23,8 +23,8 @@ if __name__ == '__main__':
 
 	wayback_parts = parse_wayback_machine_snapshot_url(args.url)
 	if wayback_parts is not None:
-		args.url = wayback_parts.Url
-		args.timestamp = wayback_parts.Timestamp
+		args.url = wayback_parts.url
+		args.timestamp = wayback_parts.timestamp
 	elif args.timestamp is None:
 		parser.error('The timestamp cannot be omitted unless the URL already points to a Wayback Machine snapshot.')
 
@@ -66,7 +66,7 @@ if __name__ == '__main__':
 					row = cursor.fetchone()
 					if row is not None:
 						
-						snapshot = Snapshot(**dict(row))
+						snapshot = Snapshot(**row)
 						old_state = snapshot.State
 
 						if priority == Snapshot.SCOUT_PRIORITY:

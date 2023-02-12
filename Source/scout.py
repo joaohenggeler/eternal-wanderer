@@ -389,7 +389,7 @@ if __name__ == '__main__':
 						row = cursor.fetchone()
 						if row is not None:
 							
-							snapshot = Snapshot(**dict(row))
+							snapshot = Snapshot(**row)
 							
 							browser.set_fallback_encoding_for_snapshot(snapshot)
 							parent_points = row['ParentPoints']
@@ -488,7 +488,7 @@ if __name__ == '__main__':
 						# missing snapshots. Keeping the Wayback Machine URL format is also necessary when counting
 						# tags later on in the script.
 						frame_text_list = []
-						for i, frame_url in enumerate(browser.traverse_frames(format_wayback_urls=True, skip_missing=True)):
+						for frame_url in browser.traverse_frames(format_wayback_urls=True, skip_missing=True):
 
 							# Retrieve links from all href attributes.
 							# This is useful for snapshots that use tags other than <a> to link to other pages.
@@ -516,8 +516,8 @@ if __name__ == '__main__':
 									# Which links to https://web.archive.org/web/20110519051847if_/http://web.archive.org/web/20031105100709/http://www.turboforce3d.com/annoying/index.htm
 									wayback_parts = parse_wayback_machine_snapshot_url(url)
 									if wayback_parts is not None:
-										url = wayback_parts.Url
-										wayback_timestamp = wayback_parts.Timestamp
+										url = wayback_parts.url
+										wayback_timestamp = wayback_parts.timestamp
 
 									# Checking for valid URLs using netloc only makes sense if it was properly decoded.
 									# E.g. "http%3A//www.geocities.com/Hollywood/Hills/5988/main.html" would result in
@@ -567,7 +567,7 @@ if __name__ == '__main__':
 							# Convert the URL to the unmodified page archive.
 							wayback_parts = parse_wayback_machine_snapshot_url(frame_url)
 							if wayback_parts is not None:
-								wayback_parts.Modifier = Snapshot.IDENTICAL_MODIFIER
+								wayback_parts.modifier = Snapshot.IDENTICAL_MODIFIER
 								raw_frame_url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
 								raw_frame_url_list.append(raw_frame_url)
 							else:
@@ -698,10 +698,10 @@ if __name__ == '__main__':
 					log.debug(f'Words and tags found: {word_and_tag_counter}')
 
 					child_snapshot_list = []
-					for i, (url, wayback_timestamp) in enumerate(url_list):
+					for i, (url, wayback_timestamp) in enumerate(url_list, start=1):
 
-						if (i+1) % 100 == 0:
-							log.info(f'Locating snapshot {i+1} of {len(url_list)}.')
+						if i % 100 == 0:
+							log.info(f'Locating snapshot {i} of {len(url_list)}.')
 
 						timestamp = wayback_timestamp or snapshot.Timestamp
 						child_snapshot = find_child_snapshot(snapshot, url, timestamp)

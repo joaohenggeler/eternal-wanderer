@@ -131,8 +131,6 @@ if __name__ == '__main__':
 
 			snapshots_and_recordings = []
 			for row in cursor:
-
-				row = dict(row)
 				
 				# Avoid naming conflicts with each table's primary key.
 				del row['Id']
@@ -318,8 +316,8 @@ if __name__ == '__main__':
 					if args.published:
 
 						recording_compilation = []
-						for i, (snapshot, recording) in enumerate(snapshots_and_recordings):
-							recording_compilation.append({'recording_id': recording.Id, 'compilation_id': compilation_id, 'snapshot_id': snapshot.Id, 'position': i + 1})
+						for i, (snapshot, recording) in enumerate(snapshots_and_recordings, start=1):
+							recording_compilation.append({'recording_id': recording.Id, 'compilation_id': compilation_id, 'snapshot_id': snapshot.Id, 'position': i})
 
 						db.execute(	'''
 									INSERT INTO Compilation (UploadFilename, TimestampsFilename, CreationTime)

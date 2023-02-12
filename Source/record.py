@@ -766,7 +766,7 @@ if __name__ == '__main__':
 					download_path = None
 
 					wayback_parts = parse_wayback_machine_snapshot_url(wayback_url)
-					parts = urlparse(wayback_parts.Url if wayback_parts is not None else wayback_url)
+					parts = urlparse(wayback_parts.url if wayback_parts is not None else wayback_url)
 					filename = os.path.basename(parts.path)
 						
 					if media_extension is None:
@@ -953,7 +953,7 @@ if __name__ == '__main__':
 						row = cursor.fetchone()
 						if row is not None:
 							
-							snapshot = Snapshot(**dict(row))
+							snapshot = Snapshot(**row)
 
 							assert snapshot.Points is not None, 'The Points column is not being computed properly.'
 							
@@ -1235,6 +1235,8 @@ if __name__ == '__main__':
 								
 								if config.ffmpeg_media_conversion_enable_subtitles and not has_video_stream:
 
+									log.debug('Adding subtitles to the converted media file.')
+
 									preposition = 'by' if media_author is not None else None
 									subtitles = '\n'.join(filter(None, [snapshot.DisplayTitle, media_title, preposition, media_author]))
 
@@ -1385,9 +1387,9 @@ if __name__ == '__main__':
 							# If a file like "level3.dat" was missing, then we should check the
 							# other values, both above and below 3.
 							# E.g. https://web.archive.org/cdx/search/cdx?url=disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/cutplane/*&fl=original,timestamp,statuscode&collapse=urlkey
-							for i, url in enumerate(missing_urls):
+							for i, url in enumerate(missing_urls, start=1):
 								
-								browser.go_to_blank_page_with_text('\N{Left-Pointing Magnifying Glass} Locating Missing URLs \N{Left-Pointing Magnifying Glass}', f'{i+1} of {len(missing_urls)}')
+								browser.go_to_blank_page_with_text('\N{Left-Pointing Magnifying Glass} Locating Missing URLs \N{Left-Pointing Magnifying Glass}', f'{i} of {len(missing_urls)}')
 
 								parts = urlparse(url)
 								directory_path, filename = os.path.split(parts.path)
@@ -1440,6 +1442,7 @@ if __name__ == '__main__':
 							if missing_urls:
 								log.info(f'Saving {len(missing_urls)} missing URLs.')
 
+							# This index is later used to store any skipped URLs.
 							for i, url in enumerate(missing_urls):
 
 								browser.go_to_blank_page_with_text('\N{Floppy Disk} Saving Missings URLs \N{Floppy Disk}', f'{i+1} of {len(missing_urls)}', f'{url}')
@@ -1456,8 +1459,8 @@ if __name__ == '__main__':
 
 										wayback_parts = parse_wayback_machine_snapshot_url(wayback_url)
 										if wayback_parts is not None:
-											url = wayback_parts.Url
-											timestamp = wayback_parts.Timestamp
+											url = wayback_parts.url
+											timestamp = wayback_parts.timestamp
 										else:
 											timestamp = None
 

@@ -43,7 +43,7 @@ if __name__ == '__main__':
 								LIMIT :max_recordings;
 								''', {'recorded_state': Snapshot.RECORDED, 'max_recordings': args.max_recordings})
 
-			row_list = [dict(row) for row in cursor]
+			row_list = cursor.fetchall()
 			total_recordings = len(row_list)
 
 			snapshot_updates = []
@@ -72,7 +72,7 @@ if __name__ == '__main__':
 
 			row_iter = alternate(row_list) if args.alternate else row_list
 			
-			for i, row in enumerate(row_iter):
+			for i, row in enumerate(row_iter, start=1):
 
 				del row['Id']
 				snapshot = Snapshot(**row, Id=row['SnapshotId'])
@@ -85,7 +85,7 @@ if __name__ == '__main__':
 
 				try:
 					print()
-					print(f'[{i+1} of {total_recordings}] Approve the following recording:')
+					print(f'[{i} of {total_recordings}] Approve the following recording:')
 					print(f'- Snapshot: #{snapshot.Id} {snapshot}')
 					print(f'- Type: {"Media" if snapshot.IsMedia else "Page"}')
 					print(f'- Title: {snapshot.DisplayTitle}')

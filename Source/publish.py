@@ -202,7 +202,7 @@ if __name__ == '__main__':
 					try:
 						if config.twitter_max_text_to_speech_segments is None or len(segment_file_paths) <= config.twitter_max_text_to_speech_segments:
 							
-							for i, segment_path in enumerate(segment_file_paths):
+							for i, segment_path in enumerate(segment_file_paths, start=1):
 
 								sleep(config.twitter_api_wait)
 								tts_media = twitter_api.chunked_upload(filename=segment_path, file_type='video/mp4', media_category='TweetVideo')
@@ -216,7 +216,7 @@ if __name__ == '__main__':
 								segment_body = tts_body
 								
 								if len(segment_file_paths) > 1:
-									segment_body += f'\n{i+1} of {len(segment_file_paths)}'
+									segment_body += f'\n{i} of {len(segment_file_paths)}'
 								
 								max_title_length = max(config.twitter_max_status_length - len(segment_body) - 2, 0)
 								tts_text = f'{title[:max_title_length]}\n{segment_body}'
@@ -225,7 +225,7 @@ if __name__ == '__main__':
 								tts_status = twitter_api.update_status(tts_text, in_reply_to_status_id=last_status_id, media_ids=[tts_media_id], possibly_sensitive=sensitive)
 								last_status_id = tts_status.id
 
-								log.debug(f'Posted the text-to-speech status #{last_status_id} with the media #{tts_media_id} ({i+1} of {len(segment_file_paths)}) using {len(tts_text)} characters.')
+								log.debug(f'Posted the text-to-speech status #{last_status_id} with the media #{tts_media_id} ({i} of {len(segment_file_paths)}) using {len(tts_text)} characters.')
 
 							log.info(f'Posted {len(segment_file_paths)} text-to-speech segments.')
 						else:
@@ -478,10 +478,7 @@ if __name__ == '__main__':
 												  'require_approval': config.require_approval})
 						
 						row = cursor.fetchone()
-						if row is not None:
-							
-							row = dict(row)
-							
+						if row is not None:	
 							# Avoid naming conflicts with each table's primary key.
 							del row['Id']
 							snapshot = Snapshot(**row, Id=row['SnapshotId'])

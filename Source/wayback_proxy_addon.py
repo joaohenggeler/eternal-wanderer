@@ -88,7 +88,7 @@ def request(flow: http.HTTPFlow) -> None:
 
 	if config.proxy_convert_realmedia_metadata_snapshots:
 		
-		parts = urlparse(wayback_parts.Url)
+		parts = urlparse(wayback_parts.url)
 		_, file_extension = os.path.splitext(parts.path)
 
 		if file_extension.lower() == '.ram':
@@ -130,7 +130,7 @@ def request(flow: http.HTTPFlow) -> None:
 						parts = parts._replace(scheme='http')
 						url = urlunparse(parts)
 					
-						wayback_parts.Url = url
+						wayback_parts.url = url
 						request.url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
 
 			except (RequestException, UnicodeError):
@@ -164,8 +164,8 @@ def request(flow: http.HTTPFlow) -> None:
 
 		if not found_snapshot:
 			
-			extract = no_fetch_tld_extract(wayback_parts.Url)
-			parts = urlparse(wayback_parts.Url)
+			extract = no_fetch_tld_extract(wayback_parts.url)
+			parts = urlparse(wayback_parts.url)
 			split_path = parts.path.split('/')
 
 			# E.g. "http://www.example.com/path1/path2/file.ext" -> "/path2/file.ext" (2 components).
@@ -217,13 +217,13 @@ def request(flow: http.HTTPFlow) -> None:
 				no_query_cdx = None
 
 			cdx_list = [(prefix_cdx, 'PREFIX'), (subdomain_cdx, 'SUBDOMAIN'), (no_query_cdx, 'NO QUERY')]
-			for i, (cdx, identifier) in enumerate(filter(lambda x: x[0], cdx_list)):
+			for cdx, identifier in filter(lambda x: x[0], cdx_list):
 				try:
 					# Queries to the CDX API cost twice as much here as the queries sent from other scripts.
 					global_rate_limiter.wait_for_cdx_api_rate_limit(cost=2)
 					snapshot = cdx.near(wayback_machine_timestamp=timestamp)
-					wayback_parts.Timestamp = snapshot.timestamp
-					wayback_parts.Url = snapshot.original
+					wayback_parts.timestamp = snapshot.timestamp
+					wayback_parts.url = snapshot.original
 					found_snapshot = True
 					cdx_mark = f'{identifier} CDX {wayback_response.status_code} -> {snapshot.statuscode}'
 					break
@@ -235,19 +235,19 @@ def request(flow: http.HTTPFlow) -> None:
 	redirect_to_original = False
 	if config.proxy_save_missing_snapshots_that_still_exist_online and wayback_response is not None:
 
-		if not found_snapshot and is_url_available(wayback_parts.Url):
+		if not found_snapshot and is_url_available(wayback_parts.url):
 			
 			redirect_to_original = True
 			with lock:
-				print(f'[SAVE] [{wayback_parts.Url}]')
+				print(f'[SAVE] [{wayback_parts.url}]')
 
 	# Avoid showing the toolbar in frame pages that are missing their modifier.
-	if wayback_parts.Modifier is None:
-		wayback_parts.Modifier = Snapshot.IFRAME_MODIFIER
+	if wayback_parts.modifier is None:
+		wayback_parts.modifier = Snapshot.IFRAME_MODIFIER
 
 	# This is used to redirect the request in the majority of cases. For VRML
 	# worlds, we'll create the response ourselves (see below).
-	request.url = wayback_parts.Url if redirect_to_original else compose_wayback_machine_snapshot_url(parts=wayback_parts)
+	request.url = wayback_parts.url if redirect_to_original else compose_wayback_machine_snapshot_url(parts=wayback_parts)
 
 	if extracted_realmedia_url:
 		with lock:

@@ -441,8 +441,16 @@ class Database():
 		os.makedirs(os.path.dirname(config.database_path), exist_ok=True)
 
 		self.connection = sqlite3.connect(config.database_path)
-		self.connection.row_factory = sqlite3.Row
+		
+		def dict_factory(cursor: sqlite3.Cursor, row: sqlite3.Row) -> dict:
+			""" Converts a SQLite row into a dictionary. """
+			# Adapted from: https://docs.python.org/3/library/sqlite3.html#how-to-create-and-use-row-factories
+			fields = [column[0] for column in cursor.description]
+			return {key: value for key, value in zip(fields, row)}
 
+		self.connection.row_factory = dict_factory
+
+		self.connection.execute('PRAGMA foreign_keys = ON;')
 		self.connection.execute('PRAGMA journal_mode = WAL;')
 		self.connection.execute('PRAGMA synchronous = NORMAL;')
 		self.connection.execute('PRAGMA temp_store = MEMORY;')
@@ -658,6 +666,7 @@ class Database():
 	def __exit__(self, exception_type, exception_value, traceback):
 		self.disconnect()
 
+@dataclass
 class Snapshot():
 	""" A snapshot from the Wayback Machine at a specific time and location. """
 
@@ -731,7 +740,9 @@ class Snapshot():
 		
 		self.Points = None
 		self.IsSensitive = None
-		self.__dict__.update(kwargs)
+		
+		field_names = set(field.name for field in dataclasses.fields(self))
+		self.__dict__.update({key: value for key, value in kwargs.items() if key in field_names})
 		
 		def bool_or_none(value: Any) -> Union[bool, None]:
 			return bool(value) if value is not None else None
@@ -818,6 +829,7 @@ Snapshot.PRIORITY_NAMES = {
 	Snapshot.PUBLISH_PRIORITY: 'Publish',
 }
 
+@dataclass
 class Recording():
 	""" A video recording of a Wayback Machine snapshot. """
 
@@ -844,7 +856,8 @@ class Recording():
 
 	def __init__(self, **kwargs):
 		
-		self.__dict__.update(kwargs)
+		field_names = set(field.name for field in dataclasses.fields(self))
+		self.__dict__.update({key: value for key, value in kwargs.items() if key in field_names})
 		
 		subdirectory_path = config.get_recording_subdirectory_path(self.Id)
 		self.UploadFilePath = os.path.join(subdirectory_path, self.UploadFilename)
@@ -1595,28 +1608,28 @@ class Browser():
 		# Catches example #4.
 		if current_wayback_parts is None:
 			log.debug(f'Passed the redirection test since the current page is not a valid snapshot: "{expected_wayback_url}" -> "{current_url}".')
-			return True, current_url, expected_wayback_parts.Timestamp
+			return True, current_url, expected_wayback_parts.timestamp
 
 		# Catches examples #2 and #5.
 		redirect_count = self.driver.execute_script('return window.performance.navigation.redirectCount;')
 		if redirect_count > 0:
 			log.debug(f'Passed the redirection test with the redirect count at {redirect_count}: "{expected_wayback_url}" -> "{current_url}".')
-			return True, current_wayback_parts.Url, current_wayback_parts.Timestamp
+			return True, current_wayback_parts.url, current_wayback_parts.timestamp
 
 		# Catches example #1.
-		if current_wayback_parts.Modifier != expected_wayback_parts.Modifier:
+		if current_wayback_parts.modifier != expected_wayback_parts.modifier:
 			log.debug(f'Passed the redirection test since the modifiers changed: "{expected_wayback_url}" -> "{current_url}".')
-			return True, current_wayback_parts.Url, current_wayback_parts.Timestamp
+			return True, current_wayback_parts.url, current_wayback_parts.timestamp
 
 		# Catches examples #2 and #5 if they weren't detected before.
-		if current_wayback_parts.Timestamp != expected_wayback_parts.Timestamp:
+		if current_wayback_parts.timestamp != expected_wayback_parts.timestamp:
 			log.debug(f'Passed the redirection test since the timestamps changed: "{expected_wayback_url}" -> "{current_url}".')
-			return True, current_wayback_parts.Url, current_wayback_parts.Timestamp
+			return True, current_wayback_parts.url, current_wayback_parts.timestamp
 
 		# Catches example #3 but lets #6 through.
-		if current_wayback_parts.Url.lower() not in [expected_wayback_parts.Url.lower(), unquote(expected_wayback_parts.Url.lower())]:
+		if current_wayback_parts.url.lower() not in [expected_wayback_parts.url.lower(), unquote(expected_wayback_parts.url.lower())]:
 			log.debug(f'Passed the redirection test since the URLs changed: "{expected_wayback_url}" -> "{current_url}".')
-			return True, current_wayback_parts.Url, current_wayback_parts.Timestamp
+			return True, current_wayback_parts.url, current_wayback_parts.timestamp
 
 		return False, None, None
 
@@ -1681,9 +1694,9 @@ class Browser():
 				wayback_parts = parse_wayback_machine_snapshot_url(current_url)
 
 				if wayback_parts is not None:
-					wayback_parts.Modifier = root_wayback_parts.Modifier
+					wayback_parts.modifier = root_wayback_parts.modifier
 				else:
-					wayback_parts = dataclasses.replace(root_wayback_parts, Url=current_url)
+					wayback_parts = dataclasses.replace(root_wayback_parts, url=current_url)
 				
 				current_url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
 
@@ -2213,9 +2226,9 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 
 @dataclass
 class WaybackParts:
-	Timestamp: str
-	Modifier: Optional[str]
-	Url: str
+	timestamp: str
+	modifier: Optional[str]
+	url: str
 
 WAYBACK_MACHINE_SNAPSHOT_URL_REGEX = re.compile(r'https?://web\.archive\.org/web/(?P<timestamp>\d+)(?P<modifier>[a-z]+_)?/(?P<url>.+)', re.IGNORECASE)
 
@@ -2239,9 +2252,9 @@ def compose_wayback_machine_snapshot_url(*, timestamp: Optional[str] = None, mod
 	""" Combines the basic components of a Wayback Machine snapshot into a URL. """
 
 	if parts is not None:
-		timestamp = parts.Timestamp
-		modifier = parts.Modifier
-		url = parts.Url
+		timestamp = parts.timestamp
+		modifier = parts.modifier
+		url = parts.url
 
 	if timestamp is None or url is None:
 		raise ValueError('Missing the Wayback Machine timestamp and URL.')

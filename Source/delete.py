@@ -54,7 +54,7 @@ if __name__ == '__main__':
 			if args.unapproved:
 
 				cursor = db.execute('SELECT * FROM Recording WHERE IsProcessed AND PublishTime IS NULL ORDER BY CreationTime;')
-				unapproved_recordings = [Recording(**dict(row)) for row in cursor]
+				unapproved_recordings = [Recording(**row) for row in cursor]
 
 				print(f'Deleting the files from {len(unapproved_recordings)} unapproved recordings.')
 				num_unapproved_deleted, total_unapproved = delete_recordings(unapproved_recordings)
@@ -68,7 +68,7 @@ if __name__ == '__main__':
 									ORDER BY RC.CompilationId, RC.Position;
 									''')
 
-				compiled_recordings = [Recording(**dict(row)) for row in cursor]
+				compiled_recordings = [Recording(**row) for row in cursor]
 
 				print(f'Deleting the files from {len(compiled_recordings)} compiled recordings.')
 				num_compiled_deleted, total_compiled = delete_recordings(compiled_recordings)

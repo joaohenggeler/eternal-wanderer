@@ -4,7 +4,7 @@ A Python bot that generates videos of old web pages and media files archived by 
 
 With over 682 billion web pages saved since 1996, the [Wayback Machine](https://web.archive.org/) is a great resource for exploring the early internet. One project that takes advantage of this archive is [wayback_exe](https://github.com/muffinista/wayback_exe), a bot that generates images of old web pages. The Eternal Wanderer extends this idea and records videos of these old pages so that any audiovisual media like Flash movies, Java applets, VRML worlds, MIDI music, and QuickTime videos can also be experienced.
 
-Available on [Twitter](https://twitter.com/waybackwanderer), [Mastodon](https://botsin.space/@eternalwanderer), and [Tumblr](https://www.tumblr.com/waybackwanderer).
+Available on [Twitter](https://twitter.com/waybackwanderer), [Mastodon](https://botsin.space/@eternalwanderer), and [Tumblr](https://waybackwanderer.tumblr.com).
 
 ![The web page "http://www.geocities.com:80/Hollywood/Hills/5988/" as seen on December 1996 via the Wayback Machine.](Images/page.gif)
 
