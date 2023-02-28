@@ -35,9 +35,11 @@ The following Python packages are used:
 
 * [requests](https://github.com/psf/requests): to check if specific Wayback Machine snapshots are available and to download binary snapshot files.
 
-* [brotlicffi](https://github.com/python-hyper/brotlicffi): to automatically decompress Brotli-encoded requests.
+* [brotlicffi](https://github.com/python-hyper/brotlicffi): to automatically decompress Brotli-encoded responses.
 
 * [limits](https://github.com/alisaifee/limits): to avoid making too many requests to the Wayback Machine, the CDX API, and the Save API.
+
+* [tldextract](https://github.com/john-kurkowski/tldextract) to determine the correct registered domain from a URL.
 
 * [ffmpeg-python](https://github.com/kkroening/ffmpeg-python): to record the screen and manipulate audio/video files.
 
@@ -56,8 +58,6 @@ The following Python packages are used:
 * [comtypes](https://github.com/enthought/comtypes): to interface with Windows' text-to-speech API and generate audio recordings from a page's content. Only used if `enable_text_to_speech` is enabled, though it should already be installed since pywinauto depends on it.
 
 * [mitmproxy](https://github.com/mitmproxy/mitmproxy) to intercept all HTTP/HTTPS requests made by Firefox and its plugins. Used to locate missing resources in other subdomains via the CDX API while also allowing plugin media that loads slowly to finish requesting assets. Only used if `enable_proxy` is enabled.
-
-* [tldextract](https://github.com/john-kurkowski/tldextract) to determine the correct registered domain from a URL. Only used if `enable_proxy` is enabled.
 
 ### Troubleshooting
 
@@ -113,15 +113,15 @@ If you're hosting the bot in a remote Windows machine, there are some additional
 
 * If your machine doesn't have any audio output devices, then some components will crash or show error messages during recording. These include the FFmpeg audio capture device and the MIDI web plugin. You can solve this by installing the [VB-CABLE](https://vb-audio.com/Cable/index.htm) virtual audio device and selecting the speakers as your default output device in the Windows settings by going to `Devices > Sound settings (under Related settings) > Sound Control Panel (under Related settings) > Playback`.
 
-* It's strongly recommended that you increase the `rtbufsize` and `thread_queue_size` parameters in `ffmpeg_recording_input_args` to the maximum supported values for the remote machine. Check how much RAM is free while displaying a page with plugins in the browser (e.g. [this snapshot](https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html)) and set `rtbufsize` somewhere close to that value. If you see the errors `real-time buffer [screen-capture-recorder] [video input] too full or near too full` or `Thread message queue blocking; consider raising the thread_queue_size option` in the recorder log file, increase `rtbufsize` and `thread_queue_size`, respectively. If these values are too low, the recordings will stutter. A good rule of thumb is setting `thread_queue_size` to 5000 and `rtbufsize` as close as possible to 2 GB while leaving around 400 to 500 MB free for Firefox, the web plugins, and the Python scripts.
+* It's strongly recommended that you increase the `rtbufsize` and `thread_queue_size` parameters in `raw_ffmpeg_input_args` to the maximum supported values for the remote machine. Check how much RAM is free while displaying a page with plugins in the browser (e.g. [this snapshot](https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html)) and set `rtbufsize` somewhere close to that value. If you see the errors `real-time buffer [screen-capture-recorder] [video input] too full or near too full` or `Thread message queue blocking; consider raising the thread_queue_size option` in the recorder log file, increase `rtbufsize` and `thread_queue_size`, respectively. If these values are too low, the recordings will stutter. A good rule of thumb is setting `thread_queue_size` to 5000 and `rtbufsize` as close as possible to 2 GB while leaving around 400 to 500 MB free for Firefox, the web plugins, and the Python scripts.
 
-* If the recordings stutter in specific situations (e.g. VRML worlds or video media files), consider lowering the frame rate from 60 to 30 FPS. You can do this by setting the `framerate` parameter in `ffmpeg_recording_input_args` to 30, and by changing the `r` and `g` parameters in `ffmpeg_upload_output_args` to 30 and 15, respectively. Remember that `g` should be half the frame rate. If `enable_media_conversion` is enabled, change the `rate` parameter in `ffmpeg_media_conversion_input_name` from `60/1` to `30/1`.
+* If the recordings stutter in specific situations (e.g. VRML worlds or video media files), consider lowering the frame rate from 60 to 30 FPS. You can do this by setting the `framerate` parameter in `raw_ffmpeg_input_args` to 30, and by changing the `r` and `g` parameters in `upload_ffmpeg_output_args` to 30 and 15, respectively. Remember that `g` should be half the frame rate. If `enable_media_conversion` is enabled, change the `rate` parameter in `media_conversion_ffmpeg_input_name` from `60/1` to `30/1`.
 
-* It's recommended that you adjust the dimensions of the scale and pad filters in `ffmpeg_upload_output_args` depending on your screen capture dimensions (or on your display settings if these are set to null in `screen_capture_recorder_settings`). For example, you could change the width and height to 1920x1080 (16:9) or 1440x1080 (4:3) in order to record 1080p videos. If `enable_media_conversion` is enabled, you should also change the `size` parameter in `ffmpeg_media_conversion_input_name`.
+* It's recommended that you adjust the dimensions of the scale and pad filters in `upload_ffmpeg_output_args` depending on your screen capture dimensions (or on your display settings if these are set to null in `screen_capture_recorder_settings`). For example, you could change the width and height to 1920x1080 (16:9) or 1440x1080 (4:3) in order to record 1080p videos. If `enable_media_conversion` is enabled, you should also change the `size` parameter in `media_conversion_ffmpeg_input_name`.
 
 * Check if your machine can record pages with plugins properly while `plugin_syncing_page_type` is set to `unload`. If you notice any issues like embedded audio files not being played correctly, set this option to `reload`. These steps also apply to `plugin_syncing_media_type`, meaning this option should stay set to `unload` unless you notice a problem while recording media file snapshots.
 
-* Depending on the remote machine you're using to host the bot, it's possible that you won't be able to use the OpenGL renderer when viewing VRML worlds with the Cosmo Player. If that's the case, you should change the renderer to DirectX by setting `cosmo_player_renderer` to `DirectX`. The Shockwave and 3DVIA players are able to choose the best available renderer, meaning `shockwave_renderer` and `3dvia_renderer` can be left to `Auto`.
+* Depending on the remote machine you're using to host the bot, it's possible that you won't be able to use the OpenGL renderer when viewing VRML worlds with the Cosmo Player. If that's the case, you should change the renderer to DirectX by setting `cosmo_player_renderer` to `DirectX`. The Shockwave and 3DVIA players are able to choose the best available renderer, meaning `shockwave_renderer` and `_3dvia_renderer` can be left to `Auto`.
 
 * Consider disabling any appearance settings that might reduce the remote machine's performance in the Windows settings by going to `System > About > Advanced system settings (under Related settings) > Settings... (under Performance) > Visual Effects` and selecting `Adjust for best performance`. Doing this can also make the text in old pages look sharper.
 
@@ -158,6 +158,8 @@ Below is a summary of the Python scripts located in the [source directory](Sourc
 * `voices.py`: lists and exports the voices used by the Microsoft Speech API.
 
 * `stats.py`: shows snapshot and recording statistics from the database.
+
+* `graph.py`: displays information based on the snapshot topology.
 
 * `wayback_proxy_addon.py`: a mitmproxy script that tells the recorder script if the page is still making requests while also checking if any missing files are available in a different subdomain. This script should not be run directly and is instead started automatically by the recorder if `enable_proxy` is enabled.
 
@@ -227,7 +229,7 @@ Used by all scripts.
 
 * `cosmo_player_animate_transitions`: enable to animate the transitions between viewpoints in a VRML world. Otherwise, snap between viewpoints.
 
-* `3dvia_renderer`: the renderer used by the 3DVIA Player. May be `auto`, `hardware`, or `software`. It's recommended that you leave this set to `auto`.
+* `_3dvia_renderer`: the renderer used by the 3DVIA Player. May be `auto`, `hardware`, or `software`. It's recommended that you leave this set to `auto`.
 
 * `autoit_path`: the path to the compiled AutoIt scripts directory.
 
@@ -285,7 +287,7 @@ Used by `scout.py`.
 
 * `user_script_filter`: which user scripts from `user_scripts` to install before scouting. This is currently only used to disable any JavaScript functions that may prevent the WebDriver from working correctly via the `Disable Prompt Functions` user script.
 
-* `initial_snapshots`: a list of snapshots (URL and timestamp) to be used as the starting point when scouting. Only used if the `-initial` argument is passed to the script.
+* `initial_snapshots`: a list of snapshots (URL and timestamp) to be used as the starting point when scouting. These snapshots are always scouted first regardless of the following filtering options. Only used if the `-initial` argument is passed to the script.
 
 * `ranking_max_points`: the maximum amount of points to use when ranking a snapshot. May be null if there's no maximum.
 
@@ -299,7 +301,7 @@ Used by `scout.py`.
 
 * `max_required_depth`: the maximum depth for which snapshots are prioritized (inclusive). Snapshots in this range are always scouted first until they're exhausted. May be null if there's no maximum.
 
-* `min_snapshots_for_same_host`: the minimum amount of snapshots that have to be scouted before the same host is visited again. May be null if there's no minimum.
+* `min_snapshots_for_same_host`: the minimum amount of scouted page snapshots before the same host can be selected again. Media snapshots are not counted since a single page can link to multiple media files on the same host. May be null if there's no minimum.
 
 * `excluded_url_tags`: which HTML tags to skip when collecting URLs from their attributes.
 
@@ -335,9 +337,9 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `record_sensitive_snapshots`: enable to allow sensitive snapshots to be recorded.
 
-* `min_creation_days_for_same_host`: the minimum amount of days after recording a snapshot before the same host can be selected again. May be null if there's no minimum.
+* `min_recordings_for_same_host`: the minimum amount of recordings before the same host can be selected again. May be null if there's no minimum.
 
-* `min_publish_days_for_same_snapshot`: the minimum amount of days after publishing a recording before the same snapshot can be selected again. May be null if there's no minimum.
+* `min_publish_days_for_same_url`: the minimum amount of days after publishing a recording before the same URL can be selected again. May be null if there's no minimum.
 
 * `allowed_media_extensions`: a list of file extensions that are allowed when recording a media snapshot. This must only include media formats supported by FFmpeg or the browser's plugins.
 
@@ -427,17 +429,17 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `save_archive_copy`: enable to save a lossless copy of the raw recording for archival purposes. Although this copy is smaller than the raw footage, it's still significantly larger than the lossy recording.
 
-* `screen_capture_recorder_settings`: the Screen Capture Recorder device settings. Any previous settings are temporarily cleared from the registry before applying these changes. As such, you should only change a setting if you don't want its default value. If `capture_width` or `capture_height` are null, these will be set to the screen's physical width and height, respectively, in order to record the entire screen. If `default_max_fps` is null, it will be set to the `framerate` parameter from `ffmpeg_recording_input_args`. If this parameter isn't specified, then the setting is set to 60. Note that this is just the device's maximum frame rate. The recording frame rate is specified in `ffmpeg_recording_input_args`. Refer to the [Screen Capture Recorder documentation](https://github.com/rdp/screen-capture-recorder-to-video-windows-free#configuration) for a list of all possible settings.
+* `screen_capture_recorder_settings`: the Screen Capture Recorder device settings. Any previous settings are temporarily cleared from the registry before applying these changes. As such, you should only change a setting if you don't want its default value. If `capture_width` or `capture_height` are null, these will be set to the screen's physical width and height, respectively, in order to record the entire screen. If `default_max_fps` is null, it will be set to the `framerate` parameter from `raw_ffmpeg_input_args`. If this parameter isn't specified, then the setting is set to 60. Note that this is just the device's maximum frame rate. The recording frame rate is specified in `raw_ffmpeg_input_args`. Refer to the [Screen Capture Recorder documentation](https://github.com/rdp/screen-capture-recorder-to-video-windows-free#configuration) for a list of all possible settings.
 
-* `ffmpeg_recording_input_name`: the input device used to capture the screen. This should be the Screen Capture Recorder device.
+* `raw_ffmpeg_input_name`: the input device used to capture the screen. This should be the Screen Capture Recorder device.
 
-* `ffmpeg_recording_input_args`: the input arguments used to capture the screen. Set a parameter to null if it's meant to be used as a flag (e.g. `-shortest`). Refer to the [FFmpeg documentation](https://ffmpeg.org/ffmpeg-all.html) for a list of all possible parameters. In particular, see [this tutorial](https://trac.ffmpeg.org/wiki/Capture/Desktop) to learn about the best parameters to use when capturing the screen with FFmpeg.
+* `raw_ffmpeg_input_args`: the input arguments used to capture the screen. Set a parameter to null if it's meant to be used as a flag (e.g. `-shortest`). Refer to the [FFmpeg documentation](https://ffmpeg.org/ffmpeg-all.html) for a list of all possible parameters. In particular, see [this tutorial](https://trac.ffmpeg.org/wiki/Capture/Desktop) to learn about the best parameters to use when capturing the screen with FFmpeg.
 
-* `ffmpeg_recording_output_args`: the output arguments used to generate the raw recording footage.
+* `raw_ffmpeg_output_args`: the output arguments used to generate the raw recording footage.
 
-* `ffmpeg_archive_output_args`: the output arguments used to generate a lossless recording from the raw footage. Only used if `save_archive_copy` is enabled.
+* `archive_ffmpeg_output_args`: the output arguments used to generate a lossless recording from the raw footage. Only used if `save_archive_copy` is enabled.
 
-* `ffmpeg_upload_output_args`: the output arguments used to generate a lossy recording from the raw footage. Refer to the recommended audio and video encoding settings of the supported platforms before changing any parameters: [YouTube](https://support.google.com/youtube/answer/1722171), [Twitter](https://developer.twitter.com/en/docs/twitter-api/v1/media/upload-media/uploading-media/media-best-practices), [Mastodon](https://docs.joinmastodon.org/user/posting/#attachments), [Tumblr](https://help.tumblr.com/hc/en-us/articles/231455628-Adding-Video).
+* `upload_ffmpeg_output_args`: the output arguments used to generate a lossy recording from the raw footage. Refer to the recommended audio and video encoding settings of the supported platforms before changing any parameters: [YouTube](https://support.google.com/youtube/answer/1722171), [Twitter](https://developer.twitter.com/en/docs/twitter-api/v1/media/upload-media/uploading-media/media-best-practices), [Mastodon](https://docs.joinmastodon.org/user/posting/#attachments), [Tumblr](https://help.tumblr.com/hc/en-us/articles/231455628-Adding-Video).
 
 * `enable_text_to_speech`: enable to generate a text-to-speech recording of a page snapshot's content.
 
@@ -451,25 +453,25 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `text_to_speech_language_voices`: the names of the Microsoft Speech API voices to use for the supported languages. Each language's voice package must be installed first. Otherwise, the default voice is used. Note that this feature requires enabling `detect_page_language` before scouting snapshots. Only used if `enable_text_to_speech` is enabled.
 
-* `ffmpeg_text_to_speech_video_input_name`: the input video stream shown during the text-to-speech recording. Although this recording only requires an audio stream, the video component is added for platforms that don't support the former (e.g. Twitter). Only used if `enable_text_to_speech` is enabled.
+* `text_to_speech_ffmpeg_video_input_name`: the input video stream shown during the text-to-speech recording. Although this recording only requires an audio stream, the video component is added for platforms that don't support the former (e.g. Twitter). Only used if `enable_text_to_speech` is enabled.
 
-* `ffmpeg_text_to_speech_video_input_args`: the input video arguments used when generating a text-to-speech recording. Only used if `enable_text_to_speech` is enabled.
+* `text_to_speech_ffmpeg_video_input_args`: the input video arguments used when generating a text-to-speech recording. Only used if `enable_text_to_speech` is enabled.
 
-* `ffmpeg_text_to_speech_audio_input_args`: the input audio arguments used when generating a text-to-speech recording. Only used if `enable_text_to_speech` is enabled.
+* `text_to_speech_ffmpeg_audio_input_args`: the input audio arguments used when generating a text-to-speech recording. Only used if `enable_text_to_speech` is enabled.
 
-* `ffmpeg_text_to_speech_output_args`: the output arguments used to generate a text-to-speech recording. Only used if `enable_text_to_speech` is enabled.
+* `text_to_speech_ffmpeg_output_args`: the output arguments used to generate a text-to-speech recording. Only used if `enable_text_to_speech` is enabled.
 
 * `enable_media_conversion`: enable to convert media snapshots into the final recording format without capturing the screen. Used to save time and avoid synchronization issues when recording audio and video file formats.
 
 * `convertible_media_extensions`: a list of file extensions whose format can be directly converted into the recording. Must be a subset of `allowed_media_extensions` and mutually exclusive from `multi_asset_media_extensions`. Only used if `enable_media_conversion` is enabled.
 
-* `ffmpeg_media_conversion_input_name`: the input video stream shown during audio-only media formats. The same platform restrictions from `ffmpeg_text_to_speech_video_input_name` also apply here. Only used if `enable_media_conversion` is enabled.
+* `media_conversion_ffmpeg_input_name`: the input video stream shown during audio-only media formats. The same platform restrictions from `text_to_speech_ffmpeg_video_input_name` also apply here. Only used if `enable_media_conversion` is enabled.
 
-* `ffmpeg_media_conversion_input_args`: the input video arguments used when converting the media snapshot. The corresponding output arguments are defined in `ffmpeg_upload_output_args`. Only used if `enable_media_conversion` is enabled.
+* `media_conversion_ffmpeg_input_args`: the input video arguments used when converting the media snapshot. The corresponding output arguments are defined in `upload_ffmpeg_output_args`. Only used if `enable_media_conversion` is enabled.
 
-* `ffmpeg_media_conversion_enable_subtitles`: enable to add subtitles with the file's metadata to the video stream when converting audio-only media formats. Used to make media snapshots without a video component more interesting.
+* `media_conversion_add_subtitles`: enable to add subtitles with the file's metadata to the video stream when converting audio-only media formats. Used to make media snapshots without a video component more interesting.
 
-* `ffmpeg_media_conversion_subtitles_style`: how to style the media snapshot's subtitles. This must be a string containing Advanced Substation Alpha / Substation Alpha (ASS/SSA) style fields separated by commas. Refer to the [libass source code](https://github.com/libass/libass/blob/master/libass/ass_types.h) and the [Sub Station Alpha v4.00+ Script Format](https://web.archive.org/web/20230209193228if_/https://forum.videohelp.com/attachment.php?attachmentid=33290&d=1440307546) for a list of all possible fields. Only used if `enable_media_conversion` and `ffmpeg_media_conversion_enable_subtitles` are enabled.
+* `media_conversion_ffmpeg_subtitles_style`: how to style the media snapshot's subtitles. This must be a string containing Advanced Substation Alpha / Substation Alpha (ASS/SSA) style fields separated by commas. Refer to the [libass source code](https://github.com/libass/libass/blob/master/libass/ass_types.h) and the [Sub Station Alpha v4.00+ Script Format](https://web.archive.org/web/20230209193228if_/https://forum.videohelp.com/attachment.php?attachmentid=33290&d=1440307546) for a list of all possible fields. Only used if `enable_media_conversion` and `media_conversion_add_subtitles` are enabled.
 
 ### Publish
 
@@ -487,11 +489,9 @@ Used by `publish.py` and `approve.py`.
 
 * `require_approval`: enable to only publish recordings that have been manually approved using `approve.py`.
 
-* `flag_sensitive_snapshots`: enable to flag any posts whose snapshot contains sensitive content. Not supported when publishing on Tumblr.
-
 * `show_media_metadata`: enable to show the title and author metadata of a media snapshot in the post.
 
-* `reply_with_text_to_speech`: enable to add the text-to-speech recordings as a reply to the post. When publishing on Twitter, the recording may have to be split into multiple replies. Not supported when publishing on Tumblr.
+* `reply_with_text_to_speech`: enable to add the text-to-speech recording as a reply to the post. When publishing on Twitter, the recording may have to be split into multiple replies. Not supported when publishing on Tumblr.
 
 * `delete_files_after_upload`: enable to delete the recording file after being uploaded to all platforms.
 
@@ -527,9 +527,9 @@ Used by `publish.py` and `approve.py`.
 
 * `mastodon_max_file_size`: the maximum size of each recording file (in megabytes). This should be set to the instance's video size limit. May be null if there's no maximum.
 
-* `mastodon_enable_ffmpeg`: enable to run every recording through FFmpeg in order to reduce the file size. It's strongly recommended that you enable this option since Mastodon's default limit would otherwise exclude a lot of recordings. Additionally, this reduces the total amount of disk space used by the bot in the instance.
+* `mastodon_reduce_file_size`: enable to run every recording through FFmpeg in order to reduce the file size. It's strongly recommended that you enable this option since Mastodon's default limit would otherwise exclude a lot of recordings. Additionally, this reduces the total amount of disk space used by the bot in the instance.
 
-* `mastodon_ffmpeg_output_args`: the output arguments used to reduce the file size. Aside from using filters, one trick is to avoid specifying any output bitrates so that FFmpeg reencodes the files using the default values. In most cases, this should lower the file size significantly. Only used if `mastodon_enable_ffmpeg` is enabled.
+* `mastodon_reduce_file_size_ffmpeg_output_args`: the output arguments used to reduce the file size. Aside from using filters, one trick is to avoid specifying any output bitrates so that FFmpeg reencodes the files using the default values. In most cases, this should lower the file size significantly. Only used if `mastodon_reduce_file_size` is enabled.
 
 * `tumblr_api_key`: the consumer key obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Tumblr.**
 

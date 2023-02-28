@@ -225,7 +225,7 @@
 		"cosmo_player_renderer": "OpenGL",
 		"cosmo_player_animate_transitions": true,
 
-		"3dvia_renderer": "Auto",
+		"_3dvia_renderer": "Auto",
 
 		"autoit_path": "Data/AutoIt",
 		"autoit_poll_frequency": 20,
@@ -316,6 +316,7 @@
 			{"url": "http://andromeda.einet.net/galaxy.html", "timestamp": "19971210061038"},
 			{"url": "http://apollo.maths.tcd.ie/PA", "timestamp": "19980128193132"},
 			{"url": "http://dejanews.com/", "timestamp": "19961219174859"},
+			{"url": "http://homestead.com/", "timestamp": "19981206045114"},
 			{"url": "http://hotbot.com/", "timestamp": "19971210171157"},
 			{"url": "http://multicrawl.com/", "timestamp": "19991008114903"},
 			{"url": "http://tripod.lycos.com/", "timestamp": "20000229091928"},
@@ -337,9 +338,7 @@
 			{"url": "http://www.fortunecity.com/", "timestamp": "19961227145545"},
 			{"url": "http://www.gamelan.com/", "timestamp": "19961220054054"},
 			{"url": "http://www.geocities.co.jp/", "timestamp": "19980123230306"},
-			{"url": "http://www.geocities.co.jp/neighborhoods/", "timestamp": "19980123230314"},
 			{"url": "http://www.geocities.com/", "timestamp": "19961022173245"},
-			{"url": "http://www.geocities.com/neighborhoods/", "timestamp": "19980123230346"},
 			{"url": "http://www.infohiway.com/", "timestamp": "19961223174808"},
 			{"url": "http://www.infoseek.com/", "timestamp": "19960512212113"},
 			{"url": "http://www.infospace.com/", "timestamp": "19961106224011"},
@@ -354,9 +353,10 @@
 			{"url": "http://www.stpt.com/", "timestamp": "19961022175535"},
 			{"url": "http://www.suite101.com/", "timestamp": "19970416042634"},
 			{"url": "http://www.w3.org/pub/DataSources/bySubject/Overview.html", "timestamp": "19961024044537"},
-			{"url": "http://www.w3.org/pub/DataSources/WWW/Servers.html", "timestamp": "19961024032952"},
+			{"url": "http://www.w3.org/pub/DataSources/WWW/Geographical.html", "timestamp": "19961024034258"},
 			{"url": "http://www.webcrawler.com/", "timestamp": "19961023234707"},
 			{"url": "http://www.woyaa.com/", "timestamp": "19971212033952"},
+			{"url": "http://www.xoom.com/home/", "timestamp": "19981206234835"},
 			{"url": "http://www.yahoo.co.jp/", "timestamp": "19961120065342"},
 			{"url": "http://www.yahoo.com/", "timestamp": "19961017235908"}
 		],
@@ -364,10 +364,10 @@
 		"ranking_max_points": 5000,
 		"ranking_offset": 100,
 		"min_year": null,
-		"max_year": 2010,
+		"max_year": 2005,
 		"max_depth": null,
-		"max_required_depth": null,
-		"min_snapshots_for_same_host": 100,
+		"max_required_depth": 1,
+		"min_snapshots_for_same_host": 500,
 
 		"excluded_url_tags": ["link"],
 
@@ -422,10 +422,10 @@
 
 		"ranking_offset": 100,
 		"min_year": null,
-		"max_year": null,
+		"max_year": 2005,
 		"record_sensitive_snapshots": true,
-		"min_recordings_for_same_host": null,
-		"min_publish_days_for_same_snapshot": 365,
+		"min_recordings_for_same_host": 50,
+		"min_publish_days_for_same_url": 365,
 
 		"allowed_media_extensions":
 		[
@@ -521,8 +521,8 @@
 			"capture_mouse_default_1": 0
 		},
 
-		"ffmpeg_recording_input_name": "video=screen-capture-recorder:audio=virtual-audio-capturer",
-		"ffmpeg_recording_input_args":
+		"raw_ffmpeg_input_name": "video=screen-capture-recorder:audio=virtual-audio-capturer",
+		"raw_ffmpeg_input_args":
 		{
 			"f": "dshow",
 			"framerate": 60,
@@ -530,7 +530,7 @@
 			"thread_queue_size": 1000
 		},
 
-		"ffmpeg_recording_output_args":
+		"raw_ffmpeg_output_args":
 		{
 			"c:v": "libx264rgb",
 			"qp": 0,
@@ -542,7 +542,7 @@
 			"ac": 2
 		},
 
-		"ffmpeg_archive_output_args":
+		"archive_ffmpeg_output_args":
 		{
 			"c:v": "libx264rgb",
 			"qp": 0,
@@ -551,7 +551,7 @@
 			"c:a": "copy"
 		},
 
-		"ffmpeg_upload_output_args":
+		"upload_ffmpeg_output_args":
 		{
 			"c:v": "libx264",
 			"profile:v": "high",
@@ -617,18 +617,18 @@
 			"zh": "Yaoyao"
 		},
 
-		"ffmpeg_text_to_speech_video_input_name": "color=black:size=50x50:rate=30/1",
-		"ffmpeg_text_to_speech_video_input_args":
+		"text_to_speech_ffmpeg_video_input_name": "color=black:size=50x50:rate=30/1",
+		"text_to_speech_ffmpeg_video_input_args":
 		{
 			"f": "lavfi"
 		},
 
-		"ffmpeg_text_to_speech_audio_input_args":
+		"text_to_speech_ffmpeg_audio_input_args":
 		{
 			"guess_layout_max": 0
 		},
 
-		"ffmpeg_text_to_speech_output_args":
+		"text_to_speech_ffmpeg_output_args":
 		{
 			"shortest": null,
 			"fflags": "shortest",
@@ -669,14 +669,14 @@
 			"wav", "webm", "wm", "wma", "wmv"
 		],
 
-		"ffmpeg_media_conversion_input_name": "color=#416FA6:size=1920x1080:rate=60/1",
-		"ffmpeg_media_conversion_input_args":
+		"media_conversion_ffmpeg_input_name": "color=#416FA6:size=1920x1080:rate=60/1",
+		"media_conversion_ffmpeg_input_args":
 		{
 			"f": "lavfi"
 		},
 
-		"ffmpeg_media_conversion_enable_subtitles": true,
-		"ffmpeg_media_conversion_subtitles_style": "Fontname=Segoe Print,Fontsize=60,PrimaryColour=&HFFFFFF,Outline=0,Shadow=1,BackColour=&H80000000,Alignment=10"
+		"media_conversion_add_subtitles": true,
+		"media_conversion_ffmpeg_subtitles_style": "Fontname=Segoe Print,Fontsize=60,PrimaryColour=&HFFFFFF,Outline=0,Shadow=1,BackColour=&H80000000,Alignment=10"
 	},
 
 	"publish":
@@ -689,7 +689,6 @@
 		"enable_tumblr": true,
 
 		"require_approval": true,
-		"flag_sensitive_snapshots": true,
 		"show_media_metadata": true,
 		"reply_with_text_to_speech": true,
 		"delete_files_after_upload": false,
@@ -716,8 +715,8 @@
 		"mastodon_max_status_length": 500,
 		"mastodon_max_file_size": 40,
 
-		"mastodon_enable_ffmpeg": true,
-		"mastodon_ffmpeg_output_args":
+		"mastodon_reduce_file_size": true,
+		"mastodon_reduce_file_size_ffmpeg_output_args":
 		{
 			"vf": "fps=30"
 		},

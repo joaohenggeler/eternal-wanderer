@@ -10,7 +10,7 @@ import ffmpeg # type: ignore
 
 from common import (
 	CommonConfig, Database, Recording, Snapshot,
-	delete_file, get_current_timestamp,
+	delete_file,
 )
 from record import RecordConfig
 
@@ -82,7 +82,7 @@ if __name__ == '__main__':
 		
 		try:
 			# Find the next auto incremented row ID.
-			cursor = db.execute('''SELECT seq + 1 AS NextCompilationId FROM sqlite_sequence WHERE name = 'Compilation';''')
+			cursor = db.execute("SELECT seq + 1 AS NextCompilationId FROM sqlite_sequence WHERE name = 'Compilation';")
 			row = cursor.fetchone()
 			compilation_id = row['NextCompilationId'] if row is not None else 1
 
@@ -94,7 +94,8 @@ if __name__ == '__main__':
 									INNER JOIN Recording R ON S.Id = R.SnapshotId
 									WHERE R.PublishTime BETWEEN :begin_date AND :end_date
 									ORDER BY R.PublishTime;
-									''', {'begin_date': begin_date, 'end_date': end_date})
+									''',
+									{'begin_date': begin_date, 'end_date': end_date})
 
 			else:
 				def is_recording_part_of_compilation(id_: int) -> bool:
@@ -175,7 +176,7 @@ if __name__ == '__main__':
 						audio_stream = ffmpeg.input(args.sfx, guess_layout_max=0) if args.sfx else None
 						input_streams: list[ffmpeg.Stream] = list(filter(None, [video_stream, audio_stream]))
 
-						ffmpeg_output_args = config.ffmpeg_text_to_speech_output_args if args.tts else config.ffmpeg_upload_output_args
+						ffmpeg_output_args = config.text_to_speech_ffmpeg_output_args if args.tts else config.upload_ffmpeg_output_args
 						ffmpeg_output_args['tune'] = 'stillimage'
 
 						# Remove the -shortest flags used when generating the text-to-speech file so they don't shorten the transition.
@@ -258,8 +259,9 @@ if __name__ == '__main__':
 								timestamp = f'{hours:02}:{minutes:02}:{seconds:02}'
 								plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsMedia or snapshot.PageUsesPlugins else None
 								sensitive_identifier = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
+								audio_identifier = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
 								
-								recording_identifiers = [timestamp, snapshot.DisplayTitle, f'({snapshot.ShortDate})', plugin_identifier, sensitive_identifier]
+								recording_identifiers = [timestamp, snapshot.DisplayTitle, f'({snapshot.ShortDate})', plugin_identifier, sensitive_identifier, audio_identifier]
 								timestamp_line = ' '.join(filter(None, recording_identifiers))
 								timestamps_file.write(f'{timestamp_line}\n')
 								
@@ -269,16 +271,17 @@ if __name__ == '__main__':
 
 							timestamps_file.write('\n')
 
+							minutes, seconds = divmod(round(current_duration), 60)
+							hours, minutes = divmod(minutes, 60)
+
 							snapshot_ids = ','.join(str(snapshot.Id) for snapshot, _ in snapshots_and_recordings)
 							recording_ids = ','.join(str(recording.Id) for _, recording in snapshots_and_recordings)
 							
-							timestamps_file.write(f'Snapshots: {snapshot_ids}\n')
-							timestamps_file.write('\n')
-
-							timestamps_file.write(f'Recordings: {recording_ids}\n')
-							timestamps_file.write('\n')
-
+							timestamps_file.write(f'Duration: {hours:02}:{minutes:02}:{seconds:02}\n')
 							timestamps_file.write(f'Total: {len(snapshots_and_recordings)}\n')
+							timestamps_file.write(f'Snapshots: {snapshot_ids}\n')
+							timestamps_file.write(f'Recordings: {recording_ids}\n')
+							
 							timestamps_file.write('\n')
 							
 							if args.published:
@@ -289,7 +292,7 @@ if __name__ == '__main__':
 							timestamps_file.write(f'Text-to-Speech: {"Yes" if args.tts else "No"}\n')
 							timestamps_file.write(f'Transition Color: {args.color}\n')
 							timestamps_file.write(f'Transition Duration: {args.duration}\n')
-							timestamps_file.write(f'Transition Sfx: {args.sfx}\n')
+							timestamps_file.write(f'Transition Sfx: {args.sfx}')
 
 					except (ffmpeg.Error, KeyError, ValueError) as error:
 						print(f'Failed to create the timestamps file with the error: {repr(error)}')
@@ -320,9 +323,10 @@ if __name__ == '__main__':
 							recording_compilation.append({'recording_id': recording.Id, 'compilation_id': compilation_id, 'snapshot_id': snapshot.Id, 'position': i})
 
 						db.execute(	'''
-									INSERT INTO Compilation (UploadFilename, TimestampsFilename, CreationTime)
-									VALUES (:upload_filename, :timestamps_filename, :creation_time);
-									''', {'upload_filename': compilation_filename, 'timestamps_filename': timestamps_filename, 'creation_time': get_current_timestamp()})
+									INSERT INTO Compilation (UploadFilename, TimestampsFilename)
+									VALUES (:upload_filename, :timestamps_filename);
+									''',
+									{'upload_filename': compilation_filename, 'timestamps_filename': timestamps_filename})
 
 						db.executemany(	'''
 										INSERT INTO RecordingCompilation (RecordingId, CompilationId, SnapshotId, Position)

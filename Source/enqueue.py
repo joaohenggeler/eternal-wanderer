@@ -31,11 +31,13 @@ if __name__ == '__main__':
 	priority = names_to_values[args.priority]
 
 	with Database() as db:
+
 		try:
 			best_snapshot, is_media, media_extension = find_best_wayback_machine_snapshot(timestamp=args.timestamp, url=args.url)
 			last_modified_time = find_extra_wayback_machine_snapshot_info(best_snapshot.archive_url)
 
 			first_state = Snapshot.SCOUTED if is_media else Snapshot.QUEUED
+			scout_time = Database.get_current_timestamp() if is_media else None
 
 			# Media files shouldn't be scouted.
 			if is_media and priority == Snapshot.SCOUT_PRIORITY:
@@ -43,11 +45,11 @@ if __name__ == '__main__':
 
 			try:
 				db.execute(	'''
-							INSERT INTO Snapshot (Depth, State, Priority, IsExcluded, IsMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
-							VALUES (:depth, :state, :priority, :is_excluded, :is_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
+							INSERT INTO Snapshot (Depth, State, Priority, IsExcluded, IsMedia, MediaExtension, ScoutTime, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+							VALUES (0, :state, :priority, FALSE, :is_media, :media_extension, :scout_time, :url, :timestamp, :last_modified_time, :url_key, :digest);
 							''',
-							{'depth': 0, 'state': first_state, 'priority': priority, 'is_excluded': False, 'is_media': is_media,
-							 'media_extension': media_extension, 'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
+							{'state': first_state, 'priority': priority, 'is_media': is_media, 'media_extension': media_extension,
+							 'scout_time': scout_time, 'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
 							 'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest})
 				db.commit()
 				

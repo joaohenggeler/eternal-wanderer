@@ -41,7 +41,8 @@ if __name__ == '__main__':
 								WHERE S.State = :recorded_state AND NOT R.IsProcessed
 								ORDER BY S.Priority DESC, R.CreationTime
 								LIMIT :max_recordings;
-								''', {'recorded_state': Snapshot.RECORDED, 'max_recordings': args.max_recordings})
+								''',
+								{'recorded_state': Snapshot.RECORDED, 'max_recordings': args.max_recordings})
 
 			row_list = cursor.fetchall()
 			total_recordings = len(row_list)
@@ -90,14 +91,15 @@ if __name__ == '__main__':
 					print(f'- Type: {"Media" if snapshot.IsMedia else "Page"}')
 					print(f'- Title: {snapshot.DisplayTitle}')
 					print(f'- Language: {snapshot.LanguageName}')
-					print(f'- Metadata: {snapshot.DisplayMetadata}')
-					print(f'- Sensitive: {snapshot.IsSensitive} {"(overridden)" if snapshot.IsSensitiveOverride is not None else ""}')
 					print(f'- Uses Plugins: {snapshot.PageUsesPlugins}')
+					print(f'- Metadata: {snapshot.DisplayMetadata}')
 					print(f'- Points: {snapshot.Points}')
+					print(f'- Sensitive: {snapshot.IsSensitive} {"(overridden)" if snapshot.IsSensitiveOverride is not None else ""}')
 					print(f'- Options: {snapshot.Options}')
 					print(f'- Saved URLs (Recording): {row["SavedRecordingUrls"]} of {row["TotalRecordingUrls"]}')
 					print(f'- Saved URLs (Snapshot): {row["SavedSnapshotUrls"]} of {row["TotalSnapshotUrls"]}')
 					print(f'- Filename: {recording.UploadFilename}')
+					print(f'- Has Audio: {recording.HasAudio}')
 					print(f'- Text-to-Speech: {recording.TextToSpeechFilename is not None}')
 					print()
 

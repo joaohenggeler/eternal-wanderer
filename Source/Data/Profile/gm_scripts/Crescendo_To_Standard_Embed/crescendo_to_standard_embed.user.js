@@ -97,8 +97,7 @@ const plugin_nodes = document.querySelectorAll("object[type='music/crescendo'], 
 
 for(const element of plugin_nodes)
 {
-	// E.g. <embed type="music/crescendo" song="drummer1.mid" loop="true">
-	// Into <embed type="music/crescendo" song="drummer1.mid" src="drummer1.mid" loop="true">
+	// E.g. https://web.archive.org/web/20001110090400if_/http://wood_faerie.tripod.com:80/
 	// See: https://web.archive.org/web/20030812135126if_/http://www.liveupdate.com/cpauth.html
 	const attributes_map = new Map();
 	

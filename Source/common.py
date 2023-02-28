@@ -58,6 +58,7 @@ from selenium.webdriver.firefox.firefox_profile import FirefoxProfile # type: ig
 from selenium.webdriver.firefox.webdriver import WebDriver # type: ignore
 from selenium.webdriver.support import expected_conditions as webdriver_conditions # type: ignore
 from selenium.webdriver.support.ui import WebDriverWait # type: ignore
+from tldextract import TLDExtract
 from waybackpy import WaybackMachineCDXServerAPI as Cdx
 from waybackpy.cdx_snapshot import CDXSnapshot
 
@@ -71,6 +72,7 @@ def container_to_lowercase(container: Union[list, dict]) -> Union[list, dict]:
 	else:
 		assert False, f'Unhandled container type "{type(container)}".'
 
+@dataclass
 class CommonConfig():
 	""" The general purpose configuration that applies to all scripts. """
 
@@ -227,7 +229,7 @@ class CommonConfig():
 
 		self.shockwave_renderer = self.shockwave_renderer.lower()
 		self.cosmo_player_renderer = self.cosmo_player_renderer.lower()
-		self._3dvia_renderer = getattr(self, '3dvia_renderer').lower()
+		self._3dvia_renderer = self._3dvia_renderer.lower()
 
 		def parse_domain_list(domain_list: list[str]) -> list[list[str]]:
 			""" Transforms a list of domain patterns into a list of each pattern's components. """
@@ -262,7 +264,13 @@ class CommonConfig():
 
 	def load_subconfig(self, name: str) -> None:
 		""" Loads a specific JSON object from the configuration file. """
-		self.__dict__.update(self.json_config[name])
+
+		config = self.json_config[name]
+		self.__dict__.update(config)
+
+		config_names = set(config)
+		field_names = set(field.name for field in dataclasses.fields(self))
+		assert config_names.issubset(field_names), f'The subconfig "{name}" contains options that are not defined in the class {type(self).__name__}: {config_names.difference(field_names)}'
 
 		# For apply_snapshot_options().
 		for option in CommonConfig.MUTABLE_OPTIONS:
@@ -287,7 +295,7 @@ class CommonConfig():
 		bucket = ceil(id_ / self.max_recordings_per_directory) * self.max_recordings_per_directory
 		return os.path.join(self.recordings_path, str(bucket))
 
-for option in ['encoding', 'hide_title' 'notes']:
+for option in ['encoding', 'hide_title' 'notes', 'tags']:
 	assert option not in CommonConfig.MUTABLE_OPTIONS, f'The mutable option name "{option}" is reserved.'
 
 config = CommonConfig()
@@ -442,7 +450,7 @@ class Database():
 
 		self.connection = sqlite3.connect(config.database_path)
 		
-		def dict_factory(cursor: sqlite3.Cursor, row: sqlite3.Row) -> dict:
+		def dict_factory(cursor: sqlite3.Cursor, row: tuple) -> dict:
 			""" Converts a SQLite row into a dictionary. """
 			# Adapted from: https://docs.python.org/3/library/sqlite3.html#how-to-create-and-use-row-factories
 			fields = [column[0] for column in cursor.description]
@@ -496,6 +504,7 @@ class Database():
 									Depth INTEGER NOT NULL,
 									State INTEGER NOT NULL,
 									Priority INTEGER NOT NULL DEFAULT {Snapshot.NO_PRIORITY},
+									IsInitial BOOLEAN NOT NULL DEFAULT FALSE,
 									IsExcluded BOOLEAN NOT NULL,
 									IsMedia BOOLEAN,
 									PageLanguage TEXT,
@@ -504,6 +513,7 @@ class Database():
 									MediaExtension TEXT,
 									MediaTitle TEXT,
 									MediaAuthor TEXT,
+									ScoutTime TIMESTAMP,
 									Url TEXT NOT NULL,
 									Timestamp VARCHAR(14) NOT NULL,
 									LastModifiedTime VARCHAR(14),
@@ -570,6 +580,13 @@ class Database():
 								CREATE VIEW IF NOT EXISTS SnapshotInfo AS
 								SELECT
 									S.Id AS Id,
+									CAST(MIN(SUBSTR(S.Timestamp, 1, 4), IFNULL(SUBSTR(S.LastModifiedTime, 1, 4), '9999')) AS INTEGER) AS OldestYear,
+									SUBSTR(S.UrlKey, 1, INSTR(S.UrlKey, ')') - 1) AS UrlHost,
+									(
+										CASE WHEN S.State = {Snapshot.QUEUED} THEN NULL
+										ELSE IFNULL(S.IsSensitiveOverride, IFNULL(MAX(W.IsSensitive), FALSE))
+										END
+									) AS IsSensitive,
 									(
 										CASE WHEN S.State = {Snapshot.QUEUED} THEN NULL
 											 ELSE IFNULL(CASE WHEN S.IsMedia THEN (SELECT CAST(Value AS INTEGER) FROM Config WHERE Name = 'media_points')
@@ -577,12 +594,7 @@ class Database():
 															  ELSE SUM(MIN(SW.Count, 1) * W.Points)
 														 END, 0)
 										END
-									) AS Points,
-									(
-										CASE WHEN S.State = {Snapshot.QUEUED} THEN NULL
-										ELSE IFNULL(S.IsSensitiveOverride, IFNULL(MAX(W.IsSensitive), FALSE))
-										END
-									) AS IsSensitive
+									) AS Points
 								FROM Snapshot S
 								LEFT JOIN SnapshotWord SW ON S.Id = SW.SnapshotId
 								LEFT JOIN Word W ON SW.WordId = W.Id
@@ -609,11 +621,12 @@ class Database():
 								(
 									Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 									SnapshotId INTEGER NOT NULL,
-									IsProcessed BOOLEAN NOT NULL,
+									IsProcessed BOOLEAN NOT NULL DEFAULT FALSE,
+									HasAudio BOOLEAN NOT NULL,
 									UploadFilename TEXT NOT NULL UNIQUE,
 									ArchiveFilename TEXT UNIQUE,
 									TextToSpeechFilename TEXT UNIQUE,
-									CreationTime TIMESTAMP NOT NULL,
+									CreationTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 									PublishTime TIMESTAMP,
 									TwitterMediaId INTEGER,
 									TwitterStatusId INTEGER,
@@ -631,7 +644,7 @@ class Database():
 									Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 									UploadFilename TEXT NOT NULL UNIQUE,
 									TimestampsFilename TEXT NOT NULL UNIQUE,
-									CreationTime TIMESTAMP NOT NULL
+									CreationTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 								);
 								''')
 
@@ -666,6 +679,16 @@ class Database():
 	def __exit__(self, exception_type, exception_value, traceback):
 		self.disconnect()
 
+	@staticmethod
+	def bool_or_none(value: Any) -> Union[bool, None]:
+		""" Converts a SQLite boolean into the proper Python type. """
+		return bool(value) if value is not None else None
+
+	@staticmethod
+	def get_current_timestamp() -> str:
+		""" Retrieves the current timestamp in UTC using the same format as SQLite's CURRENT_TIMESTAMP. """
+		return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
 @dataclass
 class Snapshot():
 	""" A snapshot from the Wayback Machine at a specific time and location. """
@@ -676,6 +699,7 @@ class Snapshot():
 	Depth: int
 	State: int
 	Priority: int
+	IsInitial: bool
 	IsExcluded: bool
 	IsMedia: Optional[bool]
 	PageLanguage: Optional[str]
@@ -684,6 +708,7 @@ class Snapshot():
 	MediaExtension: Optional[str]
 	MediaTitle: Optional[str]
 	MediaAuthor: Optional[str]
+	ScoutTime: Optional[str]
 	Url: str
 	Timestamp: str
 	LastModifiedTime: Optional[str]
@@ -693,13 +718,16 @@ class Snapshot():
 	Options: dict # Different from the database data type.
 
 	# Determined dynamically if joined with the SnapshotInfo view.
-	Points: Optional[int]
+	OldestYear: Optional[int]
+	UrlHost: Optional[str]
 	IsSensitive: Optional[bool]
+	Points: Optional[int]
 
 	# Determined from the Options column.
 	Encoding: str
 	HideTitle: bool
 	Notes: str
+	Tags: list[str]
 
 	# Determined at runtime.
 	WaybackUrl: str
@@ -738,20 +766,20 @@ class Snapshot():
 
 	def __init__(self, **kwargs):
 		
-		self.Points = None
+		self.OldestYear = None
+		self.UrlHost = None
 		self.IsSensitive = None
+		self.Points = None
 		
 		field_names = set(field.name for field in dataclasses.fields(self))
 		self.__dict__.update({key: value for key, value in kwargs.items() if key in field_names})
 		
-		def bool_or_none(value: Any) -> Union[bool, None]:
-			return bool(value) if value is not None else None
-
-		self.IsExcluded = bool_or_none(self.IsExcluded)
-		self.IsMedia = bool_or_none(self.IsMedia)
-		self.PageUsesPlugins = bool_or_none(self.PageUsesPlugins)	
-		self.IsSensitiveOverride = bool_or_none(self.IsSensitiveOverride)
-		self.IsSensitive = bool_or_none(self.IsSensitive)
+		self.IsInitial = Database.bool_or_none(self.IsInitial)
+		self.IsExcluded = Database.bool_or_none(self.IsExcluded)
+		self.IsMedia = Database.bool_or_none(self.IsMedia)
+		self.PageUsesPlugins = Database.bool_or_none(self.PageUsesPlugins)	
+		self.IsSensitiveOverride = Database.bool_or_none(self.IsSensitiveOverride)
+		self.IsSensitive = Database.bool_or_none(self.IsSensitive)
 
 		if self.Options is not None:
 			try:
@@ -765,6 +793,7 @@ class Snapshot():
 		self.Encoding = self.Options.get('encoding', '')
 		self.HideTitle = self.Options.get('hide_title', False)
 		self.Notes = self.Options.get('notes', '')
+		self.Tags = self.Options.get('tags', [])
 
 		modifier = Snapshot.OBJECT_EMBED_MODIFIER if self.IsMedia else Snapshot.IFRAME_MODIFIER
 		self.WaybackUrl = compose_wayback_machine_snapshot_url(timestamp=self.Timestamp, modifier=modifier, url=self.Url)
@@ -777,12 +806,13 @@ class Snapshot():
 		# Where the last modified time is 19800501233128 (too old).
 		# E.g. https://web.archive.org/web/19961222034448if_/http://panter.soci.aau.dk:80/
 		# Where the last modified time is 20090215174615 (too new).
-		if self.LastModifiedTime is not None and self.LastModifiedTime > '1991':
+		if self.LastModifiedTime is not None and self.LastModifiedTime >= '1991':
 			self.OldestTimestamp = min(self.Timestamp, self.LastModifiedTime)
 		else:
 			self.OldestTimestamp = self.Timestamp
 
 		self.OldestDatetime = datetime.strptime(self.OldestTimestamp, Snapshot.TIMESTAMP_FORMAT)
+		
 		# How the date is formatted depends on the current locale.
 		self.ShortDate = self.OldestDatetime.strftime('%b %Y')
 
@@ -837,6 +867,7 @@ class Recording():
 	Id: int
 	SnapshotId: int
 	IsProcessed: bool
+	HasAudio: bool
 	UploadFilename: str
 	ArchiveFilename: Optional[str]
 	TextToSpeechFilename: Optional[str]
@@ -859,6 +890,9 @@ class Recording():
 		field_names = set(field.name for field in dataclasses.fields(self))
 		self.__dict__.update({key: value for key, value in kwargs.items() if key in field_names})
 		
+		self.IsProcessed = Database.bool_or_none(self.IsProcessed)
+		self.HasAudio = Database.bool_or_none(self.HasAudio)
+
 		subdirectory_path = config.get_recording_subdirectory_path(self.Id)
 		self.UploadFilePath = os.path.join(subdirectory_path, self.UploadFilename)
 		self.ArchiveFilePath = os.path.join(subdirectory_path, self.ArchiveFilename) if self.ArchiveFilename is not None else None
@@ -914,15 +948,9 @@ class Browser():
 		self.java_bin_path = None
 		self.autoit_processes = []
 
-		log.info('Configuring Firefox.')
-
-		if config.profile_path is not None:
-			log.info(f'Using the custom Firefox profile at "{config.profile_path}".')
-		else:
-			log.info(f'Using a temporary Firefox profile.')
-
 		profile = FirefoxProfile(config.profile_path)
-		
+		log.info(f'Created the temporary Firefox profile at "{profile.profile_dir}".')
+
 		if not config.use_master_plugin_registry:
 			plugin_reg_path = os.path.join(profile.profile_dir, 'pluginreg.dat')
 			delete_file(plugin_reg_path)
@@ -959,13 +987,11 @@ class Browser():
 			profile.set_preference(key, value)
 
 		if extra_preferences is not None:
-			log.info(f'Setting additional preferences: {extra_preferences}')
+			log.info(f'Setting additional Firefox preferences: {extra_preferences}')
 			for key, value in extra_preferences.items():
 				profile.set_preference(key, value)
 
 		if self.use_plugins:
-
-			log.info(f'Using the plugins in "{config.plugins_path}".')
 
 			plugin_paths = [''] * len(config.plugins)
 			plugin_precedence = {key: i for i, key in enumerate(config.plugins)}
@@ -1000,8 +1026,6 @@ class Browser():
 
 		if use_extensions:
 
-			log.info(f'Installing the extensions in "{config.extensions_path}".')
-
 			for filename, enabled in config.extensions_before_running.items():
 				
 				filtered = extension_filter is not None and filename not in extension_filter
@@ -1030,14 +1054,14 @@ class Browser():
 		# - https://ss64.com/nt/syntax-compatibility.html
 		os.environ['__COMPAT_LAYER'] = 'GDIDPISCALING DPIUNAWARE'
 
-		log.info(f'Creating the WebDriver using the Firefox executable at "{self.firefox_path}" and the driver at "{self.webdriver_path}".')
+		log.info('Creating the Firefox WebDriver.')
 		
 		while True:
 			try:
 				self.driver = webdriver.Firefox(executable_path=self.webdriver_path, options=options, service_log_path=None)
 				break
 			except WebDriverException as error:
-				log.error(f'Failed to create the WebDriver with the error: {repr(error)}')
+				log.error(f'Failed to create the Firefox WebDriver with the error: {repr(error)}')
 				kill_processes_by_path(self.firefox_path)
 				sleep(30)
 
@@ -1081,8 +1105,6 @@ class Browser():
 		self.driver.get(Browser.BLANK_URL)
 
 		if self.use_autoit:
-			
-			log.info(f'Running the compiled AutoIt scripts in "{config.autoit_path}" with a poll frequency of {config.autoit_poll_frequency} milliseconds.')
 
 			for filename, enabled in config.autoit_scripts.items():
 
@@ -1149,7 +1171,7 @@ class Browser():
 			return
 
 		java_jre_path = os.path.dirname(os.path.dirname(java_plugin_path))
-		log.info(f'Configuring the Java Plugin using the runtime environment located in "{java_jre_path}".')
+		log.info(f'Configuring the Java Plugin using the runtime environment located at "{java_jre_path}".')
 
 		java_lib_path = os.path.join(java_jre_path, 'lib')
 		self.java_bin_path = os.path.join(java_jre_path, 'bin')
@@ -1167,7 +1189,7 @@ class Browser():
 		with open(java_config_template_path, encoding='utf-8') as file:
 			content = file.read()
 
-		content = content.replace('{comment}', f'Generated by "{__file__}" on {get_current_timestamp()}.')
+		content = content.replace('{comment}', f'Generated by "{__file__}" on {Database.get_current_timestamp()}.')
 		content = content.replace('{system_config_path}', java_properties_path.replace('\\', '/').replace(' ', '\\u0020'))
 		
 		with open(java_config_path, 'w', encoding='utf-8') as file:
@@ -1190,7 +1212,7 @@ class Browser():
 		def escape_java_deployment_properties_path(path: str) -> str:
 			return path.replace('\\', '\\\\').replace(':', '\\:').replace(' ', '\\u0020')
 
-		content = content.replace('{comment}', f'Generated by "{__file__}" on {get_current_timestamp()}.')
+		content = content.replace('{comment}', f'Generated by "{__file__}" on {Database.get_current_timestamp()}.')
 		content = content.replace('{jre_platform}', java_platform)
 		content = content.replace('{jre_product}', java_product)
 		content = content.replace('{jre_path}', escape_java_deployment_properties_path(java_web_start_path))
@@ -1213,7 +1235,7 @@ class Browser():
 		with open(java_security_path, encoding='utf-8') as file:
 			content = file.read()
 
-		content = re.sub(r'^jdk\.certpath\.disabledAlgorithms=.*', 'jdk.certpath.disabledAlgorithms=', content, re.IGNORECASE | re.MULTILINE)
+		content = re.sub(r'^jdk\.certpath\.disabledAlgorithms=.*', 'jdk.certpath.disabledAlgorithms=', content, re.MULTILINE)
 
 		with open(java_security_path, 'w', encoding='utf-8') as file:
 			file.write(content)
@@ -1248,7 +1270,7 @@ class Browser():
 			return
 
 		cosmo_player_path = os.path.dirname(cosmo_player_path)
-		log.info(f'Configuring the Cosmo Player using the plugin files located in "{cosmo_player_path}".')
+		log.info(f'Configuring the Cosmo Player using the plugin files located at "{cosmo_player_path}".')
 
 		cosmo_player_system32_path = os.path.join(cosmo_player_path, 'System32')
 		path = os.environ.get('PATH', '')
@@ -2125,14 +2147,6 @@ class TemporaryRegistry():
 	def __exit__(self, exception_type, exception_value, traceback):
 		self.restore()
 
-def clamp(value: float, min_value: float, max_value: float) -> float:
-	""" Clamps a number between a minimum and maximum value. """
-	return max(min_value, min(value, max_value))
-
-def get_current_timestamp() -> str:
-	""" Retrieves the current timestamp in UTC. """
-	return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-
 def extract_media_extension_from_url(url: str) -> str:
 	""" Retrieves the file extension from a media file URL. The returned extension may be
 	different from the real value for the sake of convenience (e.g. compressed VRML worlds). """
@@ -2285,26 +2299,11 @@ def is_url_from_domain(url: Union[str, ParseResult], domain: str) -> bool:
 	parts = urlparse(url) if isinstance(url, str) else url
 	return parts.hostname is not None and (parts.hostname == domain or parts.hostname.endswith('.' + domain))
 
-def was_exit_command_entered() -> bool:
-	""" Checks if an exit command was typed. Used to stop the execution of scripts that can't use Ctrl-C to terminate. """
+tld_extract = TLDExtract(suffix_list_urls=())
 
-	result = False
-
-	if msvcrt.kbhit():
-		keys = [msvcrt.getwch()]
-
-		while msvcrt.kbhit():
-			keys.append(msvcrt.getwch())
-
-		command = ''.join(keys)
-
-		if 'pause' in command:
-			command = input('Paused: ')
-
-		if 'exit' in command:
-			result = True
-
-	return result
+def clamp(value: float, min_value: float, max_value: float) -> float:
+	""" Clamps a number between a minimum and maximum value. """
+	return max(min_value, min(value, max_value))
 
 def delete_file(path: str) -> bool:
 	""" Deletes a file. Does nothing if it doesn't exist. """
@@ -2353,6 +2352,27 @@ def kill_process_by_pid(pid: int) -> None:
 		pass
 	except Exception as error:
 		log.error(f'Failed to kill the process using the PID {pid} with the error: {repr(error)}')
+
+def was_exit_command_entered() -> bool:
+	""" Checks if an exit command was typed. Used to stop the execution of scripts that can't use Ctrl-C to terminate. """
+
+	result = False
+
+	if msvcrt.kbhit():
+		keys = [msvcrt.getwch()]
+
+		while msvcrt.kbhit():
+			keys.append(msvcrt.getwch())
+
+		command = ''.join(keys)
+
+		if 'pause' in command:
+			command = input('Paused: ')
+
+		if 'exit' in command:
+			result = True
+
+	return result
 
 if __name__ == '__main__':
 	pass

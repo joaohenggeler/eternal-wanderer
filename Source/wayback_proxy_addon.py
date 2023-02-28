@@ -14,13 +14,12 @@ import requests
 from mitmproxy import http # type: ignore
 from mitmproxy.script import concurrent # type: ignore
 from requests import RequestException
-from tldextract import TLDExtract
 from waybackpy import WaybackMachineCDXServerAPI as Cdx
 
 from common import (
 	Snapshot, compose_wayback_machine_snapshot_url,
 	global_rate_limiter, is_url_available, is_url_from_domain,
-	parse_wayback_machine_snapshot_url,
+	parse_wayback_machine_snapshot_url, tld_extract,
 )
 from record import RecordConfig
 
@@ -29,7 +28,6 @@ from record import RecordConfig
 
 config = RecordConfig()
 lock = Lock()
-no_fetch_tld_extract = TLDExtract(suffix_list_urls=None) # type: ignore
 
 # Set by the commands passed from the recorder script.
 # - If set to the current snapshot's timestamp, any non-200 responses from
@@ -164,7 +162,7 @@ def request(flow: http.HTTPFlow) -> None:
 
 		if not found_snapshot:
 			
-			extract = no_fetch_tld_extract(wayback_parts.url)
+			extract = tld_extract(wayback_parts.url)
 			parts = urlparse(wayback_parts.url)
 			split_path = parts.path.split('/')
 

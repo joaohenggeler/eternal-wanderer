@@ -171,11 +171,13 @@ if(vlc_plugin)
 		{
 			// Examples:
 			// - AIFF: https://web.archive.org/web/20010306021445if_/http://www.big.or.jp:80/~frog/others/bbb.html
+			// - AU: https://web.archive.org/web/19970615064625if_/http://www.iupui.edu:80/~mtrehan/
 			// - AVI: https://web.archive.org/web/19961223102610if_/http://www.gehenna.com:80/
 			// - AVI: https://web.archive.org/web/19980221110733if_/http://heartcorps.com/journeys/voice.htm
 			// - MOV: https://web.archive.org/web/19970502031035if_/http://www.verticalonline.com/dh.html
 			// - MOV: https://web.archive.org/web/20200219215301if_/http://goa103.free.fr/t_63455/media_player.php
 			// - MOV: https://web.archive.org/web/20220514015040if_/https://web.nmsu.edu/~leti/portfolio/quicktimemovie.html
+			// - WAV: https://web.archive.org/web/19961221002525if_/http://www.geocities.com/Heartland/8055/
 			// - WAV: https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html
 			// - WAV: https://web.archive.org/web/20140823011355if_/http://www.mountaindragon.com/html/sound4.htm
 

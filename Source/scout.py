@@ -11,6 +11,7 @@ import unicodedata
 from argparse import ArgumentParser
 from base64 import b64decode
 from collections import Counter
+from dataclasses import dataclass
 from time import sleep
 from typing import Optional, Union, cast
 from urllib.parse import parse_qsl, unquote, urlparse, urlunparse
@@ -31,6 +32,7 @@ from common import (
 	setup_logger, was_exit_command_entered,
 )
 
+@dataclass
 class ScoutConfig(CommonConfig):
 	""" The configuration that applies to the scout script. """
 
@@ -66,6 +68,7 @@ class ScoutConfig(CommonConfig):
 	tokenize_japanese_text: bool
 
 	def __init__(self):
+		
 		super().__init__()
 		self.load_subconfig('scout')
 
@@ -137,9 +140,10 @@ if __name__ == '__main__':
 				last_modified_time = find_extra_wayback_machine_snapshot_info(best_snapshot.archive_url)
 
 				state = Snapshot.SCOUTED if is_media else Snapshot.QUEUED
+				scout_time = Database.get_current_timestamp() if is_media else None
 
 				result = {'parent_id': parent_id, 'depth': depth, 'state': state, 'is_excluded': False,
-						  'is_media': is_media, 'media_extension': media_extension,
+						  'is_media': is_media, 'media_extension': media_extension, 'scout_time': scout_time,
 						  'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
 						  'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey,
 						  'digest': best_snapshot.digest}
@@ -147,10 +151,12 @@ if __name__ == '__main__':
 				pass
 			
 			except BlockedSiteError:
+				# E.g. https://web.archive.org/web/20020924025743if_/http://www.yahoo.com/homet/?http://www.yahoo.com/picks/
+				# Which links to 13 excluded snapshots from the tvacres.com domain.
 				log.warning(f'The snapshot at "{url}" near {timestamp} has been excluded from the Wayback Machine.')
 				result = {'parent_id': parent_id, 'depth': depth, 'state': Snapshot.QUEUED, 'is_excluded': True,
-						  'is_media': None, 'media_extension': None, 'url': url, 'timestamp': timestamp,
-						  'last_modified_time': None, 'url_key': None, 'digest': None}
+						  'is_media': None, 'media_extension': None, 'scout_time': None, 'url': url,
+						  'timestamp': timestamp, 'last_modified_time': None, 'url_key': None, 'digest': None}
 			
 			except Exception as error:
 				log.error(f'Failed to find the snapshot at "{url}" near {timestamp} with the error: {repr(error)}')
@@ -168,159 +174,156 @@ if __name__ == '__main__':
 
 	scheduler = BlockingScheduler()
 
-	last_scouted_hosts: dict[str, int] = {}
-	total_scouted = 0
-
 	def scout_snapshots(num_snapshots: int) -> None:
 		""" Scouts a given number of snapshots in a single batch. """
 		
-		global total_scouted
-
 		log.info(f'Scouting {num_snapshots} snapshots.')
 
-		# We don't want any extensions or user scripts that change the HTML document, but we do need
-		# to use the Greasemonkey extension with a user script that disables the alert(), confirm(),
-		# prompt(), and print() JavaScript functions. This prevents the UnexpectedAlertPresentException,
-		# which would otherwise make it impossible to scrape pages that call those functions.
-		# E.g. https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html
-		# E.g. https://web.archive.org/web/20041225205249if_/http://www.me.org:80/cotes_print_fr.php?query=WBQ
-		with Database() as db, Browser(headless=True, use_extensions=True, extension_filter=config.extension_filter, user_script_filter=config.user_script_filter) as (browser, driver):
+		try:
+			# We don't want any extensions or user scripts that change the HTML document, but we do need
+			# to use the Greasemonkey extension with a user script that disables the alert(), confirm(),
+			# prompt(), and print() JavaScript functions. This prevents the UnexpectedAlertPresentException,
+			# which would otherwise make it impossible to scrape pages that call those functions.
+			# E.g. https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html
+			# E.g. https://web.archive.org/web/20041225205249if_/http://www.me.org:80/cotes_print_fr.php?query=WBQ
+			with Database() as db, Browser(headless=True, use_extensions=True, extension_filter=config.extension_filter, user_script_filter=config.user_script_filter) as (browser, driver):
 
-			if args.initial:
-				try:
-					log.info('Inserting the initial Wayback Machine snapshots.')
-
-					initial_snapshot_list = []
-					for page in config.initial_snapshots:
-						
-						url = page['url']
-						timestamp = page['timestamp']
-						
-						log.info(f'Inserting the initial snapshot at "{url}" near {timestamp}.')
-						initial_snapshot = find_child_snapshot(None, url, timestamp)
-
-						if initial_snapshot is not None:
-							initial_snapshot_list.append(initial_snapshot)
-						else:
-							log.warning(f'Could not find the initial snapshot at "{url}" near {timestamp}.')
-
-					db.executemany(	'''
-									INSERT OR IGNORE INTO Snapshot (State, Depth, IsExcluded, IsMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
-									VALUES (:state, :depth, :is_excluded, :is_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
-									''', initial_snapshot_list)
-
-					db.commit()
-
-				except sqlite3.Error as error:
-					log.error(f'Failed to insert the initial snapshots with the error: {repr(error)}')
-					db.rollback()
-					raise
-
-			else:
-				log.info('Skipping the initial snapshots at the user\'s request.')
-
-			try:
-				# Removing words that are no longer associated with any snapshot is handy when we change
-				# certain options (e.g. toggling Japanese text tokenization from one execution to another).
-				# This step is skipped for any words that were added via the configuration file.
-				cursor = db.execute('''
-									DELETE FROM Word
-									WHERE Id IN
-									(
-										SELECT W.Id
-										FROM Word W
-										LEFT JOIN SnapshotWord SW ON W.Id = SW.WordId
-										WHERE SW.WordId IS NULL AND NOT (W.Points <> 0 OR W.IsSensitive)
-									);
-									''')
-
-				log.info(f'Deleted {cursor.rowcount} words that were no longer associated with a snapshot.')
-
-				db.execute('UPDATE Word SET Points = 0, IsSensitive = FALSE;')
-
-				word_and_tag_points = []
-				
-				for word, points in config.word_points.items():
-					word_and_tag_points.append({'word': word, 'is_tag': False, 'points': points})
-
-				for tag, points in config.tag_points.items():
-					word_and_tag_points.append({'word': tag, 'is_tag': True, 'points': points})
-
-				# Do an upsert instead of replacing to avoid messing with the primary keys of previously inserted words.
-				db.executemany(	'''
-								INSERT INTO Word (Word, IsTag, Points)
-								VALUES (:word, :is_tag, :points)
-								ON CONFLICT (Word, IsTag)
-								DO UPDATE SET Points = :points;
-								''', word_and_tag_points)
-				
-				sensitive_words = []
-				
-				for word in config.sensitive_words:
-					sensitive_words.append({'word': word, 'is_tag': False, 'is_sensitive': True})
-
-				db.executemany(	'''
-								INSERT INTO Word (Word, IsTag, IsSensitive)
-								VALUES (:word, :is_tag, :is_sensitive)
-								ON CONFLICT (Word, IsTag)
-								DO UPDATE SET IsSensitive = :is_sensitive;
-								''', sensitive_words)
-
-				db.execute('INSERT OR REPLACE INTO Config (Name, Value) VALUES (:name, :value);', {'name': 'media_points', 'value': config.media_points})
-
-				db.commit()
-
-			except sqlite3.Error as error:
-				log.error(f'Failed to update the word and tag attributes with the error: {repr(error)}')
-				db.rollback()
-				raise
-
-			def invalidate_snapshot(snapshot: Snapshot) -> None:
-				""" Invalidates a snapshot that couldn't be scouted correctly due to a WebDriver error. """
-
-				try:
-					db.execute('UPDATE Snapshot SET State = :invalid_state WHERE Id = :id;', {'invalid_state': Snapshot.INVALID, 'id': snapshot.Id})
-					db.commit()
-				except sqlite3.Error as error:
-					log.error(f'Failed to invalidate the snapshot {snapshot} with the error: {repr(error)}')
-					db.rollback()
-					sleep(config.database_error_wait)
-
-			def check_snapshot_redirection(snapshot: Snapshot) -> bool:
-				""" Checks if a snapshot was redirected. If so, the snapshot is invalidated and no information is extracted from its page.
-				While the snapshot is skipped, the page we were redirected to will be added to the queue. The one exception are pages from
-				the Wayback Machine that aren't snapshots. """
-
-				redirected, url, timestamp = browser.was_wayback_url_redirected(snapshot.WaybackUrl)
-
-				if redirected:
-					try:
-						log.warning(f'Skipping the snapshot since it was redirected to "{url}".')
-						db.execute('UPDATE Snapshot SET State = :invalid_state WHERE Id = :id;', {'invalid_state': Snapshot.INVALID, 'id': snapshot.Id})
+				if args.initial:
 					
-						# See example #4 in was_wayback_url_redirected().
-						if not is_url_from_domain(url, 'web.archive.org'):
+					try:
+						log.info('Inserting the initial Wayback Machine snapshots.')
 
-							child_snapshot = find_child_snapshot(snapshot, url, timestamp)
+						initial_snapshot_list = []
+						for page in config.initial_snapshots:
+							
+							url = page['url']
+							timestamp = page['timestamp']
+							
+							log.info(f'Inserting the initial snapshot at "{url}" near {timestamp}.')
+							initial_snapshot = find_child_snapshot(None, url, timestamp)
 
-							if child_snapshot is not None:
-								db.execute(	'''
-											INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
-											VALUES (:parent_id, :depth, :state, :is_excluded, :is_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
-											''', child_snapshot)
+							if initial_snapshot is not None:
+								initial_snapshot_list.append(initial_snapshot)
 							else:
-								log.warning(f'Could not find the redirected snapshot at "{url}" near {timestamp}.')
+								log.warning(f'Could not find the initial snapshot at "{url}" near {timestamp}.')
+
+						db.executemany(	'''
+										INSERT OR IGNORE INTO Snapshot (Depth, State, IsInitial, IsExcluded, IsMedia, MediaExtension, ScoutTime, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+										VALUES (:depth, :state, TRUE, :is_excluded, :is_media, :media_extension, :scout_time, :url, :timestamp, :last_modified_time, :url_key, :digest);
+										''', initial_snapshot_list)
 
 						db.commit()
 
 					except sqlite3.Error as error:
-						log.error(f'Failed to update the redirected snapshot with the error: {repr(error)}')
+						log.error(f'Failed to insert the initial snapshots with the error: {repr(error)}')
+						db.rollback()
+						raise
+
+				else:
+					log.info('Skipping the initial snapshots at the user\'s request.')
+
+				try:
+					# Removing words that are no longer associated with any snapshot is handy when we change
+					# certain options (e.g. toggling Japanese text tokenization from one execution to another).
+					# This step is skipped for any words that were added via the configuration file.
+					cursor = db.execute('''
+										DELETE FROM Word
+										WHERE Id IN
+										(
+											SELECT W.Id
+											FROM Word W
+											LEFT JOIN SnapshotWord SW ON W.Id = SW.WordId
+											WHERE SW.WordId IS NULL AND NOT (W.Points <> 0 OR W.IsSensitive)
+										);
+										''')
+
+					log.info(f'Deleted {cursor.rowcount} words that were no longer associated with a snapshot.')
+
+					db.execute('UPDATE Word SET Points = 0, IsSensitive = FALSE;')
+
+					word_and_tag_points = []
+					
+					for word, points in config.word_points.items():
+						word_and_tag_points.append({'word': word, 'is_tag': False, 'points': points})
+
+					for tag, points in config.tag_points.items():
+						word_and_tag_points.append({'word': tag, 'is_tag': True, 'points': points})
+
+					# Do an upsert instead of replacing to avoid messing with the primary keys of previously inserted words.
+					db.executemany(	'''
+									INSERT INTO Word (Word, IsTag, Points)
+									VALUES (:word, :is_tag, :points)
+									ON CONFLICT (Word, IsTag)
+									DO UPDATE SET Points = :points;
+									''', word_and_tag_points)
+					
+					sensitive_words = []
+					
+					for word in config.sensitive_words:
+						sensitive_words.append({'word': word, 'is_tag': False, 'is_sensitive': True})
+
+					db.executemany(	'''
+									INSERT INTO Word (Word, IsTag, IsSensitive)
+									VALUES (:word, :is_tag, :is_sensitive)
+									ON CONFLICT (Word, IsTag)
+									DO UPDATE SET IsSensitive = :is_sensitive;
+									''', sensitive_words)
+
+					db.execute('INSERT OR REPLACE INTO Config (Name, Value) VALUES (:name, :value);', {'name': 'media_points', 'value': config.media_points})
+
+					db.commit()
+
+				except sqlite3.Error as error:
+					log.error(f'Failed to update the word and tag attributes with the error: {repr(error)}')
+					db.rollback()
+					raise
+
+				def invalidate_snapshot(snapshot: Snapshot) -> None:
+					""" Invalidates a snapshot that couldn't be scouted correctly due to a WebDriver error. """
+
+					try:
+						db.execute('UPDATE Snapshot SET State = :invalid_state WHERE Id = :id;', {'invalid_state': Snapshot.INVALID, 'id': snapshot.Id})
+						db.commit()
+					except sqlite3.Error as error:
+						log.error(f'Failed to invalidate the snapshot {snapshot} with the error: {repr(error)}')
 						db.rollback()
 						sleep(config.database_error_wait)
 
-				return redirected
+				def check_snapshot_redirection(snapshot: Snapshot) -> bool:
+					""" Checks if a snapshot was redirected. If so, the snapshot is invalidated and no information is extracted from its page.
+					While the snapshot is skipped, the page we were redirected to will be added to the queue. The one exception are pages from
+					the Wayback Machine that aren't snapshots. """
 
-			try:
+					redirected, url, timestamp = browser.was_wayback_url_redirected(snapshot.WaybackUrl)
+
+					if redirected:
+
+						try:
+							log.warning(f'Skipping the snapshot since it was redirected to "{url}".')
+							db.execute('UPDATE Snapshot SET State = :invalid_state WHERE Id = :id;', {'invalid_state': Snapshot.INVALID, 'id': snapshot.Id})
+						
+							# See example #4 in was_wayback_url_redirected().
+							if not is_url_from_domain(url, 'web.archive.org'):
+
+								child_snapshot = find_child_snapshot(snapshot, url, timestamp)
+
+								if child_snapshot is not None:
+									db.execute(	'''
+												INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsMedia, MediaExtension, ScoutTime, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+												VALUES (:parent_id, :depth, :state, :is_excluded, :is_media, :media_extension, :scout_time, :url, :timestamp, :last_modified_time, :url_key, :digest);
+												''', child_snapshot)
+								else:
+									log.warning(f'Could not find the redirected snapshot at "{url}" near {timestamp}.')
+
+							db.commit()
+
+						except sqlite3.Error as error:
+							log.error(f'Failed to update the redirected snapshot with the error: {repr(error)}')
+							db.rollback()
+							sleep(config.database_error_wait)
+
+					return redirected
+
 				# This is an oversimplified regular expression, but it works for our case since we are
 				# going to ask the CDX API what the real URLs are. The purpose of this pattern is to
 				# minimize the amount of requests to this endpoint.
@@ -355,11 +358,12 @@ if __name__ == '__main__':
 					try:
 						cursor = db.execute('''
 											SELECT 	S.*,
-													S.Priority <> :no_priority AS IsHighPriority,
-													CAST(MIN(SUBSTR(S.Timestamp, 1, 4), IFNULL(SUBSTR(S.LastModifiedTime, 1, 4), '9999')) AS INTEGER) AS OldestYear,
+													S.Priority <> :no_priority OR S.IsInitial AS IsHighPriority,
 													RANK_SNAPSHOT_BY_POINTS(IFNULL(MIN(PSI.ParentPoints, :ranking_max_points), PSI.ParentPoints), :ranking_offset) AS Rank,
-													PSI.ParentPoints
+													PSI.ParentPoints,
+													LSS.SnapshotsSinceSameHost
 											FROM Snapshot S
+											INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 											LEFT JOIN
 											(
 												SELECT T.ChildId, SUM(SI.Points) AS ParentPoints
@@ -368,44 +372,53 @@ if __name__ == '__main__':
 												WHERE T.ParentId <> T.ChildId
 												GROUP BY T.ChildId
 											) PSI ON S.Id = PSI.ChildId
+											LEFT JOIN
+											(
+												SELECT 	SI.UrlHost,
+														(SELECT COUNT(S.ScoutTime) FROM Snapshot S WHERE NOT S.IsMedia) - MAX(SRN.RowNum) AS SnapshotsSinceSameHost
+												FROM Snapshot S
+												INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
+												INNER JOIN
+												(
+													SELECT 	S.Id,
+															(ROW_NUMBER() OVER (ORDER BY S.ScoutTime)) AS RowNum
+													FROM Snapshot S
+													WHERE S.ScoutTime IS NOT NULL AND NOT S.IsMedia
+												) SRN ON S.Id = SRN.Id
+												GROUP BY SI.UrlHost
+											) LSS ON SI.UrlHost = LSS.UrlHost
 											WHERE
 												S.State = :queued_state
 												AND NOT S.IsMedia
 												AND NOT S.IsExcluded
-												AND (IsHighPriority OR :min_year IS NULL OR OldestYear >= :min_year)
-												AND (IsHighPriority OR :max_year IS NULL OR OldestYear <= :max_year)
+												AND (IsHighPriority OR :min_year IS NULL OR SI.OldestYear >= :min_year)
+												AND (IsHighPriority OR :max_year IS NULL OR SI.OldestYear <= :max_year)
 												AND (IsHighPriority OR :max_depth IS NULL OR S.Depth <= :max_depth)
+												AND (IsHighPriority OR LSS.SnapshotsSinceSameHost IS NULL OR :min_snapshots_for_same_host IS NULL OR LSS.SnapshotsSinceSameHost >= :min_snapshots_for_same_host)
 												AND (IsHighPriority OR IS_URL_KEY_ALLOWED(S.UrlKey))
 											ORDER BY
 												S.Priority DESC,
 												IIF(S.Depth <= :max_required_depth, S.Depth, (SELECT MAX(S.Depth) + 1 FROM Snapshot S)),
 												Rank DESC
 											LIMIT 1;
-											''', {'no_priority': Snapshot.NO_PRIORITY, 'ranking_max_points': config.ranking_max_points,
-												  'ranking_offset': config.ranking_offset, 'queued_state': Snapshot.QUEUED,
-												  'min_year': config.min_year, 'max_year': config.max_year,
-												  'max_depth': config.max_depth, 'max_required_depth': config.max_required_depth})
+											''',
+											{'no_priority': Snapshot.NO_PRIORITY, 'ranking_max_points': config.ranking_max_points,
+											 'ranking_offset': config.ranking_offset, 'queued_state': Snapshot.QUEUED,
+											 'min_year': config.min_year, 'max_year': config.max_year, 'max_depth': config.max_depth,
+											 'min_snapshots_for_same_host': config.min_snapshots_for_same_host,
+											 'max_required_depth': config.max_required_depth})
 						
 						row = cursor.fetchone()
 						if row is not None:
 							
 							snapshot = Snapshot(**row)
-							
 							browser.set_fallback_encoding_for_snapshot(snapshot)
-							parent_points = row['ParentPoints']
-
-							host, *_ = cast(str, snapshot.UrlKey).lower().partition(')')
-							host, *_ = host.partition(':')
 							
-							can_scout = snapshot.Priority != Snapshot.NO_PRIORITY \
-									 or host not in last_scouted_hosts \
-									 or config.min_snapshots_for_same_host is None \
-									 or total_scouted - last_scouted_hosts[host] >= config.min_snapshots_for_same_host
+							parent_points = row['ParentPoints']
+							snapshots_since_same_host = row['SnapshotsSinceSameHost']
 
-							if not can_scout:
-								log.debug(f'Skipping snapshot #{snapshot.Id} {snapshot} since it was scouted fewer than {config.min_snapshots_for_same_host} snapshots ago.')
-								continue
-
+							if snapshots_since_same_host is not None:
+								snapshots_since_same_host = round(snapshots_since_same_host)
 						else:
 							log.info('Ran out of snapshots to scout.')
 							break
@@ -424,7 +437,7 @@ if __name__ == '__main__':
 					# current URL to a blank page before navigating to the Wayback Machine.
 
 					try:
-						log.info(f'[{snapshot_index+1} of {num_snapshots}] Scouting snapshot #{snapshot.Id} {snapshot} located at a depth of {snapshot.Depth} pages and whose parents have {parent_points} points.')
+						log.info(f'[{snapshot_index+1} of {num_snapshots}] Scouting snapshot #{snapshot.Id} {snapshot} located at a depth of {snapshot.Depth} pages and whose parents have {parent_points} points (same host = {snapshots_since_same_host} snapshots).')
 						browser.go_to_wayback_url(snapshot.WaybackUrl, close_windows=True)
 					except SessionNotCreatedException as error:
 						log.warning(f'Terminated the WebDriver session abruptly with the error: {repr(error)}')
@@ -440,12 +453,19 @@ if __name__ == '__main__':
 					# E.g. https://web.archive.org/web/20060321063750if_/http://www.thekidfrombrooklyn.com/movies/PoundCake_02_06.wmv
 					# This video file was stored in the Wayback Machine with the text/plain media type.
 					if driver.current_url == Browser.BLANK_URL:
+
 						try:
 							log.warning('Skipping the snapshot since it was mislabeled as a media file.')
 							
 							media_extension = extract_media_extension_from_url(snapshot.Url)
-							db.execute(	'UPDATE Snapshot SET State = :scouted_state, IsMedia = :is_media, MediaExtension = :media_extension WHERE Id = :id;',
-										{'scouted_state': Snapshot.SCOUTED, 'is_media': True, 'media_extension': media_extension, 'id': snapshot.Id})
+							db.execute(	'''
+										UPDATE Snapshot
+										SET
+											State = :scouted_state, IsMedia = TRUE,
+											MediaExtension = :media_extension, ScoutTime = CURRENT_TIMESTAMP
+										WHERE Id = :id;
+										''',
+										{'scouted_state': Snapshot.SCOUTED, 'media_extension': media_extension, 'id': snapshot.Id})
 							
 							if snapshot.Priority == Snapshot.SCOUT_PRIORITY:
 								db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
@@ -551,6 +571,8 @@ if __name__ == '__main__':
 										# We'll allow all Internet Archive URLs here since we know they
 										# weren't autogenerated. Note that the (oversimplified) URL regex
 										# already checks if it's valid for our purposes.
+										# E.g. http://www.sapo.pt/cgi/getid?id=http://www.terravista.pt/Meco/1217
+										# Which contains http://www.terravista.pt/Meco/1217
 										params = parse_qsl(parts.query)
 										for key, value in params:
 											match = URL_REGEX.search(value)
@@ -558,7 +580,8 @@ if __name__ == '__main__':
 												url_list.append((match[0], wayback_timestamp))
 
 										# For cases that have a query string without any key-value pairs.
-										# E.g. "http://example.com/?http://other.com".
+										# E.g. http://www.yahoo.com/homem/?http://sports.yahoo.com
+										# Which contains http://sports.yahoo.com
 										if parts.query and not params:
 											match = URL_REGEX.search(parts.query)
 											if match is not None:
@@ -713,8 +736,8 @@ if __name__ == '__main__':
 			
 					try:
 						db.executemany(	'''
-										INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsMedia, MediaExtension, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
-										VALUES (:parent_id, :depth, :state, :is_excluded, :is_media, :media_extension, :url, :timestamp, :last_modified_time, :url_key, :digest);
+										INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsMedia, MediaExtension, ScoutTime, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+										VALUES (:parent_id, :depth, :state, :is_excluded, :is_media, :media_extension, :scout_time, :url, :timestamp, :last_modified_time, :url_key, :digest);
 										''', child_snapshot_list)
 
 						topology = [{'parent_id': child['parent_id'], 'url': child['url'], 'timestamp': child['timestamp']} for child in child_snapshot_list]
@@ -737,9 +760,15 @@ if __name__ == '__main__':
 
 						db.execute( '''
 									UPDATE Snapshot
-									SET State = :scouted_state, PageLanguage = :page_language, PageTitle = :page_title, PageUsesPlugins = :page_uses_plugins
+									SET
+										State = :scouted_state, PageLanguage = :page_language,
+										PageTitle = :page_title, PageUsesPlugins = :page_uses_plugins,
+										ScoutTime = CURRENT_TIMESTAMP
 									WHERE Id = :id;
-									''', {'scouted_state': Snapshot.SCOUTED, 'page_language': page_language, 'page_title': page_title, 'page_uses_plugins': page_uses_plugins,'id': snapshot.Id})
+									''',
+									{'scouted_state': Snapshot.SCOUTED, 'page_language': page_language,
+								  	 'page_title': page_title, 'page_uses_plugins': page_uses_plugins,
+									 'id': snapshot.Id})
 
 						if snapshot.Priority == Snapshot.SCOUT_PRIORITY:
 							db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
@@ -751,14 +780,13 @@ if __name__ == '__main__':
 						db.rollback()
 						sleep(config.database_error_wait)
 						continue
+		
+		except sqlite3.Error as error:
+			log.error(f'Failed to connect to the database with the error: {repr(error)}')
+		except KeyboardInterrupt:
+			log.warning('Detected a keyboard interrupt when these should not be used to terminate the scout due to a bug when using both Windows and the Firefox WebDriver.')
 
-					total_scouted += 1
-					last_scouted_hosts[host] = total_scouted
-
-			except KeyboardInterrupt:
-				log.warning('Detected a keyboard interrupt when these should not be used to terminate the scout due to a bug when using both Windows and the Firefox WebDriver.')
-
-			log.info(f'Finished scouting {num_snapshots} snapshots.')
+		log.info(f'Finished scouting {num_snapshots} snapshots.')
 
 	if args.max_iterations >= 0:
 		scout_snapshots(args.max_iterations)

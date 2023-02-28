@@ -5,10 +5,12 @@ import sqlite3
 import sys
 import tempfile
 from argparse import ArgumentParser
+from dataclasses import dataclass
 from glob import glob
 from tempfile import NamedTemporaryFile
 from time import sleep
 from typing import Optional, Union
+from uuid import uuid4
 
 import ffmpeg # type: ignore
 import tweepy # type: ignore
@@ -25,10 +27,11 @@ from tweepy.errors import TweepyException # type: ignore
 from common import (
 	CommonConfig, Database, Recording, Snapshot,
 	container_to_lowercase, delete_file,
-	get_current_timestamp, setup_logger,
+	setup_logger, tld_extract,
 	was_exit_command_entered,
 )
 
+@dataclass
 class PublishConfig(CommonConfig):
 	""" The configuration that applies to the publisher script. """
 
@@ -41,7 +44,6 @@ class PublishConfig(CommonConfig):
 	enable_tumblr: bool
 
 	require_approval: bool
-	flag_sensitive_snapshots: bool
 	show_media_metadata: bool
 	reply_with_text_to_speech: bool
 	delete_files_after_upload: bool
@@ -58,7 +60,6 @@ class PublishConfig(CommonConfig):
 	twitter_max_status_length: int
 	twitter_text_to_speech_segment_duration: int
 	twitter_max_text_to_speech_segments: Optional[int]
-	twitter_text_to_speech_upload_wait: int
 	
 	mastodon_instance_url: str
 	mastodon_access_token: str
@@ -69,8 +70,8 @@ class PublishConfig(CommonConfig):
 	mastodon_max_status_length: int
 	mastodon_max_file_size: Optional[int]
 
-	mastodon_enable_ffmpeg: bool
-	mastodon_ffmpeg_output_args: dict[str, Union[None, int, str]]
+	mastodon_reduce_file_size: bool
+	mastodon_reduce_file_size_ffmpeg_output_args: dict[str, Union[None, int, str]]
 
 	tumblr_api_key: str
 	tumblr_api_secret: str
@@ -83,6 +84,7 @@ class PublishConfig(CommonConfig):
 	tumblr_max_status_length: int
 
 	def __init__(self):
+		
 		super().__init__()
 		self.load_subconfig('publish')
 
@@ -106,7 +108,7 @@ class PublishConfig(CommonConfig):
 		if self.mastodon_max_file_size is not None:
 			self.mastodon_max_file_size = self.mastodon_max_file_size * 10 ** 6
 
-		self.mastodon_ffmpeg_output_args = container_to_lowercase(self.mastodon_ffmpeg_output_args)
+		self.mastodon_reduce_file_size_ffmpeg_output_args = container_to_lowercase(self.mastodon_reduce_file_size_ffmpeg_output_args)
 
 		if self.tumblr_api_key is None:
 			self.tumblr_api_key = os.environ['WANDERER_TUMBLR_API_KEY']
@@ -170,7 +172,7 @@ if __name__ == '__main__':
 				
 				# We need to take into account the extra newline and the plugin identifier emoji.
 				# Note that emojis count as two characters on Twitter.
-				max_title_length = max(config.twitter_max_status_length - len(body) - 2, 0)
+				max_title_length = max(config.twitter_max_status_length - len(body) - 7, 0)
 				text = f'{title[:max_title_length]}\n{body}'
 
 				sleep(config.twitter_api_wait)
@@ -218,7 +220,7 @@ if __name__ == '__main__':
 								if len(segment_file_paths) > 1:
 									segment_body += f'\n{i} of {len(segment_file_paths)}'
 								
-								max_title_length = max(config.twitter_max_status_length - len(segment_body) - 2, 0)
+								max_title_length = max(config.twitter_max_status_length - len(segment_body) - 7, 0)
 								tts_text = f'{title[:max_title_length]}\n{segment_body}'
 
 								sleep(config.twitter_api_wait)
@@ -269,7 +271,7 @@ if __name__ == '__main__':
 				output_file.close()
 
 				stream = ffmpeg.input(input_path)
-				stream = stream.output(output_file.name, **config.mastodon_ffmpeg_output_args)
+				stream = stream.output(output_file.name, **config.mastodon_reduce_file_size_ffmpeg_output_args)
 				stream = stream.global_args(*config.ffmpeg_global_args)
 				stream = stream.overwrite_output()
 				
@@ -296,9 +298,11 @@ if __name__ == '__main__':
 			def try_status_post(text: str, **kwargs) -> int:
 				""" Posts a status to the Mastodon instance, retrying if it fails with a 502, 503, or 504 HTTP error. """
 
+				idempotency_key = uuid4()
+
 				for i in range(config.mastodon_max_retries):
 					try:
-						status = mastodon_api.status_post(text, **kwargs)
+						status = mastodon_api.status_post(text, idempotency_key=idempotency_key, **kwargs)
 						break
 					except (MastodonNetworkError, MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
 						log.warning(f'Retrying the status post operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
@@ -314,12 +318,8 @@ if __name__ == '__main__':
 			recording_path = None
 			tts_path = None
 
-			idempotency_key_prefix = get_current_timestamp() + ' '
-			recording_idempotency_key = idempotency_key_prefix + 'recording'
-			tts_idempotency_key = idempotency_key_prefix + 'tts'
-
 			try:
-				recording_path = process_video_file(recording.UploadFilePath) if config.mastodon_enable_ffmpeg else recording.UploadFilePath
+				recording_path = process_video_file(recording.UploadFilePath) if config.mastodon_reduce_file_size else recording.UploadFilePath
 				recording_file_size = os.path.getsize(recording_path)
 				
 				if config.mastodon_max_file_size is None or recording_file_size <= config.mastodon_max_file_size:
@@ -329,7 +329,7 @@ if __name__ == '__main__':
 					max_title_length = max(config.mastodon_max_status_length - len(body) - 1, 0)
 					text = f'{title[:max_title_length]}\n{body}'
 
-					status_id = try_status_post(text, media_ids=[media_id], sensitive=sensitive, idempotency_key=recording_idempotency_key)
+					status_id = try_status_post(text, media_ids=[media_id], sensitive=sensitive)
 
 					log.info(f'Posted the recording status #{status_id} with the media #{media_id} ({recording_file_size / 10 ** 6:.1f} MB) using {len(text)} characters.')
 
@@ -338,7 +338,7 @@ if __name__ == '__main__':
 						# We'll try to reduce the file size while also having a size limit for both files.
 						if config.reply_with_text_to_speech and recording.TextToSpeechFilePath is not None:
 
-							tts_path = process_video_file(recording.TextToSpeechFilePath) if config.mastodon_enable_ffmpeg else recording.TextToSpeechFilePath
+							tts_path = process_video_file(recording.TextToSpeechFilePath) if config.mastodon_reduce_file_size else recording.TextToSpeechFilePath
 							tts_file_size = os.path.getsize(tts_path)
 
 							if config.mastodon_max_file_size is None or tts_file_size <= config.mastodon_max_file_size:
@@ -348,7 +348,7 @@ if __name__ == '__main__':
 								max_title_length = max(config.mastodon_max_status_length - len(tts_body) - 1, 0)
 								tts_text = f'{title[:max_title_length]}\n{tts_body}'
 
-								tts_status_id = try_status_post(tts_text, in_reply_to_id=status_id, media_ids=[tts_media_id], sensitive=sensitive, idempotency_key=tts_idempotency_key)
+								tts_status_id = try_status_post(tts_text, in_reply_to_id=status_id, media_ids=[tts_media_id], sensitive=sensitive)
 
 								log.info(f'Posted the text-to-speech status #{tts_status_id} with the media #{tts_media_id} ({tts_file_size / 10 ** 6:.1f} MB) using {len(tts_text)} characters.')
 							else:
@@ -366,7 +366,7 @@ if __name__ == '__main__':
 			except ffmpeg.Error as error:
 				log.error(f'Failed to process the video file with the error: {repr(error)}')
 			finally:
-				if config.mastodon_enable_ffmpeg:
+				if config.mastodon_reduce_file_size:
 					
 					if recording_path is not None:
 						delete_file(recording_path)
@@ -388,11 +388,11 @@ if __name__ == '__main__':
 			log.error(f'Failed to initialize the Tumblr API interface with the error: {repr(error)}')
 			sys.exit(1)
 
-		def publish_to_tumblr(recording: Recording, title: str, body: str) -> Optional[int]:
+		def publish_to_tumblr(recording: Recording, title: str, body: str, tags: list[str]) -> Optional[int]:
 			""" Publishes a snapshot recording on Tumblr. The video recording is added to the main post along
 			with a message whose content is generated using the remaining arguments. Unlike the Twitter and
 			Mastodon counterparts, posting text-to-speech files is not supported. It's also not possible to
-			mark a post as sensitive or add any alt text. """
+			mark a post as sensitive or add any alt text. This function also adds tags to the post. """
 
 			log.info('Publishing on Tumblr.')
 
@@ -407,10 +407,13 @@ if __name__ == '__main__':
 					# The official Tumblr library doesn't have any package-specific exceptions so
 					# we'll catch all of them to be safe.
 					# See: https://www.tumblr.com/docs/en/api/v2#post--create-a-new-blog-post-legacy
-					response = tumblr_api.create_video(tumblr_blog_name, caption=text, data=recording.UploadFilePath)
+					response = tumblr_api.create_video(tumblr_blog_name, tags=tags, caption=text, data=recording.UploadFilePath)
 					status_id = response.get('id')
 
-					if status_id is None:
+					if status_id is not None:
+						log.info(f'Posted the recording status #{status_id} using {len(text)} characters.')
+						break
+					else:
 						status_code = response['meta']['status']
 						
 						if status_code in [408, 502, 503, 504]:
@@ -419,9 +422,6 @@ if __name__ == '__main__':
 							continue
 						else:
 							raise Exception(f'Tumblr Response: {response}')
-					else:
-						log.info(f'Posted the recording status #{status_id} using {len(text)} characters.')
-						break
 				else:
 					raise Exception(f'Tumblr Response: {response}')
 			
@@ -474,8 +474,9 @@ if __name__ == '__main__':
 												AND NOT R.IsProcessed
 											ORDER BY S.Priority DESC, R.CreationTime
 											LIMIT 1;
-											''', {'approved_state': Snapshot.APPROVED, 'recorded_state': Snapshot.RECORDED,
-												  'require_approval': config.require_approval})
+											''',
+											{'approved_state': Snapshot.APPROVED, 'recorded_state': Snapshot.RECORDED,
+											 'require_approval': config.require_approval})
 						
 						row = cursor.fetchone()
 						if row is not None:	
@@ -487,7 +488,7 @@ if __name__ == '__main__':
 							assert snapshot.IsSensitive is not None, 'The IsSensitive column is not being computed properly.'
 							config.apply_snapshot_options(snapshot)
 						else:
-							log.info('Ran out of snapshots to publish.')
+							log.info('Ran out of recordings to publish.')
 							break
 					
 					except sqlite3.Error as error:
@@ -499,27 +500,35 @@ if __name__ == '__main__':
 					
 					title = snapshot.DisplayTitle
 					display_metadata = snapshot.DisplayMetadata if config.show_media_metadata else None
+					
 					plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsMedia or snapshot.PageUsesPlugins else None
-					body = '\n'.join(filter(None, [display_metadata, snapshot.ShortDate, snapshot.WaybackUrl, plugin_identifier]))
+					sensitive_identifier = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
+					audio_identifier = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
+					emoji_identifiers = ' '.join(filter(None, [plugin_identifier, sensitive_identifier, audio_identifier]))
 
-					snapshot_type = 'media file' if snapshot.IsMedia else 'web page'
-
-					# We have to format the link ourselves since the Tumblr API treats the post as HTML by default.
-					tumblr_wayback_url = f'<a href="{snapshot.WaybackUrl}">Archived {snapshot_type.title()}</a>'
-					tumblr_body = '<br>'.join(filter(None, [display_metadata, snapshot.ShortDate, tumblr_wayback_url, plugin_identifier]))
+					body = '\n'.join(filter(None, [display_metadata, snapshot.ShortDate, snapshot.WaybackUrl, emoji_identifiers]))
 
 					# How the date is formatted depends on the current locale.
+					snapshot_type = 'media file' if snapshot.IsMedia else 'web page'
 					long_date = snapshot.OldestDatetime.strftime('%B %Y')
 					alt_text = f'The {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine.'
-					sensitive = config.flag_sensitive_snapshots and snapshot.IsSensitive
+					sensitive = snapshot.IsSensitive
 					
 					tts_language = f'Text-to-Speech ({snapshot.LanguageName})' if snapshot.LanguageName is not None else 'Text-to-Speech'
 					tts_body = '\n'.join(filter(None, [snapshot.ShortDate, tts_language]))
 					tts_alt_text = f'An audio recording of the {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine. Generated using text-to-speech.'
 
+					# We have to format the link ourselves since the Tumblr API treats the post as HTML by default.
+					tumblr_wayback_url = f'<a href="{snapshot.WaybackUrl}">Archived {snapshot_type.title()}</a>'
+					tumblr_body = '<br>'.join(filter(None, [display_metadata, snapshot.ShortDate, tumblr_wayback_url, emoji_identifiers]))
+
+					extract = tld_extract(snapshot.Url)
+					year = str(snapshot.OldestDatetime.year)
+					tags = [extract.domain, year, *snapshot.Tags]
+
 					twitter_media_id, twitter_status_id = publish_to_twitter(recording, title, body, alt_text, sensitive, tts_body, tts_alt_text) if config.enable_twitter else (None, None)
 					mastodon_media_id, mastodon_status_id = publish_to_mastodon(recording, title, body, alt_text, sensitive, tts_body, tts_alt_text) if config.enable_mastodon else (None, None)
-					tumblr_status_id = publish_to_tumblr(recording, title, tumblr_body) if config.enable_tumblr else None
+					tumblr_status_id = publish_to_tumblr(recording, title, tumblr_body, tags) if config.enable_tumblr else None
 
 					if config.delete_files_after_upload:
 						delete_file(recording.UploadFilePath)
@@ -533,19 +542,20 @@ if __name__ == '__main__':
 						db.execute(	'''
 									UPDATE Recording
 									SET
-										IsProcessed = :is_processed, PublishTime = :publish_time,
+										IsProcessed = TRUE, PublishTime = CURRENT_TIMESTAMP,
 										TwitterMediaId = :twitter_media_id, TwitterStatusId = :twitter_status_id,
 										MastodonMediaId = :mastodon_media_id, MastodonStatusId = :mastodon_status_id,
 										TumblrStatusId = :tumblr_status_id
 									WHERE Id = :id;
-									''', {'is_processed': True, 'publish_time': get_current_timestamp(),
-										  'twitter_media_id': twitter_media_id, 'twitter_status_id': twitter_status_id,
-										  'mastodon_media_id': mastodon_media_id, 'mastodon_status_id': mastodon_status_id,
-										  'tumblr_status_id': tumblr_status_id, 'id': recording.Id})
+									''',
+									{'twitter_media_id': twitter_media_id, 'twitter_status_id': twitter_status_id,
+									 'mastodon_media_id': mastodon_media_id, 'mastodon_status_id': mastodon_status_id,
+									 'tumblr_status_id': tumblr_status_id,
+									 'id': recording.Id})
 
 						# Mark any earlier recordings as processed so the same snapshot isn't published multiple times in
 						# cases where there is more than one video file. See the LastCreationTime part in the main query.
-						db.execute('UPDATE Recording SET IsProcessed = :is_processed WHERE SnapshotId = :snapshot_id;', {'is_processed': True, 'snapshot_id': snapshot.Id})
+						db.execute('UPDATE Recording SET IsProcessed = TRUE WHERE SnapshotId = :snapshot_id;', {'snapshot_id': snapshot.Id})
 
 						if snapshot.Priority == Snapshot.PUBLISH_PRIORITY:
 							db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})

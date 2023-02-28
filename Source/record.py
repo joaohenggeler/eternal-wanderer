@@ -10,7 +10,7 @@ import sys
 from argparse import ArgumentParser
 from collections import Counter, defaultdict
 from contextlib import AbstractContextManager, nullcontext
-from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime
 from glob import iglob
 from math import ceil
@@ -37,12 +37,13 @@ from waybackpy.exceptions import TooManyRequestsError
 
 from common import (
 	Browser, CommonConfig, Database, Snapshot, TemporaryRegistry,
-	clamp, container_to_lowercase, delete_file, get_current_timestamp,
-	global_rate_limiter, global_session, is_url_available,
-	kill_processes_by_path, parse_wayback_machine_snapshot_url,
-	setup_logger, was_exit_command_entered,
+	clamp, container_to_lowercase, delete_file, global_rate_limiter,
+	global_session, is_url_available, kill_processes_by_path,
+	parse_wayback_machine_snapshot_url, setup_logger,
+	was_exit_command_entered,
 )
 
+@dataclass
 class RecordConfig(CommonConfig):
 	""" The configuration that applies to the recorder script. """
 
@@ -55,7 +56,7 @@ class RecordConfig(CommonConfig):
 	max_year: Optional[int]
 	record_sensitive_snapshots: bool
 	min_recordings_for_same_host: Optional[int]
-	min_publish_days_for_same_snapshot: int
+	min_publish_days_for_same_url: Optional[int]
 
 	allowed_media_extensions: frozenset[str] # Different from the config data type.
 	multi_asset_media_extensions: frozenset[str] # Different from the config data type.
@@ -113,11 +114,11 @@ class RecordConfig(CommonConfig):
 	save_archive_copy: bool
 	screen_capture_recorder_settings: dict[str, Optional[int]]
 	
-	ffmpeg_recording_input_name: str
-	ffmpeg_recording_input_args: dict[str, Union[None, int, str]]
-	ffmpeg_recording_output_args: dict[str, Union[None, int, str]]
-	ffmpeg_archive_output_args: dict[str, Union[None, int, str]]
-	ffmpeg_upload_output_args: dict[str, Union[None, int, str]]
+	raw_ffmpeg_input_name: str
+	raw_ffmpeg_input_args: dict[str, Union[None, int, str]]
+	raw_ffmpeg_output_args: dict[str, Union[None, int, str]]
+	archive_ffmpeg_output_args: dict[str, Union[None, int, str]]
+	upload_ffmpeg_output_args: dict[str, Union[None, int, str]]
 
 	enable_text_to_speech: bool
 	text_to_speech_read_image_alt_text: bool
@@ -126,17 +127,17 @@ class RecordConfig(CommonConfig):
 	text_to_speech_default_voice: Optional[str]
 	text_to_speech_language_voices: dict[str, str]
 
-	ffmpeg_text_to_speech_video_input_name: str
-	ffmpeg_text_to_speech_video_input_args: dict[str, Union[None, int, str]]
-	ffmpeg_text_to_speech_audio_input_args: dict[str, Union[None, int, str]]
-	ffmpeg_text_to_speech_output_args: dict[str, Union[None, int, str]]
+	text_to_speech_ffmpeg_video_input_name: str
+	text_to_speech_ffmpeg_video_input_args: dict[str, Union[None, int, str]]
+	text_to_speech_ffmpeg_audio_input_args: dict[str, Union[None, int, str]]
+	text_to_speech_ffmpeg_output_args: dict[str, Union[None, int, str]]
 
 	enable_media_conversion: bool
 	convertible_media_extensions: frozenset[str] # Different from the config data type.
-	ffmpeg_media_conversion_input_name: str
-	ffmpeg_media_conversion_input_args: dict[str, Union[None, int, str]]
-	ffmpeg_media_conversion_enable_subtitles: bool
-	ffmpeg_media_conversion_subtitles_style: str
+	media_conversion_ffmpeg_input_name: str
+	media_conversion_ffmpeg_input_args: dict[str, Union[None, int, str]]
+	media_conversion_add_subtitles: bool
+	media_conversion_ffmpeg_subtitles_style: str
 
 	# Determined at runtime.
 	media_template: str
@@ -146,6 +147,7 @@ class RecordConfig(CommonConfig):
 	height_dpi_scaling: float
 
 	def __init__(self):
+		
 		super().__init__()
 		self.load_subconfig('record')
 
@@ -166,23 +168,23 @@ class RecordConfig(CommonConfig):
 
 		self.screen_capture_recorder_settings = container_to_lowercase(self.screen_capture_recorder_settings)
 		
-		self.ffmpeg_recording_input_args = container_to_lowercase(self.ffmpeg_recording_input_args)
-		self.ffmpeg_recording_output_args = container_to_lowercase(self.ffmpeg_recording_output_args)
-		self.ffmpeg_archive_output_args = container_to_lowercase(self.ffmpeg_archive_output_args)
-		self.ffmpeg_upload_output_args = container_to_lowercase(self.ffmpeg_upload_output_args)
+		self.raw_ffmpeg_input_args = container_to_lowercase(self.raw_ffmpeg_input_args)
+		self.raw_ffmpeg_output_args = container_to_lowercase(self.raw_ffmpeg_output_args)
+		self.archive_ffmpeg_output_args = container_to_lowercase(self.archive_ffmpeg_output_args)
+		self.upload_ffmpeg_output_args = container_to_lowercase(self.upload_ffmpeg_output_args)
 
 		self.text_to_speech_language_voices = container_to_lowercase(self.text_to_speech_language_voices)
 
-		self.ffmpeg_text_to_speech_video_input_args = container_to_lowercase(self.ffmpeg_text_to_speech_video_input_args)
-		self.ffmpeg_text_to_speech_audio_input_args = container_to_lowercase(self.ffmpeg_text_to_speech_audio_input_args)
-		self.ffmpeg_text_to_speech_output_args = container_to_lowercase(self.ffmpeg_text_to_speech_output_args)
+		self.text_to_speech_ffmpeg_video_input_args = container_to_lowercase(self.text_to_speech_ffmpeg_video_input_args)
+		self.text_to_speech_ffmpeg_audio_input_args = container_to_lowercase(self.text_to_speech_ffmpeg_audio_input_args)
+		self.text_to_speech_ffmpeg_output_args = container_to_lowercase(self.text_to_speech_ffmpeg_output_args)
 
 		self.convertible_media_extensions = frozenset(extension for extension in container_to_lowercase(self.convertible_media_extensions))
 		assert self.convertible_media_extensions.issubset(self.allowed_media_extensions), 'The convertible media extensions must be a subset of the allowed media extensions.'
 
 		assert self.multi_asset_media_extensions.isdisjoint(self.convertible_media_extensions), 'The multi-asset and convertible media extensions must be mutually exclusive.'
 
-		self.ffmpeg_media_conversion_input_args = container_to_lowercase(self.ffmpeg_media_conversion_input_args)
+		self.media_conversion_ffmpeg_input_args = container_to_lowercase(self.media_conversion_ffmpeg_input_args)
 
 		media_template_path = os.path.join(self.plugins_path, 'media.html.template')
 		with open(media_template_path, 'r', encoding='utf-8') as file:
@@ -387,9 +389,9 @@ if __name__ == '__main__':
 	class ScreenCapture():
 		""" A process that captures the screen and stores the recording on disk using FFmpeg. """
 
-		raw_recording_path: str
-		upload_recording_path: str
-		archive_recording_path: Optional[str]
+		raw_path: str
+		upload_path: str
+		archive_path: Optional[str]
 		
 		stream: ffmpeg.Stream
 		process: Popen
@@ -397,12 +399,12 @@ if __name__ == '__main__':
 
 		def __init__(self, output_path_prefix: str):
 			
-			self.raw_recording_path = output_path_prefix + '.raw.mkv'
-			self.upload_recording_path = output_path_prefix + '.mp4'
-			self.archive_recording_path = output_path_prefix + '.mkv' if config.save_archive_copy else None
+			self.raw_path = output_path_prefix + '.raw.mkv'
+			self.upload_path = output_path_prefix + '.mp4'
+			self.archive_path = output_path_prefix + '.mkv' if config.save_archive_copy else None
 
-			stream = ffmpeg.input(config.ffmpeg_recording_input_name, t=config.max_duration, **config.ffmpeg_recording_input_args)
-			stream = stream.output(self.raw_recording_path, **config.ffmpeg_recording_output_args)
+			stream = ffmpeg.input(config.raw_ffmpeg_input_name, t=config.max_duration, **config.raw_ffmpeg_input_args)
+			stream = stream.output(self.raw_path, **config.raw_ffmpeg_output_args)
 			stream = stream.global_args(*config.ffmpeg_global_args)
 			stream = stream.overwrite_output()
 			self.stream = stream
@@ -424,19 +426,16 @@ if __name__ == '__main__':
 			try:
 				output, errors = self.process.communicate(b'q', timeout=10)
 				
-				for line in output.decode().splitlines():
+				for line in output.decode(errors='ignore').splitlines():
 					log.info(f'FFmpeg output: {line}')
 				
-				for line in errors.decode().splitlines():
+				for line in errors.decode(errors='ignore').splitlines():
 					log.warning(f'FFmpeg warning/error: {line}')
 			
 			except TimeoutExpired:
 				log.error('Failed to stop the recording gracefully.')
 				self.failed = True
 				self.process.kill()
-
-			except UnicodeDecodeError as error:
-				log.warning(f'Could not decode the FFmpeg output with the error: {repr(error)}')
 
 		def __enter__(self):
 			self.start()
@@ -450,15 +449,15 @@ if __name__ == '__main__':
 
 			if not self.failed:
 
-				output_types = [(self.upload_recording_path, config.ffmpeg_upload_output_args)]
+				output_types = [(self.upload_path, config.upload_ffmpeg_output_args)]
 				
-				if self.archive_recording_path is not None:
-					output_types.append((self.archive_recording_path, config.ffmpeg_archive_output_args))
+				if self.archive_path is not None:
+					output_types.append((self.archive_path, config.archive_ffmpeg_output_args))
 
-				for output_path, output_arguments in output_types:
+				for output_path, output_args in output_types:
 
-					stream = ffmpeg.input(self.raw_recording_path)
-					stream = stream.output(output_path, **output_arguments)
+					stream = ffmpeg.input(self.raw_path)
+					stream = stream.output(output_path, **output_args)
 					stream = stream.global_args(*config.ffmpeg_global_args)
 					stream = stream.overwrite_output()
 
@@ -466,11 +465,11 @@ if __name__ == '__main__':
 						log.debug(f'Processing the recording with the FFmpeg arguments: {stream.get_args()}')
 						stream.run()
 					except ffmpeg.Error as error:
-						log.error(f'Failed to process "{self.raw_recording_path}" into "{output_path}" with the error: {repr(error)}')
+						log.error(f'Failed to process "{self.raw_path}" into "{output_path}" with the error: {repr(error)}')
 						self.failed = True
 						break
 			
-			delete_file(self.raw_recording_path)
+			delete_file(self.raw_path)
 
 	if config.enable_text_to_speech:
 		
@@ -558,10 +557,10 @@ if __name__ == '__main__':
 					self.engine.Speak(text, SpeechLib.SVSFPurgeBeforeSpeak | SpeechLib.SVSFIsNotXML)
 					self.stream.Close()
 
-					video_stream = ffmpeg.input(config.ffmpeg_text_to_speech_video_input_name, **config.ffmpeg_text_to_speech_video_input_args)
-					audio_stream = ffmpeg.input(self.temporary_file.name, **config.ffmpeg_text_to_speech_audio_input_args)
+					video_stream = ffmpeg.input(config.text_to_speech_ffmpeg_video_input_name, **config.text_to_speech_ffmpeg_video_input_args)
+					audio_stream = ffmpeg.input(self.temporary_file.name, **config.text_to_speech_ffmpeg_audio_input_args)
 
-					target_stream = ffmpeg.output(video_stream, audio_stream, output_path, **config.ffmpeg_text_to_speech_output_args)
+					target_stream = ffmpeg.output(video_stream, audio_stream, output_path, **config.text_to_speech_ffmpeg_output_args)
 					target_stream = target_stream.global_args(*config.ffmpeg_global_args)
 					target_stream = target_stream.overwrite_output()
 					
@@ -722,39 +721,39 @@ if __name__ == '__main__':
 		escaped_subtitles_path = subtitles_file.name.replace('\\', r'\\').replace(':', r'\:')
 		log.debug(f'Created the temporary subtitles file "{subtitles_file.name}".')
 
+		extra_preferences: dict = {
+			# Always use the cached page.
+			'browser.cache.check_doc_frequency': 2,
+			
+			# Don't show a prompt or try to kill a plugin if it stops responding.
+			# We want the PluginCrashTimer to handle these silently in the background.
+			# See:
+			# - https://wiki.mozilla.org/Electrolysis/plugins
+			# - https://dblohm7.ca/blog/2012/11/22/plugin-hang-user-interface-for-firefox/
+			'dom.ipc.plugins.contentTimeoutSecs': -1,
+			'dom.ipc.plugins.hangUITimeoutSecs': -1,
+			'dom.ipc.plugins.parentTimeoutSecs': -1,
+			'dom.ipc.plugins.processLaunchTimeoutSecs': -1,
+			'dom.ipc.plugins.timeoutSecs': -1,
+			'dom.ipc.plugins.unloadTimeoutSecs': -1,
+		} 
+
+		if config.enable_proxy:
+			extra_preferences.update({
+				'network.proxy.type': 1, # Manual proxy configuration (see below).
+				'network.proxy.share_proxy_settings': False,
+				'network.proxy.http': '127.0.0.1',
+				'network.proxy.http_port': proxy.port,
+				'network.proxy.ssl': '127.0.0.1',
+				'network.proxy.ssl_port': proxy.port,
+				'network.proxy.ftp': '127.0.0.1',
+				'network.proxy.ftp_port': proxy.port,
+				'network.proxy.socks': '127.0.0.1',
+				'network.proxy.socks_port': 9, # Discard Protocol.
+				'network.proxy.no_proxies_on': 'localhost, 127.0.0.1', # For media snapshots.
+			})
+
 		try:
-			extra_preferences: dict = {
-				# Always use cached page.
-				'browser.cache.check_doc_frequency': 2,
-				
-				# Don't show a prompt or try to kill a plugin if it stops responding.
-				# We want the PluginCrashTimer to handle these silently in the background.
-				# See:
-				# - https://wiki.mozilla.org/Electrolysis/plugins
-				# - https://dblohm7.ca/blog/2012/11/22/plugin-hang-user-interface-for-firefox/
-				'dom.ipc.plugins.contentTimeoutSecs': -1,
-				'dom.ipc.plugins.hangUITimeoutSecs': -1,
-				'dom.ipc.plugins.parentTimeoutSecs': -1,
-				'dom.ipc.plugins.processLaunchTimeoutSecs': -1,
-				'dom.ipc.plugins.timeoutSecs': -1,
-				'dom.ipc.plugins.unloadTimeoutSecs': -1,
-			} 
-
-			if config.enable_proxy:
-				extra_preferences.update({
-					'network.proxy.type': 1, # Manual proxy configuration (see below).
-					'network.proxy.share_proxy_settings': False,
-					'network.proxy.http': '127.0.0.1',
-					'network.proxy.http_port': proxy.port,
-					'network.proxy.ssl': '127.0.0.1',
-					'network.proxy.ssl_port': proxy.port,
-					'network.proxy.ftp': '127.0.0.1',
-					'network.proxy.ftp_port': proxy.port,
-					'network.proxy.socks': '127.0.0.1',
-					'network.proxy.socks_port': 9, # Discard Protocol.
-					'network.proxy.no_proxies_on': 'localhost, 127.0.0.1', # For media snapshots.
-				})
-
 			with Database() as db, Browser(extra_preferences=extra_preferences, use_extensions=True, use_plugins=True, use_autoit=True) as (browser, driver), TemporaryRegistry() as registry:
 
 				browser.go_to_blank_page_with_text('\N{Broom} Initializing \N{Broom}')
@@ -808,7 +807,7 @@ if __name__ == '__main__':
 							log.debug(f'The media file "{title}" by "{author}" has the following tags: {tags}')
 
 							duration = float(probe['format']['duration'])
-							log.debug(f'The media file has a duration of {duration} seconds.')
+							log.debug(f'The media file has a duration of {duration:.2f} seconds.')
 						
 						except RequestException as error:
 							log.error(f'Failed to download the media file "{wayback_url}" with the error: {repr(error)}')
@@ -817,7 +816,7 @@ if __name__ == '__main__':
 							log.warning(f'Could not parse the media file\'s metadata with the error: {repr(error)}')
 							
 					content = config.media_template
-					content = content.replace('{comment}', f'Generated by "{__file__}" on {get_current_timestamp()}.')
+					content = content.replace('{comment}', f'Generated by "{__file__}" on {Database.get_current_timestamp()}.')
 					content = content.replace('{background_color}', config.media_background_color)
 					content = content.replace('{width}', config.media_width)
 					content = content.replace('{height}', config.media_height)
@@ -872,7 +871,7 @@ if __name__ == '__main__':
 							registry_value = config.physical_screen_height
 							log.info(f'Using the physical height ({config.physical_screen_height}) to capture the screen.')
 						elif key == 'default_max_fps':
-							framerate = config.ffmpeg_recording_input_args.get('framerate', 60)
+							framerate = config.raw_ffmpeg_input_args.get('framerate', 60)
 							registry_value = cast(int, framerate)
 						else:
 							registry.delete(registry_key)
@@ -882,6 +881,9 @@ if __name__ == '__main__':
 					
 					registry.set(registry_key, registry_value)
 				
+				# E.g. "[silencedetect @ 0000022c2f32bf40] silence_end: 4.54283 | silence_duration: 0.377167"
+				SILENCE_DURATION_REGEX = re.compile(r'^\[silencedetect.*silence_duration: (?P<duration>\d+\.\d+)', re.MULTILINE)
+
 				for snapshot_index in range(num_snapshots):
 
 					if was_exit_command_entered():
@@ -899,7 +901,6 @@ if __name__ == '__main__':
 						cursor = db.execute('''
 											SELECT 	S.*,
 													S.Priority <> :no_priority AS IsHighPriority,
-													CAST(MIN(SUBSTR(S.Timestamp, 1, 4), IFNULL(SUBSTR(S.LastModifiedTime, 1, 4), '9999')) AS INTEGER) AS OldestYear,
 													RANK_SNAPSHOT_BY_POINTS(SI.Points, :ranking_offset) AS Rank,
 													SI.Points,
 													LCR.RecordingsSinceSameHost,
@@ -908,34 +909,36 @@ if __name__ == '__main__':
 											INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 											LEFT JOIN
 											(
-												SELECT 	SUBSTR(S.UrlKey, 1, INSTR(S.UrlKey, ')') - 1) AS UrlHost,
-														(SELECT COUNT(*) FROM Recording) - MAX(R.RowNum) AS RecordingsSinceSameHost
+												SELECT 	SI.UrlHost,
+														(SELECT COUNT(*) FROM Recording) - MAX(RRN.RowNum) AS RecordingsSinceSameHost
 												FROM Snapshot S
+												INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
 												INNER JOIN
 												(
 													SELECT 	R.SnapshotId,
 															(ROW_NUMBER() OVER (ORDER BY R.CreationTime)) AS RowNum
 													FROM Recording R
-												) R ON S.Id = R.SnapshotId
-												GROUP BY UrlHost
-											) LCR ON SUBSTR(S.UrlKey, 1, INSTR(S.UrlKey, ')') - 1) = LCR.UrlHost
+												) RRN ON S.Id = RRN.SnapshotId
+												GROUP BY SI.UrlHost
+											) LCR ON SI.UrlHost = LCR.UrlHost
 											LEFT JOIN
 											(
-												SELECT 	R.SnapshotId,
+												SELECT 	S.UrlKey,
 														JulianDay('now') - JulianDay(MAX(R.PublishTime)) AS DaysSinceLastPublished
-												FROM Recording R
-												GROUP BY R.SnapshotId
-											) LPR ON S.Id = LPR.SnapshotId
+												FROM Snapshot S
+												INNER JOIN Recording R ON S.Id = R.SnapshotId
+												GROUP BY S.UrlKey
+											) LPR ON S.UrlKey = LPR.UrlKey
 											WHERE
 												(
 													S.State = :scouted_state
 													OR
-													(S.State = :published_state AND (IsHighPriority OR LPR.DaysSinceLastPublished >= :min_publish_days_for_same_snapshot))
+													(S.State = :published_state AND (IsHighPriority OR :min_publish_days_for_same_url IS NULL OR LPR.DaysSinceLastPublished >= :min_publish_days_for_same_url))
 												)
 												AND (NOT S.IsMedia OR IS_MEDIA_EXTENSION_ALLOWED(S.MediaExtension))
 												AND NOT S.IsExcluded
-												AND (IsHighPriority OR :min_year IS NULL OR OldestYear >= :min_year)
-												AND (IsHighPriority OR :max_year IS NULL OR OldestYear <= :max_year)
+												AND (IsHighPriority OR :min_year IS NULL OR SI.OldestYear >= :min_year)
+												AND (IsHighPriority OR :max_year IS NULL OR SI.OldestYear <= :max_year)
 												AND (IsHighPriority OR :record_sensitive_snapshots OR NOT SI.IsSensitive)
 												AND (IsHighPriority OR LCR.RecordingsSinceSameHost IS NULL OR :min_recordings_for_same_host IS NULL OR LCR.RecordingsSinceSameHost >= :min_recordings_for_same_host)
 												AND (IsHighPriority OR IS_URL_KEY_ALLOWED(S.UrlKey))
@@ -943,12 +946,13 @@ if __name__ == '__main__':
 												S.Priority DESC,
 												Rank DESC
 											LIMIT 1;
-											''', {'no_priority': Snapshot.NO_PRIORITY, 'ranking_offset': config.ranking_offset,
-												  'scouted_state': Snapshot.SCOUTED, 'published_state': Snapshot.PUBLISHED,
-												  'min_publish_days_for_same_snapshot': config.min_publish_days_for_same_snapshot,
-												  'min_year': config.min_year, 'max_year': config.max_year,
-												  'record_sensitive_snapshots': config.record_sensitive_snapshots,
-												  'min_recordings_for_same_host': config.min_recordings_for_same_host})
+											''',
+											{'no_priority': Snapshot.NO_PRIORITY, 'ranking_offset': config.ranking_offset,
+											 'scouted_state': Snapshot.SCOUTED, 'published_state': Snapshot.PUBLISHED,
+											 'min_publish_days_for_same_url': config.min_publish_days_for_same_url,
+											 'min_year': config.min_year, 'max_year': config.max_year,
+											 'record_sensitive_snapshots': config.record_sensitive_snapshots,
+											 'min_recordings_for_same_host': config.min_recordings_for_same_host})
 						
 						row = cursor.fetchone()
 						if row is not None:
@@ -971,7 +975,7 @@ if __name__ == '__main__':
 								days_since_last_published = round(days_since_last_published)
 
 							# Find the next auto incremented row ID.
-							cursor = db.execute('''SELECT seq + 1 AS NextRecordingId FROM sqlite_sequence WHERE name = 'Recording';''')
+							cursor = db.execute("SELECT seq + 1 AS NextRecordingId FROM sqlite_sequence WHERE name = 'Recording';")
 							row = cursor.fetchone()
 							recording_id = row['NextRecordingId'] if row is not None else 1
 						else:
@@ -1145,18 +1149,18 @@ if __name__ == '__main__':
 
 										if response_match is not None:
 											
-											status_code = response_match.group('status_code')
-											mark = response_match.group('mark')
+											status_code = response_match['status_code']
+											mark = response_match['mark']
 											proxy_status_codes[(status_code, mark)] += 1
 
 										elif save_match is not None:
 											
-											url = save_match.group('url')
+											url = save_match['url']
 											missing_urls.append(url)
 
 										elif realmedia_match is not None:
 											
-											realmedia_url = realmedia_match.group('url')
+											realmedia_url = realmedia_match['url']
 
 										proxy.task_done()
 
@@ -1204,9 +1208,9 @@ if __name__ == '__main__':
 						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, str(snapshot.OldestDatetime.year), str(snapshot.OldestDatetime.month).zfill(2), str(snapshot.OldestDatetime.day).zfill(2), media_identifier]
 						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
 
-						upload_recording_path: str
-						archive_recording_path: Optional[str]
-						text_to_speech_file_path: Optional[str]
+						upload_path: str
+						archive_path: Optional[str]
+						text_to_speech_path: Optional[str]
 
 						# This media extension differs from the snapshot's extension when recording a RealMedia file
 						# whose URL was extracted from a metadata file. We should only be converting binary media,
@@ -1220,9 +1224,9 @@ if __name__ == '__main__':
 							browser.close_all_windows()
 							browser.go_to_blank_page_with_text('\N{DNA Double Helix} Converting Media \N{DNA Double Helix}', str(snapshot))
 
-							upload_recording_path = recording_path_prefix + '.mp4'
-							archive_recording_path = None
-							text_to_speech_file_path = None
+							upload_path = recording_path_prefix + '.mp4'
+							archive_path = None
+							text_to_speech_path = None
 
 							try:
 								probe = ffmpeg.probe(media_path)
@@ -1230,10 +1234,10 @@ if __name__ == '__main__':
 							
 								# Add a video stream to the recording if the media file doesn't have one.
 								media_stream = ffmpeg.input(media_path, guess_layout_max=0)
-								video_stream = None if has_video_stream else ffmpeg.input(config.ffmpeg_media_conversion_input_name, **config.ffmpeg_media_conversion_input_args)
+								video_stream = None if has_video_stream else ffmpeg.input(config.media_conversion_ffmpeg_input_name, **config.media_conversion_ffmpeg_input_args)
 								input_streams: list[ffmpeg.Stream] = list(filter(None, [media_stream, video_stream]))
 								
-								if config.ffmpeg_media_conversion_enable_subtitles and not has_video_stream:
+								if config.media_conversion_add_subtitles and not has_video_stream:
 
 									log.debug('Adding subtitles to the converted media file.')
 
@@ -1247,39 +1251,36 @@ if __name__ == '__main__':
 									subtitles_file.flush()
 
 									# Take into account any previous filters from the configuration file.
-									output_args = deepcopy(config.ffmpeg_upload_output_args)
-									subtitles_filter = f"subtitles='{escaped_subtitles_path}':force_style='{config.ffmpeg_media_conversion_subtitles_style}'"
+									output_args = config.upload_ffmpeg_output_args.copy()
+									subtitles_filter = f"subtitles='{escaped_subtitles_path}':force_style='{config.media_conversion_ffmpeg_subtitles_style}'"
 
 									if 'vf' in output_args:
 										output_args['vf'] += ',' + subtitles_filter # type: ignore
 									else:
 										output_args['vf'] = subtitles_filter
 								else:
-									output_args = config.ffmpeg_upload_output_args
+									output_args = config.upload_ffmpeg_output_args
 
-								stream = ffmpeg.output(*input_streams, upload_recording_path, t=config.max_duration, shortest=None, **output_args)
+								stream = ffmpeg.output(*input_streams, upload_path, t=config.max_duration, shortest=None, **output_args)
 								stream = stream.global_args(*config.ffmpeg_global_args)
 								stream = stream.overwrite_output()
 
 								log.debug(f'Converting the media file with the FFmpeg arguments: {stream.get_args()}')
 								output, errors = stream.run(capture_stdout=True, capture_stderr=True)
 
-								log.info(f'Saved the media conversion to "{upload_recording_path}".')
+								log.info(f'Saved the media conversion to "{upload_path}".')
 								state = Snapshot.RECORDED
 
-								for line in output.decode().splitlines():
+								for line in output.decode(errors='ignore').splitlines():
 									log.info(f'FFmpeg output: {line}')
 								
-								for line in errors.decode().splitlines():
+								for line in errors.decode(errors='ignore').splitlines():
 									log.warning(f'FFmpeg warning/error: {line}')
 
 							except ffmpeg.Error as error:
 								log.error(f'Aborted the media conversion with the error: {repr(error)}.')
 								state = Snapshot.ABORTED
-							except UnicodeDecodeError as error:
-								log.warning(f'Could not decode the FFmpeg output with the error: {repr(error)}')
 						else:
-
 							# Record the snapshot. The page should load faster now that its resources are cached.
 
 							with PluginCrashTimer(browser, plugin_crash_timeout) as crash_timer:
@@ -1323,7 +1324,7 @@ if __name__ == '__main__':
 									delayed_sync_plugins_thread = Thread(target=delayed_sync_plugins, name='sync_plugins', daemon=True)
 
 								with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
-								
+
 									if plugin_syncing_type == 'unload':
 										delayed_sync_plugins_thread.start()
 
@@ -1340,6 +1341,7 @@ if __name__ == '__main__':
 								delayed_sync_plugins_thread.join()
 
 							redirected = False
+
 							if not snapshot.IsMedia:
 								redirected, url, timestamp = browser.was_wayback_url_redirected(content_url)
 								if redirected:
@@ -1348,29 +1350,67 @@ if __name__ == '__main__':
 							browser.close_all_windows()
 							browser.go_to_blank_page_with_text('\N{Film Projector} Post Processing \N{Film Projector}', str(snapshot))
 							capture.perform_post_processing()
-							
-							upload_recording_path = capture.upload_recording_path
-							archive_recording_path = capture.archive_recording_path
+
+							upload_path = capture.upload_path
+							archive_path = capture.archive_path
 
 							if crash_timer.crashed or capture.failed or redirected:
 								log.error(f'Aborted the recording (plugins crashed = {crash_timer.crashed}, capture failed = {capture.failed}, redirected = {redirected}).')
 								state = Snapshot.ABORTED
 							else:
-								log.info(f'Saved the recording to "{upload_recording_path}".')
+								log.info(f'Saved the recording to "{upload_path}".')
 								state = Snapshot.RECORDED
 
-							text_to_speech_file_path = None
+							text_to_speech_path = None
 							
 							if config.enable_text_to_speech and not snapshot.IsMedia and state == Snapshot.RECORDED:
 								
 								browser.go_to_blank_page_with_text('\N{Speech Balloon} Generating Text-to-Speech \N{Speech Balloon}', str(snapshot))
 								
 								page_text = '.\n'.join(frame_text_list)
-								text_to_speech_file_path = text_to_speech.generate_text_to_speech_file(snapshot.DisplayTitle, snapshot.OldestDatetime, page_text, snapshot.PageLanguage, recording_path_prefix)
+								text_to_speech_path = text_to_speech.generate_text_to_speech_file(snapshot.DisplayTitle, snapshot.OldestDatetime, page_text, snapshot.PageLanguage, recording_path_prefix)
 
-								if text_to_speech_file_path is not None:
-									log.info(f'Saved the text-to-speech file to "{text_to_speech_file_path}".')
+								if text_to_speech_path is not None:
+									log.info(f'Saved the text-to-speech file to "{text_to_speech_path}".')
 						
+						has_audio = False
+
+						if state == Snapshot.RECORDED:
+
+							browser.go_to_blank_page_with_text('\N{Speaker With Cancellation Stroke} Detecting Silence \N{Speaker With Cancellation Stroke}', str(snapshot))
+
+							try:
+								probe = ffmpeg.probe(upload_path)
+								recording_duration = float(probe['format']['duration'])
+
+								# We'll use our own global arguments since we need the log level set to
+								# info in order to get the filter's output. The minimum silence duration
+								# should be under one second so we can detect audio in short media files.
+								# E.g. https://web.archive.org/web/19961106150353if_/http://www.dnai.com:80/~sharrow/wav/frog.wav
+								stream = ffmpeg.input(upload_path)
+								stream = stream.output('-', f='null', af='silencedetect=duration=0.1')
+								stream = stream.global_args('-hide_banner', '-nostats')
+
+								# The filter's output goes to stderr.
+								log.debug(f'Detecting silence with the FFmpeg arguments: {stream.get_args()}')
+								_, errors = stream.run(capture_stderr=True)
+								
+								output = errors.decode(errors='ignore')
+								match = SILENCE_DURATION_REGEX.search(output)
+
+								# From testing, the difference between the durations in silent recordings is
+								# usually under 0.1 seconds, so we'll increase this threshold for good measure.
+								if match is not None:
+									silence_duration = float(match['duration'])
+									has_audio = abs(recording_duration - silence_duration) > 0.2
+									log.debug(f'Detected {silence_duration:.2f} seconds of silence out of {recording_duration:.2f}.')
+								else:
+									has_audio = True
+									log.debug('No silence detected.')
+
+							except (ffmpeg.Error, KeyError, ValueError) as error:
+								log.error(f'Could not detect silence with the error: {repr(error)}')
+
 						# If enabled, this step should be done even when converting media files directly
 						# since we might need to save a RealMedia file whose URL was extracted from a
 						# metadata file.
@@ -1400,9 +1440,9 @@ if __name__ == '__main__':
 
 								log.debug(f'Filename match groups for the missing URL "{url}": {match.groups()}')
 
-								name = match.group('name')
-								padding = len(match.group('num'))
-								extension = match.group('extension')
+								name = match['name']
+								padding = len(match['num'])
+								extension = match['extension']
 
 								num_consecutive_misses = 0
 								for num in range(config.proxy_max_total_save_tries):
@@ -1496,28 +1536,28 @@ if __name__ == '__main__':
 
 						if state == Snapshot.RECORDED:
 							
-							upload_filename = os.path.basename(upload_recording_path)
-							archive_filename = os.path.basename(archive_recording_path) if archive_recording_path is not None else None
-							text_to_speech_filename = os.path.basename(text_to_speech_file_path) if text_to_speech_file_path is not None else None
+							upload_filename = os.path.basename(upload_path)
+							archive_filename = os.path.basename(archive_path) if archive_path is not None else None
+							text_to_speech_filename = os.path.basename(text_to_speech_path) if text_to_speech_path is not None else None
 
 							db.execute(	'''
-										INSERT INTO Recording (SnapshotId, IsProcessed, UploadFilename, ArchiveFilename, TextToSpeechFilename, CreationTime)
-										VALUES (:snapshot_id, :is_processed, :upload_filename, :archive_filename, :text_to_speech_filename, :creation_time);
-										''', {'snapshot_id': snapshot.Id, 'is_processed': False, 'upload_filename': upload_filename,
-											  'archive_filename': archive_filename, 'text_to_speech_filename': text_to_speech_filename,
-											  'creation_time': get_current_timestamp()})
+										INSERT INTO Recording (SnapshotId, HasAudio, UploadFilename, ArchiveFilename, TextToSpeechFilename)
+										VALUES (:snapshot_id, :has_audio, :upload_filename, :archive_filename, :text_to_speech_filename);
+										''',
+										{'snapshot_id': snapshot.Id, 'has_audio': has_audio, 'upload_filename': upload_filename,
+										 'archive_filename': archive_filename, 'text_to_speech_filename': text_to_speech_filename})
 
 							if snapshot.Priority == Snapshot.RECORD_PRIORITY:
 								db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
 
 						else:
-							delete_file(upload_recording_path)
+							delete_file(upload_path)
 							
-							if archive_recording_path is not None:
-								delete_file(archive_recording_path)
+							if archive_path is not None:
+								delete_file(archive_path)
 							
-							if text_to_speech_file_path is not None:
-								delete_file(text_to_speech_file_path)
+							if text_to_speech_path is not None:
+								delete_file(text_to_speech_path)
 
 						if snapshot.IsMedia and all(metadata is None for metadata in [snapshot.MediaTitle, snapshot.MediaAuthor]):
 							db.execute(	'UPDATE Snapshot SET MediaTitle = :media_title, MediaAuthor = :media_author WHERE Id = :id;',
