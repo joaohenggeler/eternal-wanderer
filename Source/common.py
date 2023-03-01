@@ -313,7 +313,7 @@ FirefoxProfile.DEFAULT_PREFERENCES['mutable'] = config.preferences
 
 if config.ffmpeg_path is not None:
 	path = os.environ.get('PATH', '')
-	os.environ['PATH'] = f'{config.ffmpeg_path};{path}'
+	os.environ['PATH'] = config.ffmpeg_path + ';' + path
 
 log = logging.getLogger('eternal wanderer')
 log.setLevel(logging.DEBUG if config.debug else logging.INFO)
@@ -328,14 +328,14 @@ global_session.mount('https://web.archive.org', adapter)
 
 del option, path, retry, adapter
 
-def setup_logger(filename: str) -> logging.Logger:
+def setup_logger(name: str) -> logging.Logger:
 	""" Adds a stream and file handler to the Eternal Wanderer logger. """
 
 	stream_handler = logging.StreamHandler()
 	stream_formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s', datefmt='%H:%M:%S')
 	stream_handler.setFormatter(stream_formatter)
 
-	file_handler = logging.FileHandler(f'{filename}.log', 'a', 'utf-8')
+	file_handler = logging.FileHandler(name + '.log', 'a', 'utf-8')
 	file_formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] %(filename)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 	file_handler.setFormatter(file_formatter)
 
@@ -1178,7 +1178,7 @@ class Browser():
 
 		if config.java_add_to_path:
 			path = os.environ.get('PATH', '')
-			os.environ['PATH'] = f'{self.java_bin_path};{path}'
+			os.environ['PATH'] = self.java_bin_path + ';' + path
 
 		java_config_path = os.path.join(java_lib_path, 'deployment.config')
 		java_properties_path = os.path.join(java_lib_path, 'deployment.properties')
@@ -1274,7 +1274,7 @@ class Browser():
 
 		cosmo_player_system32_path = os.path.join(cosmo_player_path, 'System32')
 		path = os.environ.get('PATH', '')
-		os.environ['PATH'] = f'{cosmo_player_system32_path};{path}'
+		os.environ['PATH'] = cosmo_player_system32_path + ';' + path
 
 		# Keep in mind that the temporary registry always operates on the 32-bit view of the registry.
 		# In other words, the following values will be redirected to the following registry keys:
@@ -2062,7 +2062,7 @@ class TemporaryRegistry():
 		""" Iterates over the values of a registry key and optionally its subkeys. """
 
 		hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
-		key_path = f'{key_path}\\{sub_key}'
+		key_path += '\\' + sub_key
 
 		try:
 			with OpenKey(hkey, key_path, access=winreg.KEY_READ | winreg.KEY_WOW64_32KEY) as key_handle: 
@@ -2072,7 +2072,7 @@ class TemporaryRegistry():
 				for i in range(num_values):
 					try:
 						name, data, type_ = EnumValue(key_handle, i)
-						yield f'{key}\\{name}', data, type_
+						yield key + '\\' + name, data, type_
 					except OSError as error:
 						log.error(f'Failed to enumerate value {i+1} of {num_values} in the registry key "{key}" with the error: {repr(error)}')
 
@@ -2081,7 +2081,7 @@ class TemporaryRegistry():
 					for i in range(num_keys):
 						try:
 							child_sub_key = EnumKey(key_handle, i)
-							yield from TemporaryRegistry.traverse(f'{key}\\{child_sub_key}', recursive=recursive)
+							yield from TemporaryRegistry.traverse(key + '\\' + child_sub_key, recursive=recursive)
 						except OSError as error:
 							log.error(f'Failed to enumerate subkey {i+1} of {num_keys} in the registry key "{key}" with the error: {repr(error)}')
 
@@ -2093,7 +2093,7 @@ class TemporaryRegistry():
 		""" Deletes a registry key and all of its subkeys. """
 
 		hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
-		key_path = f'{key_path}\\{sub_key}'
+		key_path += '\\' + sub_key
 
 		try:
 			with OpenKey(hkey, key_path, access=winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_32KEY) as key_handle: 
@@ -2103,7 +2103,7 @@ class TemporaryRegistry():
 				for i in range(num_keys):
 					try:
 						child_sub_key = EnumKey(key_handle, i)
-						TemporaryRegistry.delete_key_tree(f'{key}\\{child_sub_key}')
+						TemporaryRegistry.delete_key_tree(key + '\\' + child_sub_key)
 					except OSError as error:
 						log.error(f'Failed to enumerate subkey {i+1} of {num_keys} in the registry key "{key}" with the error: {repr(error)}')
 

@@ -210,7 +210,7 @@ if __name__ == '__main__':
 					else:
 						formatted_begin_date = begin_date.replace('-', '_').replace(' ', '_').replace(':', '_')
 						formatted_end_date = end_date.replace('-', '_').replace(' ', '_').replace(':', '_')
-						range_identifier = f'{formatted_begin_date}_to_{formatted_end_date}'
+						range_identifier = formatted_begin_date + '_to_' + formatted_end_date
 
 					total_identifier = f'with_{num_found}_of_{total_recordings}'
 					text_to_speech_identifier = 'tts' if args.tts else None
@@ -262,8 +262,8 @@ if __name__ == '__main__':
 								audio_identifier = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
 								
 								recording_identifiers = [timestamp, snapshot.DisplayTitle, f'({snapshot.ShortDate})', plugin_identifier, sensitive_identifier, audio_identifier]
-								timestamp_line = ' '.join(filter(None, recording_identifiers))
-								timestamps_file.write(f'{timestamp_line}\n')
+								timestamp_line = ' '.join(filter(None, recording_identifiers)) + '\n'
+								timestamps_file.write(timestamp_line)
 								
 								probe = ffmpeg.probe(intermediate_file.name)
 								recording_duration = float(probe['format']['duration'])

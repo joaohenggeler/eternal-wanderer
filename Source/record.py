@@ -1452,7 +1452,7 @@ if __name__ == '__main__':
 
 									# Increment the value between the filename and extension.
 									new_num = str(num).zfill(padding)
-									new_filename = f'{name}{new_num}{extension}'
+									new_filename = name + new_num + extension
 									new_path = urljoin(directory_path + '/', new_filename)
 									new_parts = parts._replace(path=new_path)
 									new_url = urlunparse(new_parts)
@@ -1485,7 +1485,7 @@ if __name__ == '__main__':
 							# This index is later used to store any skipped URLs.
 							for i, url in enumerate(missing_urls):
 
-								browser.go_to_blank_page_with_text('\N{Floppy Disk} Saving Missings URLs \N{Floppy Disk}', f'{i+1} of {len(missing_urls)}', f'{url}')
+								browser.go_to_blank_page_with_text('\N{Floppy Disk} Saving Missings URLs \N{Floppy Disk}', f'{i+1} of {len(missing_urls)}', url)
 
 								try:
 									global_rate_limiter.wait_for_save_api_rate_limit()
