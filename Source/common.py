@@ -1061,9 +1061,9 @@ class Browser():
 				self.driver = webdriver.Firefox(executable_path=self.webdriver_path, options=options, service_log_path=None)
 				break
 			except WebDriverException as error:
-				log.error(f'Failed to create the Firefox WebDriver with the error: {repr(error)}')
+				log.warning(f'Retrying the Firefox WebDriver creation after failing with the error: {repr(error)}')
 				kill_processes_by_path(self.firefox_path)
-				sleep(30)
+				sleep(10)
 
 		self.driver.set_page_load_timeout(config.page_load_timeout)
 		self.driver.maximize_window()

@@ -172,7 +172,7 @@ if __name__ == '__main__':
 				
 				# We need to take into account the extra newline and the emoji identifiers since these count as two characters on Twitter.
 				emoji_length = len('\N{Jigsaw Puzzle Piece}\N{No One Under Eighteen Symbol}\N{Speaker With Three Sound Waves}')
-				max_title_length = max(config.twitter_max_status_length - len(body) - len('\n') - emoji_length, 0)
+				max_title_length = max(config.twitter_max_status_length - len('\n') - len(body) - emoji_length, 0)
 				text = title[:max_title_length] + '\n' + body
 
 				sleep(config.twitter_api_wait)
@@ -220,7 +220,7 @@ if __name__ == '__main__':
 								if len(segment_file_paths) > 1:
 									segment_body += f'\n{i} of {len(segment_file_paths)}'
 								
-								max_title_length = max(config.twitter_max_status_length - len(segment_body) - len('\n'), 0)
+								max_title_length = max(config.twitter_max_status_length - len('\n') - len(segment_body), 0)
 								tts_text = title[:max_title_length] + '\n' + segment_body
 
 								sleep(config.twitter_api_wait)
@@ -326,7 +326,7 @@ if __name__ == '__main__':
 
 					media_id = try_media_post(recording_path, mime_type='video/mp4', description=alt_text)
 
-					max_title_length = max(config.mastodon_max_status_length - len(body) - len('\n'), 0)
+					max_title_length = max(config.mastodon_max_status_length - len('\n') - len(body), 0)
 					text = title[:max_title_length] + '\n' + body
 
 					status_id = try_status_post(text, media_ids=[media_id], sensitive=sensitive)
@@ -345,7 +345,7 @@ if __name__ == '__main__':
 
 								tts_media_id = try_media_post(tts_path, mime_type='video/mp4', description=tts_alt_text)
 
-								max_title_length = max(config.mastodon_max_status_length - len(tts_body) - len('\n'), 0)
+								max_title_length = max(config.mastodon_max_status_length - len('\n') - len(tts_body), 0)
 								tts_text = title[:max_title_length] + '\n' + tts_body
 
 								tts_status_id = try_status_post(tts_text, in_reply_to_id=status_id, media_ids=[tts_media_id], sensitive=sensitive)
@@ -399,7 +399,7 @@ if __name__ == '__main__':
 			status_id = None
 
 			try:
-				max_title_length = max(config.tumblr_max_status_length - len(body) - len('<br>'), 0)
+				max_title_length = max(config.tumblr_max_status_length - len('<br>') - len(body), 0)
 				text = title[:max_title_length] + '<br>' + body
 
 				for i in range(config.tumblr_max_retries):
