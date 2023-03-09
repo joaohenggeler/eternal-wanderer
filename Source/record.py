@@ -340,7 +340,7 @@ if __name__ == '__main__':
 		def __exit__(self, exception_type, exception_value, traceback):
 			self.exec('current_timestamp = None')
 
-	class PluginCrashTimer():
+	class PluginCrashTimer:
 		""" A special timer that kills Firefox's plugin container child processes after a given time has elapsed (e.g. the recording duration). """
 
 		timeout: float
@@ -386,7 +386,7 @@ if __name__ == '__main__':
 			
 			kill_processes_by_path(self.plugin_container_path)
 
-	class ScreenCapture():
+	class ScreenCapture:
 		""" A process that captures the screen and stores the recording on disk using FFmpeg. """
 
 		raw_path: str
@@ -480,7 +480,7 @@ if __name__ == '__main__':
 		CreateObject('SAPI.SpVoice')
 		from comtypes.gen import SpeechLib # type: ignore
 
-		class TextToSpeech():
+		class TextToSpeech:
 			""" A wrapper for the Microsoft Speech API and FFmpeg that generates a text-to-speech recording. """
 
 			engine: SpeechLib.ISpeechVoice

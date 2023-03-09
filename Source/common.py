@@ -73,7 +73,7 @@ def container_to_lowercase(container: Union[list, dict]) -> Union[list, dict]:
 		assert False, f'Unhandled container type "{type(container)}".'
 
 @dataclass
-class CommonConfig():
+class CommonConfig:
 	""" The general purpose configuration that applies to all scripts. """
 
 	# From the config file.
@@ -345,7 +345,7 @@ def setup_logger(name: str) -> logging.Logger:
 	
 	return log
 
-class RateLimiter():
+class RateLimiter:
 	""" A rate limiter wrapper that restricts the number of requests made to the Wayback Machine and its APIs. """
 
 	wayback_machine_memory_storage: MemoryStorage
@@ -437,7 +437,7 @@ def is_url_key_allowed(url_key: str) -> bool:
 	""" Checks whether a URL should be scouted or recorded given its URL key. """
 	return (not config.allowed_domains or url_key_matches_domain_pattern(url_key, config.allowed_domains, checked_allowed_domains)) and (not config.disallowed_domains or not url_key_matches_domain_pattern(url_key, config.disallowed_domains, checked_disallowed_domains))
 
-class Database():
+class Database:
 	""" The database that contains all scraped snapshot metadata and their recordings. """
 
 	connection: sqlite3.Connection
@@ -690,7 +690,7 @@ class Database():
 		return datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
 @dataclass
-class Snapshot():
+class Snapshot:
 	""" A snapshot from the Wayback Machine at a specific time and location. """
 
 	# From the database.
@@ -860,7 +860,7 @@ Snapshot.PRIORITY_NAMES = {
 }
 
 @dataclass
-class Recording():
+class Recording:
 	""" A video recording of a Wayback Machine snapshot. """
 
 	# From the database.
@@ -899,7 +899,7 @@ class Recording():
 		self.TextToSpeechFilePath = os.path.join(subdirectory_path, self.TextToSpeechFilename) if self.TextToSpeechFilename is not None else None
 		self.CompilationSegmentFilePath = None # Set in the compilation script.
 
-class Browser():
+class Browser:
 	""" A Firefox browser instance created by Selenium. """
 
 	use_plugins: bool
@@ -1907,7 +1907,7 @@ class Browser():
 		Firefox had the required plugins installed). Returns None if Firefox is running in headless mode. """
 		return len(self.window.children(class_name=class_name)) if self.window is not None else None
 
-class TemporaryRegistry():
+class TemporaryRegistry:
 	""" A temporary registry that remembers and undos any changes (key additions and deletions) made to the Windows registry. """
 
 	# For the sake of convenience, this class mostly deals with registry key values and forces all queries to look at the
