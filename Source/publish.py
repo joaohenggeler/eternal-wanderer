@@ -298,7 +298,7 @@ if __name__ == '__main__':
 			def try_status_post(text: str, **kwargs) -> int:
 				""" Posts a status to the Mastodon instance, retrying if it fails with a 502, 503, or 504 HTTP error. """
 
-				idempotency_key = uuid4()
+				idempotency_key = str(uuid4())
 
 				for i in range(config.mastodon_max_retries):
 					try:
