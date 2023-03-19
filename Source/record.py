@@ -1382,6 +1382,7 @@ if __name__ == '__main__':
 							try:
 								probe = ffmpeg.probe(upload_path)
 								recording_duration = float(probe['format']['duration'])
+								has_audio_stream = any(stream for stream in probe['streams'] if stream['codec_type'] == 'audio')
 
 								# We'll use our own global arguments since we need the log level set to
 								# info in order to get the filter's output. The minimum silence duration
@@ -1400,13 +1401,16 @@ if __name__ == '__main__':
 
 								# From testing, the difference between the durations in silent recordings is
 								# usually under 0.1 seconds, so we'll increase this threshold for good measure.
+								# If FFmpeg couldn't detect any silence, we still have to check if the recording
+								# has an audio stream because we might have converted a video-only media file.
+								# E.g. https://web.archive.org/web/19970119195540if_/http://www.gwha.com:80/dynimg/lapse.mpeg
 								if match is not None:
 									silence_duration = float(match['duration'])
 									has_audio = abs(recording_duration - silence_duration) > 0.2
 									log.debug(f'Detected {silence_duration:.2f} seconds of silence out of {recording_duration:.2f}.')
 								else:
-									has_audio = True
-									log.debug('No silence detected.')
+									has_audio = has_audio_stream
+									log.debug(f'No silence detected (audio stream = {has_audio_stream}).')
 
 							except (ffmpeg.Error, KeyError, ValueError) as error:
 								log.error(f'Could not detect silence with the error: {repr(error)}')
