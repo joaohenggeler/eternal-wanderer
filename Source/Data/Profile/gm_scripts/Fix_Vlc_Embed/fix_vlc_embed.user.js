@@ -177,7 +177,9 @@ if(vlc_plugin)
 			// - MOV: https://web.archive.org/web/19970502031035if_/http://www.verticalonline.com/dh.html
 			// - MOV: https://web.archive.org/web/20200219215301if_/http://goa103.free.fr/t_63455/media_player.php
 			// - MOV: https://web.archive.org/web/20220514015040if_/https://web.nmsu.edu/~leti/portfolio/quicktimemovie.html
+			// - MP3: https://web.archive.org/web/20001109024100if_/http://marshall_a.tripod.com/
 			// - WAV: https://web.archive.org/web/19961221002525if_/http://www.geocities.com/Heartland/8055/
+			// - WAV: https://web.archive.org/web/19961228051934if_/http://nyelabs.kcts.org:80/
 			// - WAV: https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html
 			// - WAV: https://web.archive.org/web/20140823011355if_/http://www.mountaindragon.com/html/sound4.htm
 
@@ -227,7 +229,9 @@ if(vlc_plugin)
 			// allow you to repeat the media a set number of times, so we'll treat any
 			// number as only needing to loop the media once. With that being the case,
 			// it's easier to check if the media wasn't intended to loop forever (i.e.
-			// if the loop attribute is not true, infinite, or -1).
+			// if the loop attribute is not true, infinite, or -1). If it should loop
+			// forever, then we must set the attribute to true since infinite and -1
+			// aren't recognized by VLC.
 			//
 			// While there are VLC-specific events that could be used here instead,
 			// these didn't seem to be called in practice.
@@ -242,6 +246,9 @@ if(vlc_plugin)
 			const loop = attributes_map.get("loop");
 			if(loop !== "true" && loop !== "infinite" && loop !== "-1")
 			{
+				attributes_map.set("loop", "false");
+				set_object_embed_attributes(element, attributes_map);
+
 				element.dataset.vlcLastPosition = "-1";
 				element.dataset.vlcIntervalId = setInterval(function(vlc)
 				{
@@ -260,6 +267,11 @@ if(vlc_plugin)
 						vlc.dataset.vlcLastPosition = vlc.input.position;
 					}
 				}, 0, element);
+			}
+			else
+			{
+				attributes_map.set("loop", "true");
+				set_object_embed_attributes(element, attributes_map);
 			}
 
 			reload_object_embed(element);

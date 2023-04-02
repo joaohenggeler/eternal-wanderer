@@ -306,7 +306,7 @@
 	"scout":
 	{
 		"scheduler": {"day_of_week": "mon-fri", "hour": 2},
-		"num_snapshots_per_scheduled_batch": 300,
+		"num_snapshots_per_scheduled_batch": 500,
 
 		"extension_filter": ["greasemonkey-3.17-fx.xpi"],
 		"user_script_filter": ["Disable Prompt Functions"],
