@@ -171,7 +171,7 @@ if __name__ == '__main__':
 					twitter_api.create_media_metadata(media_id, alt_text)
 				
 				# We need to take into account the extra newline and the emoji identifiers since these count as two characters on Twitter.
-				emoji_length = len('\N{Jigsaw Puzzle Piece}\N{No One Under Eighteen Symbol}\N{Speaker With Three Sound Waves}')
+				emoji_length = len('\N{DVD}\N{No One Under Eighteen Symbol}\N{Speaker With Three Sound Waves}')
 				max_title_length = max(config.twitter_max_status_length - len('\n') - len(body) - emoji_length, 0)
 				text = title[:max_title_length] + '\n' + body
 
@@ -500,11 +500,11 @@ if __name__ == '__main__':
 					
 					title = snapshot.DisplayTitle
 					display_metadata = snapshot.DisplayMetadata if config.show_media_metadata else None
-					
-					plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsMedia or snapshot.PageUsesPlugins else None
+
+					media_identifier = '\N{DVD}' if snapshot.IsMedia else ('\N{Jigsaw Puzzle Piece}' if snapshot.PageUsesPlugins else None)
 					sensitive_identifier = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
 					audio_identifier = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
-					emoji_identifiers = ' '.join(filter(None, [plugin_identifier, sensitive_identifier, audio_identifier]))
+					emoji_identifiers = ' '.join(filter(None, [media_identifier, sensitive_identifier, audio_identifier]))
 
 					body = '\n'.join(filter(None, [display_metadata, snapshot.ShortDate, snapshot.WaybackUrl, emoji_identifiers]))
 

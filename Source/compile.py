@@ -257,11 +257,11 @@ if __name__ == '__main__':
 								minutes, seconds = divmod(round(current_duration), 60)
 								hours, minutes = divmod(minutes, 60)
 								timestamp = f'{hours:02}:{minutes:02}:{seconds:02}'
-								plugin_identifier = '\N{Jigsaw Puzzle Piece}' if snapshot.IsMedia or snapshot.PageUsesPlugins else None
+								media_identifier = '\N{DVD}' if snapshot.IsMedia else ('\N{Jigsaw Puzzle Piece}' if snapshot.PageUsesPlugins else None)
 								sensitive_identifier = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
 								audio_identifier = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
 								
-								recording_identifiers = [timestamp, snapshot.DisplayTitle, f'({snapshot.ShortDate})', plugin_identifier, sensitive_identifier, audio_identifier]
+								recording_identifiers = [timestamp, snapshot.DisplayTitle, f'({snapshot.ShortDate})', media_identifier, sensitive_identifier, audio_identifier]
 								timestamp_line = ' '.join(filter(None, recording_identifiers)) + '\n'
 								timestamps_file.write(timestamp_line)
 								

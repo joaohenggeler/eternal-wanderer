@@ -8,9 +8,9 @@ With over 682 billion web pages saved since 1996, the [Wayback Machine](https://
 
 ## Features
 
-* Visits archived web pages and collects metadata from their content and from the Wayback Machine's CDX API.
+* Visits archived web pages and collects metadata from the Wayback Machine's CDX API.
 
-* Records the screen using FFmpeg and generates short MP4 videos that show the entire page.
+* Records the screen using FFmpeg and generates videos that show the entire page.
 
 * Generates audio recordings of each page using text-to-speech.
 
@@ -18,11 +18,11 @@ With over 682 billion web pages saved since 1996, the [Wayback Machine](https://
 
 * Designed with now obsolete web plugins in mind. The bot will automatically perform the necessary steps so that old web media plays smoothly (e.g. Flash, Shockwave, Java, VRML, MIDI, RealAudio, QuickTime, etc).
 
-* Supports web media that is linked directly instead of being embedded on the page (e.g. VRML worlds, MIDI music, QuickTime videos, etc).
+* Supports media files that are linked directly instead of being embedded on the page (e.g. VRML worlds, MIDI music, QuickTime videos, etc).
 
 * Monitors all HTTP/HTTPS requests and archives files that still exist online using the Wayback Machine's Save API.
 
-* Web pages are ranked based on specific words and embedded plugin media, and can be given different priorities so that they're scraped, recorded, or published first.
+* Ranks web pages based on specific words and HTML tags.
 
 ## Setup
 
