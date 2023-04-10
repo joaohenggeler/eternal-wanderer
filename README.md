@@ -10,7 +10,7 @@ With over 682 billion web pages saved since 1996, the [Wayback Machine](https://
 
 * Visits archived web pages and collects metadata from the Wayback Machine's CDX API.
 
-* Records the screen using FFmpeg and generates videos that show the entire page.
+* Records the screen and generates videos that show the entire page.
 
 * Generates audio recordings of each page using text-to-speech.
 
