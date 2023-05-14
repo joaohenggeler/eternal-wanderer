@@ -161,10 +161,10 @@ class RecordConfig(CommonConfig):
 			self.proxy_max_cdx_path_components = max(self.proxy_max_cdx_path_components, 1)
 
 		self.plugin_syncing_page_type = self.plugin_syncing_page_type.lower()
-		assert self.plugin_syncing_page_type in ['none', 'reload', 'unload'], f'Unknown plugin syncing page type "{self.plugin_syncing_page_type}".'
+		assert self.plugin_syncing_page_type in ['none', 'reload_before', 'reload_twice', 'unload'], f'Unknown plugin syncing page type "{self.plugin_syncing_page_type}".'
 
 		self.plugin_syncing_media_type = self.plugin_syncing_media_type.lower()
-		assert self.plugin_syncing_media_type in ['none', 'reload', 'unload'], f'Unknown plugin syncing media type "{self.plugin_syncing_media_type}".'
+		assert self.plugin_syncing_media_type in ['none', 'reload_before', 'reload_twice', 'unload'], f'Unknown plugin syncing media type "{self.plugin_syncing_media_type}".'
 
 		self.screen_capture_recorder_settings = container_to_lowercase(self.screen_capture_recorder_settings)
 		
@@ -1305,13 +1305,13 @@ if __name__ == '__main__':
 										log.info(f'Reloading the page from cache since {num_cosmo_player_instances} Cosmo Player instances were found.')
 										browser.reload_page_from_cache()
 
-								if plugin_syncing_type == 'reload':
-									
+								if plugin_syncing_type in ['reload_before', 'reload_twice']:
+
 									log.debug('Reloading plugin content.')
 									browser.reload_plugin_content()
-								
+
 								elif plugin_syncing_type == 'unload':
-									
+
 									log.debug('Unloading plugin content.')
 									browser.unload_plugin_content(skip_applets=True)
 
@@ -1325,7 +1325,12 @@ if __name__ == '__main__':
 
 								with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
 
-									if plugin_syncing_type == 'unload':
+									if plugin_syncing_type == 'reload_twice':
+
+										log.debug('Reloading plugin content.')
+										browser.reload_plugin_content(skip_applets=True)
+
+									elif plugin_syncing_type == 'unload':
 										delayed_sync_plugins_thread.start()
 
 									sleep(wait_after_load)

@@ -119,7 +119,7 @@ If you're hosting the bot in a remote Windows machine, there are some additional
 
 * It's recommended that you adjust the dimensions of the scale and pad filters in `upload_ffmpeg_output_args` depending on your screen capture dimensions (or on your display settings if these are set to null in `screen_capture_recorder_settings`). For example, you could change the width and height to 1920x1080 (16:9) or 1440x1080 (4:3) in order to record 1080p videos. If `enable_media_conversion` is enabled, you should also change the `size` parameter in `media_conversion_ffmpeg_input_name`.
 
-* Check if your machine can record pages with plugins properly while `plugin_syncing_page_type` is set to `unload`. If you notice any issues like embedded audio files not being played correctly, set this option to `reload`. These steps also apply to `plugin_syncing_media_type`, meaning this option should stay set to `unload` unless you notice a problem while recording media file snapshots.
+* Check if your machine can record pages with plugins properly while `plugin_syncing_page_type` is set to `unload`. If you notice any issues like embedded audio files not being played correctly, set this option to `reload_before`. These steps also apply to `plugin_syncing_media_type`, meaning this option should stay set to `unload` unless you notice a problem while recording media file snapshots.
 
 * Depending on the remote machine you're using to host the bot, it's possible that you won't be able to use the OpenGL renderer when viewing VRML worlds with the Cosmo Player. If that's the case, you should change the renderer to DirectX by setting `cosmo_player_renderer` to `DirectX`. The Shockwave and 3DVIA players are able to choose the best available renderer, meaning `shockwave_renderer` and `_3dvia_renderer` can be left to `Auto`.
 
@@ -399,7 +399,7 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `fullscreen_browser`: enable to display the browser window in fullscreen before recording.
 
-* `plugin_syncing_page_type`: the method used to sync plugin media so that different page elements start playing at the same time. Set to `reload` to restart all plugin media before recording. Set to `unload` to only start playing plugin media after the recording starts. Set to `none` to disable this feature. No other values are allowed. While `unload` is meant to be a more robust version of `reload`, the underlying implementation may not always work correctly.
+* `plugin_syncing_page_type`: the method used to sync plugin media so that different page elements start playing at the same time. Set to `reload_before` to restart all plugin media before recording. Set to `reload_twice` to do the same as `reload_before` while also reloading a second time immediately after the recording starts. Useful for pages that play a short audio file after loading. Set to `unload` to only start playing plugin media after the recording starts. Set to `none` to disable this feature. No other values are allowed. While `unload` is meant to be a more robust version of `reload_before`, the underlying implementation may not always work correctly.
 
 * `plugin_syncing_media_type`: same as `plugin_syncing_page_type` but for media snapshots.
 

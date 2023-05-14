@@ -178,6 +178,7 @@ if(vlc_plugin)
 			// - MOV: https://web.archive.org/web/20200219215301if_/http://goa103.free.fr/t_63455/media_player.php
 			// - MOV: https://web.archive.org/web/20220514015040if_/https://web.nmsu.edu/~leti/portfolio/quicktimemovie.html
 			// - MP3: https://web.archive.org/web/20001109024100if_/http://marshall_a.tripod.com/
+			// - WAV: https://web.archive.org/web/19961111121936if_/http://movievan.com:80/	
 			// - WAV: https://web.archive.org/web/19961221002525if_/http://www.geocities.com/Heartland/8055/
 			// - WAV: https://web.archive.org/web/19961228051934if_/http://nyelabs.kcts.org:80/
 			// - WAV: https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html
