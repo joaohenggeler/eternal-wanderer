@@ -747,7 +747,7 @@ class Snapshot:
 	REJECTED = 5
 	APPROVED = 6
 	PUBLISHED = 7
-	ARCHIVED = 8
+	WITHHELD = 8
 
 	STATE_NAMES: dict[int, str]
 
@@ -849,7 +849,7 @@ Snapshot.STATE_NAMES = {
 	Snapshot.REJECTED: 'Rejected',
 	Snapshot.APPROVED: 'Approved',
 	Snapshot.PUBLISHED: 'Published',
-	Snapshot.ARCHIVED: 'Archived',
+	Snapshot.WITHHELD: 'Withheld',
 }
 
 Snapshot.PRIORITY_NAMES = {

@@ -81,23 +81,6 @@ if __name__ == '__main__':
 
 			print()
 
-			cursor = db.execute('SELECT COUNT(*) AS Total FROM Snapshot S INNER JOIN SnapshotInfo SI ON S.Id = SI.Id WHERE SI.IsSensitive IS NOT NULL;')
-			row = cursor.fetchone()
-			total_can_be_sensitive = row['Total']
-
-			percent = total_can_be_sensitive / total_snapshots * 100 if total_snapshots > 0 else 0
-			print(f'- Can Be Sensitive: {total_can_be_sensitive} ({percent:.2f}%)')
-
-			cursor = db.execute('SELECT SI.IsSensitive, COUNT(*) AS Total FROM Snapshot S INNER JOIN SnapshotInfo SI ON S.Id = SI.Id WHERE SI.IsSensitive IS NOT NULL GROUP BY SI.IsSensitive ORDER BY SI.IsSensitive;')
-			sensitive_total = {row['IsSensitive']: row['Total'] for row in cursor}
-
-			for sensitive, name in [(0, 'Not Sensitive'), (1, 'Sensitive')]:
-				total = sensitive_total.get(sensitive, 0)
-				percent = total / total_can_be_sensitive * 100 if total_can_be_sensitive > 0 else 0
-				print(f'-> {name}: {total} ({percent:.2f}%)')
-
-			print()
-
 			cursor = db.execute('SELECT COUNT(*) AS Total FROM Snapshot WHERE Priority > 0;')
 			row = cursor.fetchone()
 			total_prioritized = row['Total']
