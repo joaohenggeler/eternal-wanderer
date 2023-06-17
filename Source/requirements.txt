@@ -8,6 +8,6 @@ pywinauto>=0.6.8
 requests>=2.27.1
 selenium>=3.141.0,<4.0.0
 tldextract>=3.3.0
-tweepy>=4.8.0
+tweepy>=4.14.0
 typing-extensions>=4.2.0
 waybackpy>=3.0.6

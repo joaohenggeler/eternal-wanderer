@@ -140,17 +140,38 @@ if __name__ == '__main__':
 		
 		try:
 			# At the time of writing, you need to use the standard Twitter API version 1.1 to upload videos.
-			# This requires having both elevated access and using OAuth 1.0a.
+			# This requires having elevated access and using OAuth 1.0a. You also need to use version 2 of
+			# the API to create tweets.
 			log.info('Initializing the Twitter API interface.')
-			twitter_auth = tweepy.OAuth1UserHandler(config.twitter_api_key, config.twitter_api_secret,
-													config.twitter_access_token, config.twitter_access_token_secret)
-			twitter_api = tweepy.API(twitter_auth, 	retry_count=config.twitter_max_retries, retry_delay=config.twitter_retry_wait,
-													retry_errors=[408, 502, 503, 504], wait_on_rate_limit=True)
+
+			twitter_auth = tweepy.OAuth1UserHandler(
+				consumer_key=config.twitter_api_key,
+				consumer_secret=config.twitter_api_secret,
+				access_token=config.twitter_access_token,
+				access_token_secret=config.twitter_access_token_secret,
+			)
+
+			twitter_api_v1 = tweepy.API(
+				twitter_auth,
+				retry_count=config.twitter_max_retries,
+				retry_delay=config.twitter_retry_wait,
+				retry_errors=[408, 502, 503, 504],
+				wait_on_rate_limit=True,
+			)
+
+			twitter_api_v2 = tweepy.Client(
+				consumer_key=config.twitter_api_key,
+				consumer_secret=config.twitter_api_secret,
+				access_token=config.twitter_access_token,
+				access_token_secret=config.twitter_access_token_secret,
+				wait_on_rate_limit=True,
+			)
+
 		except TweepyException as error:
 			log.error(f'Failed to initialize the Twitter API interface with the error: {repr(error)}')
 			sys.exit(1)
 
-		def publish_to_twitter(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str, tts_alt_text: str) -> tuple[Optional[int], Optional[int]]:
+		def publish_to_twitter(recording: Recording, title: str, body: str, alt_text: str, tts_body: str, tts_alt_text: str) -> tuple[Optional[int], Optional[int]]:
 			""" Publishes a snapshot recording and text-to-speech file on Twitter. The video recording is added to the main post along
 			with a message whose content is generated using the remaining arguments. The text-to-speech file is added as a reply to the
 			main post. If this file is too long for Twitter's video duration limit, then it's split across multiple replies. """
@@ -161,14 +182,14 @@ if __name__ == '__main__':
 			status_id = None
 
 			try:
-				media = twitter_api.chunked_upload(filename=recording.UploadFilePath, file_type='video/mp4', media_category='TweetVideo')
+				media = twitter_api_v1.chunked_upload(filename=recording.UploadFilePath, file_type='video/mp4', media_category='TweetVideo')
 				media_id = media.media_id
 
 				# At the time of writing, you can't add alt text to videos.
 				# See: https://docs.tweepy.org/en/stable/api.html#tweepy.API.create_media_metadata
 				if False:
 					sleep(config.twitter_api_wait)
-					twitter_api.create_media_metadata(media_id, alt_text)
+					twitter_api_v1.create_media_metadata(media_id, alt_text)
 				
 				# We need to take into account the extra newline and the emoji identifiers since these count as two characters on Twitter.
 				emoji_length = len('\N{DVD}\N{No One Under Eighteen Symbol}\N{Speaker With Three Sound Waves}')
@@ -176,9 +197,9 @@ if __name__ == '__main__':
 				text = title[:max_title_length] + '\n' + body
 
 				sleep(config.twitter_api_wait)
-				status = twitter_api.update_status(text, media_ids=[media_id], possibly_sensitive=sensitive)
-				status_id = status.id
-				
+				response = twitter_api_v2.create_tweet(text=text, media_ids=[media_id])
+				status_id = int(response.data['id'])
+
 				log.info(f'Posted the recording status #{status_id} with the media #{media_id} using {len(text)} characters.')
 
 				# Add the text-to-speech file as a reply to the previous tweet. While Twitter has a generous
@@ -207,13 +228,13 @@ if __name__ == '__main__':
 							for i, segment_path in enumerate(segment_file_paths, start=1):
 
 								sleep(config.twitter_api_wait)
-								tts_media = twitter_api.chunked_upload(filename=segment_path, file_type='video/mp4', media_category='TweetVideo')
+								tts_media = twitter_api_v1.chunked_upload(filename=segment_path, file_type='video/mp4', media_category='TweetVideo')
 								tts_media_id = tts_media.media_id
 
 								# See above.
 								if False:
 									sleep(config.twitter_api_wait)
-									twitter_api.create_media_metadata(tts_media_id, tts_alt_text)
+									twitter_api_v1.create_media_metadata(tts_media_id, tts_alt_text)
 
 								segment_body = tts_body
 								
@@ -224,8 +245,8 @@ if __name__ == '__main__':
 								tts_text = title[:max_title_length] + '\n' + segment_body
 
 								sleep(config.twitter_api_wait)
-								tts_status = twitter_api.update_status(tts_text, in_reply_to_status_id=last_status_id, media_ids=[tts_media_id], possibly_sensitive=sensitive)
-								last_status_id = tts_status.id
+								tts_response = twitter_api_v2.create_tweet(text=tts_text, in_reply_to_tweet_id=last_status_id, media_ids=[tts_media_id])
+								last_status_id = int(tts_response.data['id'])
 
 								log.debug(f'Posted the text-to-speech status #{last_status_id} with the media #{tts_media_id} ({i} of {len(segment_file_paths)}) using {len(tts_text)} characters.')
 
@@ -526,7 +547,7 @@ if __name__ == '__main__':
 					year = str(snapshot.OldestDatetime.year)
 					tags = [extract.domain, year, *snapshot.Tags]
 
-					twitter_media_id, twitter_status_id = publish_to_twitter(recording, title, body, alt_text, sensitive, tts_body, tts_alt_text) if config.enable_twitter else (None, None)
+					twitter_media_id, twitter_status_id = publish_to_twitter(recording, title, body, alt_text, tts_body, tts_alt_text) if config.enable_twitter else (None, None)
 					mastodon_media_id, mastodon_status_id = publish_to_mastodon(recording, title, body, alt_text, sensitive, tts_body, tts_alt_text) if config.enable_mastodon else (None, None)
 					tumblr_status_id = publish_to_tumblr(recording, title, tumblr_body, tags) if config.enable_tumblr else None
 
