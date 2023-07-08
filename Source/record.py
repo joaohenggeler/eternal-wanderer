@@ -1121,7 +1121,7 @@ if __name__ == '__main__':
 
 									max_plugin_duration = None
 
-									for url in browser.get_plugin_sources():
+									for url in browser.get_playback_plugin_sources():
 										try:
 											probe = ffmpeg.probe(url)
 											duration = float(probe['format']['duration'])
@@ -1236,13 +1236,8 @@ if __name__ == '__main__':
 
 						# This media extension differs from the snapshot's extension when recording a RealMedia file
 						# whose URL was extracted from a metadata file. We should only be converting binary media,
-						# and not text files like playlists or metadata. In some rare cases, RealMedia metadata files
-						# are mislabeled as audio or video files. To solve this, we'll allow forcing the conversion
-						# for specific snapshots.
-						# E.g. https://web.archive.org/web/19961029094219if_/http://www.asiaonline.net:80/comradio/news.ram
-						# Which should be news.rm.
-						can_convert = snapshot.IsMedia and (media_extension in config.convertible_media_extensions or snapshot.ForceMediaConversion)
-						if config.enable_media_conversion and can_convert and media_path is not None:
+						# and not text files like playlists or metadata.
+						if config.enable_media_conversion and snapshot.IsMedia and media_extension in config.convertible_media_extensions and media_path is not None:
 
 							# Convert a media snapshot directly and skip capturing the screen.
 

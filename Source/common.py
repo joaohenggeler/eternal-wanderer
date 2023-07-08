@@ -168,6 +168,7 @@ class CommonConfig:
 		'wait_after_load_per_plugin_instance',
 		'base_wait_per_scroll',
 		'wait_after_scroll_per_plugin_instance',
+		'wait_for_plugin_playback_after_load',
 		'base_media_wait_after_load',
 		
 		'media_fallback_duration',
@@ -295,7 +296,7 @@ class CommonConfig:
 		bucket = ceil(id_ / self.max_recordings_per_directory) * self.max_recordings_per_directory
 		return os.path.join(self.recordings_path, str(bucket))
 
-for option in ['encoding', 'force_media_conversion', 'hide_title' 'notes', 'tags']:
+for option in ['encoding', 'hide_title', 'media_extension_override', 'notes', 'tags']:
 	assert option not in CommonConfig.MUTABLE_OPTIONS, f'The mutable option name "{option}" is reserved.'
 
 config = CommonConfig()
@@ -725,8 +726,8 @@ class Snapshot:
 
 	# Determined from the Options column.
 	Encoding: str
-	ForceMediaConversion: bool
 	HideTitle: bool
+	MediaExtensionOverride: Optional[str]
 	Notes: str
 	Tags: list[str]
 
@@ -792,10 +793,18 @@ class Snapshot:
 			self.Options = {}
 
 		self.Encoding = self.Options.get('encoding', '')
-		self.ForceMediaConversion = self.Options.get('force_media_conversion', False)
 		self.HideTitle = self.Options.get('hide_title', False)
+		self.MediaExtensionOverride = self.Options.get('media_extension_override')
 		self.Notes = self.Options.get('notes', '')
 		self.Tags = self.Options.get('tags', [])
+
+		# In some rare cases, media snapshots can have incorrect file extensions.
+		# To solve this, we'll allow forcing the media conversion by overriding
+		# the original extension.
+		# E.g. https://web.archive.org/web/19961029094219if_/http://www.asiaonline.net:80/comradio/news.ram
+		# Which should be news.rm.
+		if self.MediaExtensionOverride is not None:
+			self.MediaExtension = self.MediaExtensionOverride
 
 		modifier = Snapshot.OBJECT_EMBED_MODIFIER if self.IsMedia else Snapshot.IFRAME_MODIFIER
 		self.WaybackUrl = compose_wayback_machine_snapshot_url(timestamp=self.Timestamp, modifier=modifier, url=self.Url)
@@ -1808,7 +1817,7 @@ class Browser:
 		except NoSuchWindowException:
 			pass
 
-	def get_plugin_sources(self) -> list[str]:
+	def get_playback_plugin_sources(self) -> list[str]:
 		""" Retrieves the source URLs of any content embedded using the object/embed tags in the current web page and its frames. """
 
 		sources = []
@@ -1835,7 +1844,7 @@ class Browser:
 				sources.extend(frame_sources)
 
 		except WebDriverException as error:
-			log.error(f'Failed to get the plugin sources with the error: {repr(error)}')
+			log.error(f'Failed to get the playback plugin sources with the error: {repr(error)}')
 
 		return sources
 
