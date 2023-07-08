@@ -295,7 +295,7 @@ class CommonConfig:
 		bucket = ceil(id_ / self.max_recordings_per_directory) * self.max_recordings_per_directory
 		return os.path.join(self.recordings_path, str(bucket))
 
-for option in ['encoding', 'hide_title' 'notes', 'tags']:
+for option in ['encoding', 'force_media_conversion', 'hide_title' 'notes', 'tags']:
 	assert option not in CommonConfig.MUTABLE_OPTIONS, f'The mutable option name "{option}" is reserved.'
 
 config = CommonConfig()
@@ -725,6 +725,7 @@ class Snapshot:
 
 	# Determined from the Options column.
 	Encoding: str
+	ForceMediaConversion: bool
 	HideTitle: bool
 	Notes: str
 	Tags: list[str]
@@ -791,6 +792,7 @@ class Snapshot:
 			self.Options = {}
 
 		self.Encoding = self.Options.get('encoding', '')
+		self.ForceMediaConversion = self.Options.get('force_media_conversion', False)
 		self.HideTitle = self.Options.get('hide_title', False)
 		self.Notes = self.Options.get('notes', '')
 		self.Tags = self.Options.get('tags', [])
@@ -1805,7 +1807,38 @@ class Browser:
 
 		except NoSuchWindowException:
 			pass
-	
+
+	def get_plugin_sources(self) -> list[str]:
+		""" Retrieves the source URLs of any content embedded using the object/embed tags in the current web page and its frames. """
+
+		sources = []
+
+		try:
+			for _ in self.traverse_frames():
+				frame_sources = self.driver.execute_script(	'''
+															const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
+
+															const plugin_nodes = document.querySelectorAll("object, embed");
+															const plugin_sources = [];
+
+															for(const element of plugin_nodes)
+															{
+																for(const source_attribute of SOURCE_ATTRIBUTES)
+																{
+																	const source = element.getAttribute(source_attribute);
+																	if(source) plugin_sources.push(source);
+																}
+															}
+
+															return plugin_sources;
+															''')
+				sources.extend(frame_sources)
+
+		except WebDriverException as error:
+			log.error(f'Failed to get the plugin sources with the error: {repr(error)}')
+
+		return sources
+
 	def unload_plugin_content(self, skip_applets: bool = False) -> None:
 		""" Unloads any content embedded using the object/embed/applet tags in the current web page and its frames.
 		This function should not be called more than once if any of this content is being played by the VLC plugin. """

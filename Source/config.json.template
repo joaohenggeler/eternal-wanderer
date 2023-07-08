@@ -485,6 +485,7 @@
 		"wait_after_load_per_plugin_instance": 15,
 		"base_wait_per_scroll": 10,
 		"wait_after_scroll_per_plugin_instance": 10,
+		"wait_for_plugin_playback_after_load": true,
 		"base_media_wait_after_load": 2,
 
 		"media_fallback_duration": 45,

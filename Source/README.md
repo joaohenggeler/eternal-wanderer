@@ -387,6 +387,8 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `wait_after_scroll_per_plugin_instance`: how much longer to wait after scrolling the page per plugin instance when recording (in seconds). Only used by page snapshots.
 
+* `wait_for_plugin_playback_after_load`: enable to find the duration of the longest embedded media file and wait as long as possible so that the recording captures most of it. Useful for short pages that play long audio files.
+
 * `base_media_wait_after_load`: how long to wait after loading the page that embeds the media when recording (in seconds). The scripts waits this amount plus the total media file's duration. This should be a small value to prevent the final recording from being too short. Only used by media snapshots.
 
 * `media_fallback_duration`: the fallback value used when the media file's duration cannot be determined (in seconds). This is mostly used by Flash movies, Shockwave movies, and VRML worlds. Only used by media snapshots.

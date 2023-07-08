@@ -172,17 +172,17 @@ if(vlc_plugin)
 			// Examples:
 			// - AIFF: https://web.archive.org/web/20010306021445if_/http://www.big.or.jp:80/~frog/others/bbb.html
 			// - AU: https://web.archive.org/web/19970615064625if_/http://www.iupui.edu:80/~mtrehan/
-			// - AVI: https://web.archive.org/web/19961223102610if_/http://www.gehenna.com:80/
+			// - AVI (loop = true): https://web.archive.org/web/19961223102610if_/http://www.gehenna.com:80/
 			// - AVI: https://web.archive.org/web/19980221110733if_/http://heartcorps.com/journeys/voice.htm
-			// - MOV: https://web.archive.org/web/19970502031035if_/http://www.verticalonline.com/dh.html
+			// - MOV (loop = False): https://web.archive.org/web/19970502031035if_/http://www.verticalonline.com/dh.html
 			// - MOV: https://web.archive.org/web/20200219215301if_/http://goa103.free.fr/t_63455/media_player.php
 			// - MOV: https://web.archive.org/web/20220514015040if_/https://web.nmsu.edu/~leti/portfolio/quicktimemovie.html
-			// - MP3: https://web.archive.org/web/20001109024100if_/http://marshall_a.tripod.com/
-			// - WAV: https://web.archive.org/web/19961111121936if_/http://movievan.com:80/	
+			// - MP3 (loop = 1): https://web.archive.org/web/20001109024100if_/http://marshall_a.tripod.com/
+			// - WAV (loop = 2): https://web.archive.org/web/20140822200334if_/http://www.mountaindragon.com/html/sound1.htm
+			// - WAV (loop = 8): https://web.archive.org/web/19970725113606if_/http://www.wnwcorp.com:80/pharmca/
+			// - WAV (loop = INFINITE): https://web.archive.org/web/19961228051934if_/http://nyelabs.kcts.org:80/
+			// - WAV: https://web.archive.org/web/19961111121936if_/http://movievan.com:80/
 			// - WAV: https://web.archive.org/web/19961221002525if_/http://www.geocities.com/Heartland/8055/
-			// - WAV: https://web.archive.org/web/19961228051934if_/http://nyelabs.kcts.org:80/
-			// - WAV: https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html
-			// - WAV: https://web.archive.org/web/20140823011355if_/http://www.mountaindragon.com/html/sound4.htm
 
 			const attributes_map = new Map();
 			
@@ -222,31 +222,36 @@ if(vlc_plugin)
 				vlc.playlist.play();
 			});
 
-			// Stop media that isn't supposed to loop forever from being played twice by VLC.
+			// If the loop attribute is missing, VLC assumes that the media should only
+			// play once (even though it plays it twice due to a bug). Note that this
+			// element might contain a number in the loop attribute (e.g. when converting
+			// a bgsound to an embed tag). The VLC plugin doesn't allow you to repeat
+			// the media a set number of times, so we have to decide whether to play it
+			// once or loop forever. We'll use the following criteria:
 			//
-			// If the loop attribute is missing, VLC assumes that the media shouldn't
-			// loop. Note that this element might contain a number in the loop attribute
-			// (e.g. when converting a bgsound to an embed tag). The VLC plugin doesn't
-			// allow you to repeat the media a set number of times, so we'll treat any
-			// number as only needing to loop the media once. With that being the case,
-			// it's easier to check if the media wasn't intended to loop forever (i.e.
-			// if the loop attribute is not true, infinite, or -1). If it should loop
-			// forever, then we must set the attribute to true since infinite and -1
-			// aren't recognized by VLC.
-			//
-			// While there are VLC-specific events that could be used here instead,
-			// these didn't seem to be called in practice.
-			//
-			// See:
-			// - https://wiki.videolan.org/Documentation:WebPlugin/#Optional_elements
-			// - https://wiki.videolan.org/Documentation:WebPlugin/#Root_object
-			// - https://wiki.videolan.org/Documentation:WebPlugin/#Video_object
+			// Play once: no loop attribute, false, 0, 1.
+			// Loop forever: true, infinite, -1, 2 or more.
+
 			attributes_map.set("loop", null);
 			get_object_embed_attributes(element, attributes_map);
 
 			const loop = attributes_map.get("loop");
-			if(loop !== "true" && loop !== "infinite" && loop !== "-1")
+			if(["true", "infinite", "-1"].includes(loop) || Number(loop) >= 2)
 			{
+				attributes_map.set("loop", "true");
+				set_object_embed_attributes(element, attributes_map);
+			}
+			else
+			{
+				// Stop media that isn't supposed to loop forever from being played twice by VLC.
+				//
+				// While there are VLC-specific events that could be used here instead, these
+				// didn't seem to be called in practice.
+				//
+				// See:
+				// - https://wiki.videolan.org/Documentation:WebPlugin/#Optional_elements
+				// - https://wiki.videolan.org/Documentation:WebPlugin/#Root_object
+				// - https://wiki.videolan.org/Documentation:WebPlugin/#Video_object
 				attributes_map.set("loop", "false");
 				set_object_embed_attributes(element, attributes_map);
 
@@ -268,11 +273,6 @@ if(vlc_plugin)
 						vlc.dataset.vlcLastPosition = vlc.input.position;
 					}
 				}, 0, element);
-			}
-			else
-			{
-				attributes_map.set("loop", "true");
-				set_object_embed_attributes(element, attributes_map);
 			}
 
 			reload_object_embed(element);

@@ -85,6 +85,7 @@ class RecordConfig(CommonConfig):
 	wait_after_load_per_plugin_instance: int
 	base_wait_per_scroll: int
 	wait_after_scroll_per_plugin_instance: int
+	wait_for_plugin_playback_after_load: bool
 	base_media_wait_after_load: int
 
 	media_fallback_duration: int
@@ -1114,6 +1115,27 @@ if __name__ == '__main__':
 								wait_after_load = config.base_wait_after_load + num_plugin_instances * config.wait_after_load_per_plugin_instance
 								wait_per_scroll = config.base_wait_per_scroll + num_plugin_instances * config.wait_after_scroll_per_plugin_instance
 
+								# Find the maximum duration of plugin content so the recording captures most it.
+								# E.g. https://web.archive.org/web/19991005002723if_/http://www.geocities.com:80/TelevisionCity/Set/1939/
+								if config.wait_for_plugin_playback_after_load:
+
+									max_plugin_duration = None
+
+									for url in browser.get_plugin_sources():
+										try:
+											probe = ffmpeg.probe(url)
+											duration = float(probe['format']['duration'])
+											if max_plugin_duration is not None:
+												max_plugin_duration = max(max_plugin_duration, duration)
+											else:
+												max_plugin_duration = duration
+										except (ffmpeg.Error, KeyError, ValueError) as error:
+											log.warning(f'Could not determine the duration of "{url}" with the error: {repr(error)}')
+
+									if max_plugin_duration is not None:
+										log.info(f'Found the maximum plugin content duration of {max_plugin_duration:.1f} seconds.')
+										wait_after_load = max(wait_after_load, max_plugin_duration)
+
 								min_wait_after_load = max(config.min_duration, config.base_wait_after_load + min(num_plugin_instances, 1) * config.wait_after_load_per_plugin_instance)
 								max_wait_after_load = max(config.max_duration - num_scrolls * wait_per_scroll, 0)
 								wait_after_load = clamp(wait_after_load, min_wait_after_load, max_wait_after_load)
@@ -1214,8 +1236,13 @@ if __name__ == '__main__':
 
 						# This media extension differs from the snapshot's extension when recording a RealMedia file
 						# whose URL was extracted from a metadata file. We should only be converting binary media,
-						# and not text files like playlists or metadata.
-						if config.enable_media_conversion and snapshot.IsMedia and media_extension in config.convertible_media_extensions and media_path is not None:
+						# and not text files like playlists or metadata. In some rare cases, RealMedia metadata files
+						# are mislabeled as audio or video files. To solve this, we'll allow forcing the conversion
+						# for specific snapshots.
+						# E.g. https://web.archive.org/web/19961029094219if_/http://www.asiaonline.net:80/comradio/news.ram
+						# Which should be news.rm.
+						can_convert = snapshot.IsMedia and (media_extension in config.convertible_media_extensions or snapshot.ForceMediaConversion)
+						if config.enable_media_conversion and can_convert and media_path is not None:
 
 							# Convert a media snapshot directly and skip capturing the screen.
 
