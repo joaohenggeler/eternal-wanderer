@@ -41,5 +41,10 @@
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
+
+	<Script basedir="Remove_Free_Hosting_Ads" checkRemoteUpdates="0" description="Removes header and footer ads inserted by free hosting services like Angelfire and Tripod." enabled="true" filename="remove_free_hosting_ads.user.js" installTime="1654470000000" modified="1654470000000" name="Remove Free Hosting Ads" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="6ade9c83-2d2a-43f7-9336-6423091d79a3" version="1.0.0">
+		<Grant>none</Grant>
+		<Include>*</Include>
+	</Script>
 	
 </UserScriptConfig>

@@ -296,7 +296,7 @@ class CommonConfig:
 		bucket = ceil(id_ / self.max_recordings_per_directory) * self.max_recordings_per_directory
 		return os.path.join(self.recordings_path, str(bucket))
 
-for option in ['encoding', 'hide_title', 'media_extension_override', 'notes', 'tags']:
+for option in ['encoding', 'media_extension_override', 'notes', 'script', 'tags']:
 	assert option not in CommonConfig.MUTABLE_OPTIONS, f'The mutable option name "{option}" is reserved.'
 
 config = CommonConfig()
@@ -726,9 +726,9 @@ class Snapshot:
 
 	# Determined from the Options column.
 	Encoding: str
-	HideTitle: bool
 	MediaExtensionOverride: Optional[str]
 	Notes: str
+	Script: Optional[str]
 	Tags: list[str]
 
 	# Determined at runtime.
@@ -793,9 +793,9 @@ class Snapshot:
 			self.Options = {}
 
 		self.Encoding = self.Options.get('encoding', '')
-		self.HideTitle = self.Options.get('hide_title', False)
 		self.MediaExtensionOverride = self.Options.get('media_extension_override')
 		self.Notes = self.Options.get('notes', '')
+		self.Script = self.Options.get('script')
 		self.Tags = self.Options.get('tags', [])
 
 		# In some rare cases, media snapshots can have incorrect file extensions.
@@ -828,8 +828,8 @@ class Snapshot:
 		self.ShortDate = self.OldestDatetime.strftime('%b %Y')
 
 		self.DisplayTitle = self.PageTitle
-		if self.HideTitle or not self.DisplayTitle:
-			
+		if not self.DisplayTitle:
+
 			parts = urlparse(unquote(self.Url))
 			self.DisplayTitle = os.path.basename(parts.path)
 			

@@ -1043,6 +1043,10 @@ if __name__ == '__main__':
 
 							browser.go_to_wayback_url(content_url, close_windows=True)
 
+							if snapshot.Script is not None:
+								log.info('Running custom script.')
+								driver.execute_script(snapshot.Script)
+
 							# Make sure the plugin instances had time to load.
 							sleep(config.plugin_load_wait)
 
@@ -1315,7 +1319,11 @@ if __name__ == '__main__':
 
 								log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
 								browser.go_to_wayback_url(content_url, close_windows=True)
-								
+
+								if snapshot.Script is not None:
+									log.info('Running custom script.')
+									driver.execute_script(snapshot.Script)
+
 								if config.plugin_syncing_reload_vrml_from_cache:
 									# Syncing VRML content in some machines can prevent the Cosmo Player from retrieving
 									# any previously cached assets. We'll fix this by reloading the page from cache using

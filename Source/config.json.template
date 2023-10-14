@@ -192,7 +192,8 @@
 			"Autoplay Random Audio And Video": true,
 			"Fix Vlc Embed": true,
 			"Force Java Applet Version": true,
-			"Random Yamaha Midplug Skin": true
+			"Random Yamaha Midplug Skin": true,
+			"Remove Free Hosting Ads": true
 		},
 
 		"plugins_path": "Data/Plugins",
@@ -488,7 +489,7 @@
 		"wait_for_plugin_playback_after_load": true,
 		"base_media_wait_after_load": 2,
 
-		"media_fallback_duration": 45,
+		"media_fallback_duration": 30,
 		"media_width": "90%",
 		"media_height": "90%",
 		"media_background_color": "#000000",
