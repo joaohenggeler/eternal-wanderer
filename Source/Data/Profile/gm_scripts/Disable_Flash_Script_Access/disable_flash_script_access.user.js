@@ -1,6 +1,6 @@
 ﻿// ==UserScript==
-// @name			Random Yamaha Midplug Skin
-// @description		Picks a random skin for the YAMAHA MIDPLUG for XG plugin's player if one isn't set explicitly.
+// @name			Disable Flash Script Access
+// @description		Prevents Flash movies from executing JavaScript code or navigating to a different page.
 // @version			1.0.0
 // @grant			none
 // ==/UserScript==
@@ -94,35 +94,35 @@ function reload_object_embed(element)
 	}
 }
 
-const MIDPLUG_MIME_TYPES = new Map();
-const MIDPLUG_FILE_EXTENSIONS = new Map();
+const FLASH_MIME_TYPES = new Map();
+const FLASH_FILE_EXTENSIONS = new Map();
 
-function source_uses_midplug_plugin(source)
+function source_uses_flash_plugin(source)
 {
 	let result = false;
 	
 	if(source)
 	{
 		const source_extension = source.split(".").pop();
-		if(source_extension !== source) result = MIDPLUG_FILE_EXTENSIONS.has(source_extension);
+		if(source_extension !== source) result = FLASH_FILE_EXTENSIONS.has(source_extension);
 	}
 
 	return result;
 }
 
-function object_embed_uses_midplug_plugin(element)
+function object_embed_uses_flash_plugin(element)
 {
 	let result = false;
 	const type = element.getAttribute("type");
 	
-	if(type) result = MIDPLUG_MIME_TYPES.has(type);
+	if(type) result = FLASH_MIME_TYPES.has(type);
 
 	if(!result)
 	{
 		for(const source_attribute of SOURCE_ATTRIBUTES)
 		{
 			const source = element.getAttribute(source_attribute);
-			result = source_uses_midplug_plugin(source);
+			result = source_uses_flash_plugin(source);
 			if(result) break;
 		}
 
@@ -133,7 +133,7 @@ function object_embed_uses_midplug_plugin(element)
 			const value = param.getAttribute("value");
 			if(SOURCE_ATTRIBUTES.some(source => name === source))
 			{
-				result = source_uses_midplug_plugin(value);
+				result = source_uses_flash_plugin(value);
 				if(result) break;
 			}
 		}
@@ -143,48 +143,36 @@ function object_embed_uses_midplug_plugin(element)
 }
 
 const plugins = Array.from(navigator.plugins);
-const midplug_plugin = plugins.find(plugin => plugin.name.includes("MIDPLUG"));
+const flash_plugin = plugins.find(plugin => plugin.name.includes("Flash"));
 
-if(midplug_plugin)
+if(flash_plugin)
 {
-	for(const mime_type of Array.from(midplug_plugin))
+	for(const mime_type of Array.from(flash_plugin))
 	{
-		if(mime_type.type) MIDPLUG_MIME_TYPES.set(mime_type.type, true);
+		if(mime_type.type) FLASH_MIME_TYPES.set(mime_type.type, true);
 
 		const file_extensions = mime_type.suffixes.split(",");
 		for(const extension of file_extensions)
 		{
-			if(extension) MIDPLUG_FILE_EXTENSIONS.set(extension, true);
+			if(extension) FLASH_FILE_EXTENSIONS.set(extension, true);
 		}
 	}
 
 	const plugin_nodes = document.querySelectorAll("object, embed");
-	
+
 	for(const element of plugin_nodes)
 	{
-		if(object_embed_uses_midplug_plugin(element))
+		if(object_embed_uses_flash_plugin(element))
 		{
+			// E.g. https://web.archive.org/web/20010303084655if_/http://www.halloweennet.com/
+			// See: https://helpx.adobe.com/flash/kb/control-access-scripts-host-web.html
 			const attributes_map = new Map();
-			
-			attributes_map.set("panel", null);
-			get_object_embed_attributes(element, attributes_map);
+			attributes_map.set("allowscriptaccess", "never");
+			set_object_embed_attributes(element, attributes_map);
 
-			const panel = attributes_map.get("panel");
-			if(!panel)
-			{
-				// See: https://web.archive.org/web/20020614163533if_/http://www.yamaha-xg.com/midplug/server.html
-				const random_panel = Math.round(Math.random());
-				attributes_map.set("panel", random_panel);
-				set_object_embed_attributes(element, attributes_map);
-				
-				reload_object_embed(element);
-				
-				if(LOG) console.log("Random Yamaha Midplug Skin - Changed:", element);
-			}
-			else
-			{
-				if(LOG) console.log("Random Yamaha Midplug Skin - Already Set Explicitly:", element);
-			}
+			reload_object_embed(element);
+
+			if(LOG) console.log("Disable Flash Script Access - Disabled:", element);
 		}
 	}
 }

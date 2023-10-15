@@ -546,3 +546,19 @@ Used by `publish.py` and `approve.py`.
 * `tumblr_retry_wait`: how long to wait before retrying a Tumblr API request (in seconds).
 
 * `tumblr_max_status_length`: the maximum amount of characters in a Tumblr post. This should be set to the current Tumblr character limit.
+
+## Custom Options
+
+Some of the options described above can be changed for specific snapshots using the `Options` column in the database. This column takes a JSON object with any options to override the default configuration. For example, if you wanted a recording to last longer and wanted to improve the chances of a short audio file being captured correctly, you could use the following: `{"min_duration": 60, "plugin_syncing_page_type": "reload_twice"}`. You can find a list of all mutable options in [`common.py`](common.py#L158).
+
+This column also accepts the following extra options:
+
+* `encoding`: force a specific fallback character encoding. This takes precedence over the guessed encoding from the Wayback Machine. Only used if `enable_fallback_encoding` is enabled.
+
+* `media_extension_override`: force a specific file extension for a media snapshot. Used in rare cases where a snapshot has an incorrect extension that affects how the media is displayed (e.g. `ram` instead of `rm`).
+
+* `notes`: notes and comments about the snapshot.
+
+* `script`: JavaScript code to execute after loading the snapshot's page.
+
+* `tags`: a list of tags to add to the Tumblr post. Can be used to group snapshots by theme and for content warnings (e.g. `["halloween", "jumpscare"]`).

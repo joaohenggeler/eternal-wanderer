@@ -10,9 +10,10 @@ const LOG = true;
 // See:
 // - https://developer.mozilla.org/en-US/docs/Web/HTML/Element/object
 // - https://developer.mozilla.org/en-US/docs/Web/HTML/Element/embed
+// - https://helpx.adobe.com/flash/kb/flash-object-embed-tag-attributes.html
 // - https://docs.oracle.com/javase/8/docs/technotes/guides/jweb/applet/using_tags.html
 // - https://wiki.videolan.org/Documentation:WebPlugin/#Required_elements
-const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
+const SOURCE_ATTRIBUTES = ["data", "src", "movie", "code", "object", "target", "mrl", "filename"];
 
 // The attribute names and values passed to and returned from the next two functions are always lowercase.
 

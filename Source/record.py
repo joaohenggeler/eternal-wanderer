@@ -1044,7 +1044,7 @@ if __name__ == '__main__':
 							browser.go_to_wayback_url(content_url, close_windows=True)
 
 							if snapshot.Script is not None:
-								log.info('Running custom script.')
+								log.info(f'Running custom script: "{snapshot.Script}"')
 								driver.execute_script(snapshot.Script)
 
 							# Make sure the plugin instances had time to load.
@@ -1321,7 +1321,7 @@ if __name__ == '__main__':
 								browser.go_to_wayback_url(content_url, close_windows=True)
 
 								if snapshot.Script is not None:
-									log.info('Running custom script.')
+									log.info(f'Running custom script: "{snapshot.Script}"')
 									driver.execute_script(snapshot.Script)
 
 								if config.plugin_syncing_reload_vrml_from_cache:

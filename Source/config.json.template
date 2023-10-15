@@ -191,6 +191,7 @@
 			"Bgsound To Embed": true,
 			"Autoplay Random Audio And Video": true,
 			"Fix Vlc Embed": true,
+			"Disable Flash Script Access": true,
 			"Force Java Applet Version": true,
 			"Random Yamaha Midplug Skin": true,
 			"Remove Free Hosting Ads": true

@@ -32,6 +32,11 @@
 		<Include>*</Include>
 	</Script>
 	
+	<Script basedir="Disable_Flash_Script_Access" checkRemoteUpdates="0" description="Prevents Flash movies from executing JavaScript code or navigating to a different page." enabled="true" filename="disable_flash_script_access.user.js" installTime="1654470000000" modified="1654470000000" name="Disable Flash Script Access" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="5fdf143d-ea8c-4607-ab58-196813fd354c" version="1.0.0">
+		<Grant>none</Grant>
+		<Include>*</Include>
+	</Script>
+
 	<Script basedir="Force_Java_Applet_Version" checkRemoteUpdates="0" description="Forces the Java Plugin to use a specific JRE version and makes every applet run in its own JVM instance." enabled="true" filename="force_java_applet_version.user.js" installTime="1654470000000" modified="1654470000000" name="Force Java Applet Version" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="66744dc4-ae46-4afb-8a33-93c8d5b5d15a" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>

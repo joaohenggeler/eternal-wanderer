@@ -19,6 +19,9 @@ if(host === "web.archive.org")
 	}
 }
 
+// Examples:
+// - https://web.archive.org/web/20090715011436if_/http://al1ninegrandquest.angelfire.com/
+// - https://web.archive.org/web/20231013184643if_/https://paligurl.tripod.com/index.html
 if(host.endsWith("angelfire.com") || host.endsWith("tripod.com"))
 {
 	const ad_nodes = document.querySelectorAll("div[id='tb_container'], div[id='FooterAd'], div[id='_pa-bottom-sticky-placement']");
