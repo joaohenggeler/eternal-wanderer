@@ -366,7 +366,7 @@
 		"ranking_max_points": 5000,
 		"ranking_offset": 100,
 		"min_year": null,
-		"max_year": 2005,
+		"max_year": 2006,
 		"max_depth": null,
 		"max_required_depth": 1,
 		"min_snapshots_for_same_host": 500,
@@ -424,9 +424,9 @@
 
 		"ranking_offset": 100,
 		"min_year": null,
-		"max_year": 2005,
+		"max_year": 2006,
 		"record_sensitive_snapshots": true,
-		"min_recordings_for_same_host": 50,
+		"min_recordings_for_same_host": 100,
 		"min_publish_days_for_same_url": 365,
 
 		"allowed_media_extensions":
