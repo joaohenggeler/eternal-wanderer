@@ -1,6 +1,6 @@
 ﻿// ==UserScript==
-// @name			Random Yamaha Midplug Skin
-// @description		Picks a random skin for the YAMAHA MIDPLUG for XG plugin's player if one isn't set explicitly.
+// @name			Random Midplug Skin
+// @description		Picks a random skin for the YAMAHA MIDPLUG player if one isn't set explicitly.
 // @version			1.0.0
 // @grant			none
 // ==/UserScript==
@@ -179,11 +179,11 @@ if(midplug_plugin)
 				
 				reload_object_embed(element);
 				
-				if(LOG) console.log("Random Yamaha Midplug Skin - Changed:", element);
+				if(LOG) console.log("Random Midplug Skin - Changed:", element);
 			}
 			else
 			{
-				if(LOG) console.log("Random Yamaha Midplug Skin - Already Set Explicitly:", element);
+				if(LOG) console.log("Random Midplug Skin - Set Explicitly:", element);
 			}
 		}
 	}

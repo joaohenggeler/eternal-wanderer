@@ -185,16 +185,17 @@
 
 		"user_scripts":
 		{
-			"Disable Prompt Functions": true,
-			"Add Stylesheets To Wayback Machine Snapshots": true,
-			"Crescendo To Standard Embed": true,
-			"Bgsound To Embed": true,
 			"Autoplay Random Audio And Video": true,
-			"Fix Vlc Embed": true,
+			"Bgsound To Embed": true,
+			"Crescendo To Standard Embed": true,
 			"Disable Flash Script Access": true,
-			"Force Java Applet Version": true,
-			"Random Yamaha Midplug Skin": true,
-			"Remove Free Hosting Ads": true
+			"Disable Prompt Functions": true,
+			"Fix Vlc Embed": true,
+			"Fix Wayback Machine Embed": true,
+			"Force Java Version": true,
+			"Random Midplug Skin": true,
+			"Remove Free Hosting Ads": true,
+			"Style Wayback Machine": true
 		},
 
 		"plugins_path": "Data/Plugins",

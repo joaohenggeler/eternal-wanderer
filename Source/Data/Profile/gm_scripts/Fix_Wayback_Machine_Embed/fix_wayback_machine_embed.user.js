@@ -1,15 +1,12 @@
-﻿// ==UserScript==
-// @name			Force Java Applet Version
-// @description		Forces the Java Plugin to use a specific JRE version and makes every applet run in its own JVM instance.
+// ==UserScript==
+// @name			Fix Wayback Machine Embed
+// @description		Fixes object, embed, and applet tags whose source URL is missing a Wayback Machine modifier.
 // @version			1.0.0
+// @match			*://web.archive.org/web/*
 // @grant			none
 // ==/UserScript==
 
 const LOG = true;
-
-// This is used to tell the Java Plugin to use the JRE that came bundled with it instead of
-// a newer installed version in the system.
-const JAVA_VERSION = "1.8.0_11";
 
 // See:
 // - https://developer.mozilla.org/en-US/docs/Web/HTML/Element/object
@@ -98,41 +95,49 @@ function reload_object_embed(element)
 	}
 }
 
-const JAVA_MIME_TYPES = ["application/x-java-applet", "application/x-java-bean", "application/x-java-vm", "application/java-vm", "application/java-archive"];
-
-function object_embed_uses_java_plugin(element)
-{
-	// E.g. type="application/x-java-applet;version=1.8".
-	// E.g. classid="clsid:8AD9C840-044E-11D1-B3E9-00805F499D93" or classid="clsid:CAFEEFAC-xxxx-yyyy-zzzz-ABCDEFFEDCBA".
-	// See: https://docs.oracle.com/javase/8/docs/technotes/guides/jweb/applet/using_tags.html
-	let type = element.getAttribute("type");
-	let class_id = element.getAttribute("classid");
-	
-	if(type) type = type.toLowerCase();
-	if(class_id) class_id = class_id.toLowerCase();
-
-	return (type && JAVA_MIME_TYPES.some(mime_type => type.startsWith(mime_type)))
-		|| (class_id && class_id === "clsid:8ad9c840-044e-11d1-b3e9-00805f499d93")
-		|| (class_id && class_id.startsWith("clsid:cafeefac-"));
-}
-
-const applet_nodes = Array.from(document.querySelectorAll("applet"));
-let object_and_embed_nodes = Array.from(document.querySelectorAll("object, embed"));
-object_and_embed_nodes = object_and_embed_nodes.filter(object_embed_uses_java_plugin);
-
-const plugin_nodes = applet_nodes.concat(object_and_embed_nodes);
+const plugin_nodes = document.querySelectorAll("object, embed, applet");
 
 for(const element of plugin_nodes)
 {
-	// See: https://docs.oracle.com/javase/8/docs/technotes/guides/deploy/applet_dev_guide.html#JSDPG709
+	let fixed = false;
 	const attributes_map = new Map();
 
-	attributes_map.set("java_version", JAVA_VERSION);
-	attributes_map.set("separate_jvm", "true");
+	for(const source_attribute of SOURCE_ATTRIBUTES)
+	{
+		attributes_map.set(source_attribute, null);
+		get_object_embed_attributes(element, attributes_map);
 
-	set_object_embed_attributes(element, attributes_map);
+		const source = attributes_map.get(source_attribute);
+		if(source)
+		{
+			const url = new URL(source);
+			if(url.hostname === "web.archive.org")
+			{
+				// E.g. "https://web.archive.org/web/20000101235959/http://www.example.com" -> ["", "web", "20000101235959", "http:", "", www.example.com].
+				const components = url.pathname.split("/");
+				if(components.length >= 4)
+				{
+					const timestamp = components[2];
+					if(timestamp.length === 14)
+					{
+						// E.g. https://web.archive.org/web/20130107202832if_/http://comic.naver.com/webtoon/detail.nhn?titleId=350217&no=31&weekday=tue
+						components[2] += "oe_";
+						url.pathname = components.join("/");
 
-	reload_object_embed(element);
+						attributes_map.set(source_attribute, url.toString());
+						set_object_embed_attributes(element, attributes_map);
 
-	if(LOG) console.log("Force Java Applet Version - Changed:", element);
+						fixed = true;
+					}
+				}
+			}
+		}
+	}
+
+	if(fixed)
+	{
+		reload_object_embed(element);
+
+		if(LOG) console.log("Fix Wayback Machine Embed - Fixed:", element);
+	}
 }

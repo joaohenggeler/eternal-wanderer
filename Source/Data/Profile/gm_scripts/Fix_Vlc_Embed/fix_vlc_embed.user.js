@@ -1,6 +1,6 @@
 ﻿// ==UserScript==
 // @name			Fix Vlc Embed
-// @description		Fixes an issue where a video played by the VLC plugin is displayed in the wrong position on the page. Also fixes an issue where embedded media that isn't supposed to loop forever is played twice by VLC. The first fix removes the video's controls so the script allows you to toggle pause by clicking on it. Videos can also be played from the beginning by right-clicking on them.
+// @description		Fixes playback issues with VLC. Also changes how the player is controlled (click to toggle pause, right-click to restart).
 // @version			1.0.0
 // @grant			none
 // ==/UserScript==

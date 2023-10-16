@@ -1,6 +1,6 @@
 ﻿// ==UserScript==
-// @name			Add Stylesheets To Wayback Machine Snapshots
-// @description		Adds one of two stylesheets to a Wayback Machine snapshot's page depending on its timestamp.
+// @name			Style Wayback Machine
+// @description		Styles Wayback Machine snapshots depending on the year they were archived.
 // @version			1.0.0
 // @match			*://web.archive.org/web/*
 // @run-at			document-start
@@ -33,4 +33,4 @@ link.setAttribute("rel", "stylesheet");
 link.setAttribute("href", stylesheet_url);
 document.head.prepend(link);
 
-if(LOG) console.log("Add Stylesheets To Wayback Machine Snapshots - Added:", link);
+if(LOG) console.log("Style Wayback Machine - Styled:", link);

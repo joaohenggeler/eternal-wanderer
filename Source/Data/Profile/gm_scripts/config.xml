@@ -5,7 +5,7 @@
 		<Include>*</Include>
 	</Script>
 	
-	<Script basedir="Add_Stylesheets_To_Wayback_Machine_Snapshots" checkRemoteUpdates="0" description="Adds one of two stylesheets to a Wayback Machine snapshot's page depending on its timestamp." enabled="true" filename="add_stylesheets_to_wayback_machine_snapshots.user.js" installTime="1654470000000" modified="1654470000000" name="Add Stylesheets To Wayback Machine Snapshots" namespace="" noframes="false" runAt="document-start" updateMetaStatus="unknown" uuid="0fcf9bac-9d07-4e8e-bde2-c982baad5070" version="1.0.0">
+	<Script basedir="Style_Wayback_Machine" checkRemoteUpdates="0" description="Styles Wayback Machine snapshots depending on the year they were archived." enabled="true" filename="style_wayback_machine.user.js" installTime="1654470000000" modified="1654470000000" name="Style Wayback Machine" namespace="" noframes="false" runAt="document-start" updateMetaStatus="unknown" uuid="0fcf9bac-9d07-4e8e-bde2-c982baad5070" version="1.0.0">
 		<Grant>GM_getResourceURL</Grant>
 		<Match>*://web.archive.org/web/*</Match>
 		<Resource name="CSS_98" filename="98.css" mimetype="text/css"/>
@@ -17,17 +17,22 @@
 		<Include>*</Include>
 	</Script>
 	
-	<Script basedir="Bgsound_To_Embed" checkRemoteUpdates="0" description="Converts bgsound to embed tags. Avoids converting bgsound tags whose audio is already being played using an embed tag. Adapted from: https://userscripts-mirror.org/scripts/show/1827" enabled="true" filename="bgsound_to_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Bgsound To Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="3334ea18-4dce-432b-890c-8e9bf4273611" version="1.0.0">
+	<Script basedir="Bgsound_To_Embed" checkRemoteUpdates="0" description="Converts bgsound to embed tags. Avoids converting bgsound tags whose audio is already being played by an embed tag. Adapted from: https://userscripts-mirror.org/scripts/show/1827" enabled="true" filename="bgsound_to_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Bgsound To Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="3334ea18-4dce-432b-890c-8e9bf4273611" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
 	
-	<Script basedir="Autoplay_Random_Audio_And_Video" checkRemoteUpdates="0" description="Makes a random audio and video element start playing as soon as possible. This includes both the audio and video tags as well as any object and embed tags that specify audio or video MIME types." enabled="true" filename="autoplay_random_audio_and_video.user.js" installTime="1654470000000" modified="1654470000000" name="Autoplay Random Audio And Video" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="bb89b659-0056-48dd-8b2b-be05b8cd9af3" version="1.0.0">
+	<Script basedir="Fix_Wayback_Machine_Embed" checkRemoteUpdates="0" description="Fixes object, embed, and applet tags whose source URL is missing a Wayback Machine modifier." enabled="true" filename="fix_wayback_machine_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Fix Wayback Machine Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="ebbefd00-e76c-43e9-b6f0-4dc086da5323" version="1.0.0">
+		<Grant>none</Grant>
+		<Match>*://web.archive.org/web/*</Match>
+	</Script>
+	
+	<Script basedir="Autoplay_Random_Audio_And_Video" checkRemoteUpdates="0" description="Plays a random audio and video element. This includes the audio and video tags as well as any object and embed tags that use audio or video MIME types." enabled="true" filename="autoplay_random_audio_and_video.user.js" installTime="1654470000000" modified="1654470000000" name="Autoplay Random Audio And Video" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="bb89b659-0056-48dd-8b2b-be05b8cd9af3" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
 	
-	<Script basedir="Fix_Vlc_Embed" checkRemoteUpdates="0" description="Fixes an issue where a video played by the VLC plugin is displayed in the wrong position on the page. Also fixes an issue where embedded media that isn't supposed to loop forever is played twice by VLC. The first fix removes the video's controls so the script allows you to toggle pause by clicking on it. Videos can also be played from the beginning by right-clicking on them." enabled="true" filename="fix_vlc_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Fix Vlc Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="416d9933-71d9-44c5-9936-56aaa4f2f314" version="1.0.0">
+	<Script basedir="Fix_Vlc_Embed" checkRemoteUpdates="0" description="Fixes playback issues with VLC. Also changes how the player is controlled (click to toggle pause, right-click to restart)." enabled="true" filename="fix_vlc_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Fix Vlc Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="416d9933-71d9-44c5-9936-56aaa4f2f314" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
@@ -37,17 +42,17 @@
 		<Include>*</Include>
 	</Script>
 
-	<Script basedir="Force_Java_Applet_Version" checkRemoteUpdates="0" description="Forces the Java Plugin to use a specific JRE version and makes every applet run in its own JVM instance." enabled="true" filename="force_java_applet_version.user.js" installTime="1654470000000" modified="1654470000000" name="Force Java Applet Version" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="66744dc4-ae46-4afb-8a33-93c8d5b5d15a" version="1.0.0">
+	<Script basedir="Force_Java_Version" checkRemoteUpdates="0" description="Forces the Java Plugin to use a specific JRE version and makes every applet run in its own JVM instance." enabled="true" filename="force_java_version.user.js" installTime="1654470000000" modified="1654470000000" name="Force Java Version" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="66744dc4-ae46-4afb-8a33-93c8d5b5d15a" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
 	
-	<Script basedir="Random_Yamaha_Midplug_Skin" checkRemoteUpdates="0" description="Picks a random skin for the YAMAHA MIDPLUG for XG plugin's player if one isn't set explicitly." enabled="true" filename="random_yamaha_midplug_skin.user.js" installTime="1654470000000" modified="1654470000000" name="Random Yamaha Midplug Skin" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="d0812582-7d4f-48f2-8502-463bba9ba3ab" version="1.0.0">
+	<Script basedir="Random_Midplug_Skin" checkRemoteUpdates="0" description="Picks a random skin for the YAMAHA MIDPLUG player if one isn't set explicitly." enabled="true" filename="random_midplug_skin.user.js" installTime="1654470000000" modified="1654470000000" name="Random Midplug Skin" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="d0812582-7d4f-48f2-8502-463bba9ba3ab" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
 
-	<Script basedir="Remove_Free_Hosting_Ads" checkRemoteUpdates="0" description="Removes header and footer ads inserted by free hosting services like Angelfire and Tripod." enabled="true" filename="remove_free_hosting_ads.user.js" installTime="1654470000000" modified="1654470000000" name="Remove Free Hosting Ads" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="6ade9c83-2d2a-43f7-9336-6423091d79a3" version="1.0.0">
+	<Script basedir="Remove_Free_Hosting_Ads" checkRemoteUpdates="0" description="Removes ads inserted by free hosting services like Angelfire and Tripod." enabled="true" filename="remove_free_hosting_ads.user.js" installTime="1654470000000" modified="1654470000000" name="Remove Free Hosting Ads" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="6ade9c83-2d2a-43f7-9336-6423091d79a3" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>

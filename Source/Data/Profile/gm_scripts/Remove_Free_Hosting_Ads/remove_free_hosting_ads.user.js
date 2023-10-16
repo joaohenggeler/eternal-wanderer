@@ -1,6 +1,6 @@
 ﻿// ==UserScript==
 // @name			Remove Free Hosting Ads
-// @description		Removes header and footer ads inserted by free hosting services like Angelfire and Tripod.
+// @description		Removes ads inserted by free hosting services like Angelfire and Tripod.
 // @version			1.0.0
 // @grant			none
 // ==/UserScript==

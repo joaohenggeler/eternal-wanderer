@@ -1,6 +1,6 @@
 ﻿// ==UserScript==
 // @name			Bgsound To Embed
-// @description		Converts bgsound to embed tags. Avoids converting bgsound tags whose audio is already being played using an embed tag. Adapted from: https://userscripts-mirror.org/scripts/show/1827
+// @description		Converts bgsound to embed tags. Avoids converting bgsound tags whose audio is already being played by an embed tag. Adapted from: https://userscripts-mirror.org/scripts/show/1827
 // @version			1.0.0
 // @grant			none
 // ==/UserScript==
