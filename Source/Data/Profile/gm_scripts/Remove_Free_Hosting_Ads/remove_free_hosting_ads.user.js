@@ -21,14 +21,23 @@ if(host === "web.archive.org")
 
 // Examples:
 // - https://web.archive.org/web/20090715011436if_/http://al1ninegrandquest.angelfire.com/
+// - https://web.archive.org/web/20190727172159if_/http://www.angelfire.com/ca2/scream1/scream11.html
 // - https://web.archive.org/web/20231013184643if_/https://paligurl.tripod.com/index.html
 if(host.endsWith("angelfire.com") || host.endsWith("tripod.com"))
 {
-	const ad_nodes = document.querySelectorAll("div[id='tb_container'], div[id='FooterAd'], div[id='_pa-bottom-sticky-placement']");
+	let ad_nodes = document.querySelectorAll("div[id='tb_container'], div[id='FooterAd']");
 
 	for(const element of ad_nodes)
 	{
 		if(LOG) console.log("Remove Free Hosting Ads - Removed:", element);
 		element.remove();
+	}
+
+	ad_nodes = document.querySelectorAll("div[class='adCenterClass']");
+
+	for(const element of ad_nodes)
+	{
+		if(LOG) console.log("Remove Free Hosting Ads - Removed:", element.parentElement);
+		element.parentElement.remove();
 	}
 }
