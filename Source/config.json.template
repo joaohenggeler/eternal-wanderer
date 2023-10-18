@@ -239,7 +239,9 @@
 			"close_java_popups.exe": true,
 			"close_shockwave_popups.exe": true
 		},
-		
+
+		"fonts_path": "Data/Fonts",
+
 		"recordings_path": "Data/Recordings",
 		"max_recordings_per_directory": 5000,
 		"compilations_path": "Data/Compilations",

@@ -120,6 +120,8 @@ class CommonConfig:
 	autoit_poll_frequency: int
 	autoit_scripts: dict[str, bool]
 
+	fonts_path: str
+
 	recordings_path: str
 	max_recordings_per_directory: int
 	compilations_path: str
@@ -218,6 +220,7 @@ class CommonConfig:
 		self.extensions_path = os.path.abspath(self.extensions_path)
 		self.plugins_path = os.path.abspath(self.plugins_path)
 		self.autoit_path = os.path.abspath(self.autoit_path)
+		self.fonts_path = os.path.abspath(self.fonts_path)
 		self.recordings_path = os.path.abspath(self.recordings_path)
 		self.compilations_path = os.path.abspath(self.compilations_path)
 		self.ffmpeg_path = os.path.abspath(self.ffmpeg_path)
@@ -1058,7 +1061,17 @@ class Browser:
 		else:
 			log.warning('Disabling multiprocess Firefox.')
 			os.environ['MOZ_FORCE_DISABLE_E10S'] = '1'
-		
+
+		if not headless:
+			# E.g. https://web.archive.org/web/19990221053308if_/http://www.geocities.com:80/Eureka/Park/5977/hallow/index.html
+			# Which uses the Halloween font.
+			font_search_path = os.path.join(config.fonts_path, '*.ttf')
+			firefox_fonts_path = os.path.join(self.firefox_directory_path, 'fonts')
+			for path in iglob(font_search_path):
+				filename = os.path.basename(path)
+				log.info(f'Adding the font "{filename}".')
+				shutil.copy(path, firefox_fonts_path)
+
 		# Disable DPI scaling to fix potential display issues in Firefox.
 		# See:
 		# - https://stackoverflow.com/a/37881453/18442724

@@ -237,6 +237,8 @@ Used by all scripts.
 
 * `autoit_scripts`: the AutoIt scripts that execute in the background while Firefox is running.
 
+* `fonts_path`: the path to the fonts directory. Every TTF file here is added to Firefox's fonts directory before running. Used to support custom fonts in old snapshots.
+
 * `recordings_path`: the path to the snapshot recordings directory.
 
 * `max_recordings_per_directory`: the maximum amount of recordings to be stored in each subdirectory in `recordings_path`.
@@ -559,6 +561,6 @@ This column also accepts the following extra options:
 
 * `notes`: notes and comments about the snapshot.
 
-* `script`: JavaScript code to execute after loading the snapshot's page.
+* `script`: JavaScript code to execute after loading the snapshot's page but before the recording starts.
 
 * `tags`: a list of tags to add to the Tumblr post. Can be used to group snapshots by theme and for content warnings (e.g. `["halloween", "jumpscare"]`).
