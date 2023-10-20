@@ -1078,10 +1078,15 @@ if __name__ == '__main__':
 							else:
 								scroll_height = 0
 								for _ in browser.traverse_frames():
-									
-									frame_scroll_height = driver.execute_script('return document.body.scrollHeight;')
-									frame_client_height = driver.execute_script('return document.body.clientHeight;')
-									
+
+									# The correct height depends on if we're on quirks or standards mode.
+									# E.g. https://web.archive.org/web/20071012232916if_/http://profile.myspace.com:80/index.cfm?fuseaction=user.viewprofile&friendid=15134349
+									# Where body is right and documentElement is wrong (quirks)
+									# E.g. https://web.archive.org/web/20130107202832if_/http://comic.naver.com/webtoon/detail.nhn?titleId=350217&no=31&weekday=tue
+									# Where documentElement is right and body is wrong (standards).
+									frame_scroll_height = driver.execute_script('return (document.compatMode === "BackCompat") ? (document.body.scrollHeight) : (document.documentElement.scrollHeight);')
+									frame_client_height = driver.execute_script('return (document.compatMode === "BackCompat") ? (document.body.clientHeight) : (document.documentElement.clientHeight);')
+
 									# The second condition is for rare cases where the largest scroll height
 									# has a client height of zero.
 									# E.g. https://web.archive.org/web/20071012232916if_/http://profile.myspace.com:80/index.cfm?fuseaction=user.viewprofile&friendid=15134349

@@ -1838,7 +1838,7 @@ class Browser:
 		try:
 			for _ in self.traverse_frames():
 				frame_sources = self.driver.execute_script(	'''
-															const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
+															const SOURCE_ATTRIBUTES = ["data", "src", "movie", "code", "object", "target", "mrl", "filename"];
 
 															const plugin_nodes = document.querySelectorAll("object, embed");
 															const plugin_sources = [];
@@ -1870,7 +1870,7 @@ class Browser:
 		try:
 			for _ in self.traverse_frames():
 				self.driver.execute_script(	'''
-											const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
+											const SOURCE_ATTRIBUTES = ["data", "src", "movie", "code", "object", "target", "mrl", "filename"];
 
 											const plugin_nodes = document.querySelectorAll(arguments[0]);
 
@@ -1915,7 +1915,7 @@ class Browser:
 		try:
 			for _ in self.traverse_frames():
 				self.driver.execute_script(	'''
-											const SOURCE_ATTRIBUTES = ["data", "src", "code", "object", "target", "mrl", "filename"];
+											const SOURCE_ATTRIBUTES = ["data", "src", "movie", "code", "object", "target", "mrl", "filename"];
 
 											const plugin_nodes = document.querySelectorAll(arguments[0]);
 
