@@ -1784,9 +1784,7 @@ class Browser:
 					continue
 
 				# Skip any frames that were added by the Internet Archive (e.g. https://archive.org/includes/donate.php).
-				# This works with the format Wayback Machine URLs parameter since we only format them after calling the
-				# function recursively below.
-				if is_url_from_domain(parts, 'archive.org'):
+				if parts.hostname == 'archive.org':
 					log.debug(f'Skipping the Internet Archive frame "{frame_source}".')
 					continue
 

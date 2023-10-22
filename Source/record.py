@@ -1077,6 +1077,7 @@ if __name__ == '__main__':
 								wait_per_scroll = 0.0
 							else:
 								scroll_height = 0
+								client_height = 0
 								for _ in browser.traverse_frames():
 
 									# The correct height depends on if we're on quirks or standards mode.
