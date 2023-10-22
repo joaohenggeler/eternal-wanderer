@@ -11,11 +11,14 @@ let host = window.location.hostname;
 
 if(host === "web.archive.org")
 {
-	// E.g. "https://web.archive.org/web/20000101235959if_/http://www.example.com" -> ["", "web", "20000101235959if_", "http:", "", www.example.com].
-	const components = window.location.pathname.split("/", 6);
-	if(components.length === 6)
+	// E.g. "https://web.archive.org/web/20000101235959if_/http://www.example.com:80/index.html"
+	// Splits into ["", "web", "20000101235959if_", "http:", "", "www.example.com:80", "index.html"]
+	const components = window.location.pathname.split("/");
+	if(components.length >= 6)
 	{
-		host = components[5];
+		let url = components.slice(3).join("/");
+		url = new URL(url);
+		host = url.hostname;
 	}
 }
 
