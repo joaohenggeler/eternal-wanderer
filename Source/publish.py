@@ -278,25 +278,42 @@ if __name__ == '__main__':
 
 		def publish_to_mastodon(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str, tts_alt_text: str) -> tuple[Optional[int], Optional[int]]:
 			""" Publishes a snapshot recording and text-to-speech file on a given Mastodon instance. The video recording is added to the
-			main post along with a message whose content is generated using the remaining arguments. The text-to-speech file is added
-			as a reply to the main post. This function can optionally attempt to reduce both files' size before uploading them. If a
+			main post along with a message whose content is generated using the remaining arguments. The text-to-speech audio is added
+			as a reply to the main post. This function can optionally attempt to reduce the recording size before uploading it. If the
 			file exceeds the user-defined size limit, then it will be skipped. """
 
 			log.info('Publishing on Mastodon.')
 
-			def process_video_file(input_path: str) -> str:
-				""" Runs a video file through FFmpeg, potentially reducing its size before uploading it to the Mastodon instance. """
+			def reduce_video_size(path: str) -> str:
+				""" Reduces a video's file size. """
 				
 				# Closing the file right away makes it easier to delete it later.
 				output_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
 				output_file.close()
 
-				stream = ffmpeg.input(input_path)
+				stream = ffmpeg.input(path)
 				stream = stream.output(output_file.name, **config.mastodon_reduce_file_size_ffmpeg_output_args)
 				stream = stream.global_args(*config.ffmpeg_global_args)
 				stream = stream.overwrite_output()
 				
-				log.debug(f'Processing the video file with the FFmpeg arguments: {stream.get_args()}')
+				log.debug(f'Reducing the video size with the FFmpeg arguments: {stream.get_args()}')
+				stream.run()
+
+				return output_file.name
+
+			def extract_audio(path: str) -> str:
+				""" Extracts the audio from a video file. """
+				
+				# Closing the file right away makes it easier to delete it later.
+				output_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp3', delete=False)
+				output_file.close()
+
+				stream = ffmpeg.input(path)
+				stream = stream.output(output_file.name)
+				stream = stream.global_args(*config.ffmpeg_global_args)
+				stream = stream.overwrite_output()
+				
+				log.debug(f'Extracting the audio with the FFmpeg arguments: {stream.get_args()}')
 				stream.run()
 
 				return output_file.name
@@ -340,7 +357,9 @@ if __name__ == '__main__':
 			tts_path = None
 
 			try:
-				recording_path = process_video_file(recording.UploadFilePath) if config.mastodon_reduce_file_size else recording.UploadFilePath
+				# Unlike with Twitter, uploading videos to Mastodon can be trickier due to hosting costs.
+				# We'll try to reduce the file size while also having a maximum size limit.
+				recording_path = reduce_video_size(recording.UploadFilePath) if config.mastodon_reduce_file_size else recording.UploadFilePath
 				recording_file_size = os.path.getsize(recording_path)
 				
 				if config.mastodon_max_file_size is None or recording_file_size <= config.mastodon_max_file_size:
@@ -355,16 +374,14 @@ if __name__ == '__main__':
 					log.info(f'Posted the recording status #{status_id} with the media #{media_id} ({recording_file_size / 10 ** 6:.1f} MB) using {len(text)} characters.')
 
 					try:
-						# Unlike with Twitter, uploading videos to Mastodon can be trickier due to hosting costs.
-						# We'll try to reduce the file size while also having a size limit for both files.
 						if config.reply_with_text_to_speech and recording.TextToSpeechFilePath is not None:
 
-							tts_path = process_video_file(recording.TextToSpeechFilePath) if config.mastodon_reduce_file_size else recording.TextToSpeechFilePath
+							tts_path = extract_audio(recording.TextToSpeechFilePath)
 							tts_file_size = os.path.getsize(tts_path)
 
 							if config.mastodon_max_file_size is None or tts_file_size <= config.mastodon_max_file_size:
 
-								tts_media_id = try_media_post(tts_path, mime_type='video/mp4', description=tts_alt_text)
+								tts_media_id = try_media_post(tts_path, mime_type='audio/mpeg', description=tts_alt_text)
 
 								max_title_length = max(config.mastodon_max_status_length - len('\n') - len(tts_body), 0)
 								tts_text = title[:max_title_length] + '\n' + tts_body
@@ -373,10 +390,10 @@ if __name__ == '__main__':
 
 								log.info(f'Posted the text-to-speech status #{tts_status_id} with the media #{tts_media_id} ({tts_file_size / 10 ** 6:.1f} MB) using {len(tts_text)} characters.')
 							else:
-								log.info(f'Skipping the text-to-speech file since its size ({tts_file_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_file_size / 10 ** 6} MB.')
+								log.info(f'Skipping the text-to-speech audio since its size ({tts_file_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_file_size / 10 ** 6} MB.')
 					
 					except MastodonError as error:
-						log.error(f'Failed to post the text-to-speech file with the error: {repr(error)}')
+						log.error(f'Failed to post the text-to-speech audio with the error: {repr(error)}')
 				else:
 					log.info(f'Skipping the recording since its size ({recording_file_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_file_size / 10 ** 6} MB.')
 
