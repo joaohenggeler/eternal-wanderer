@@ -290,7 +290,7 @@ class CommonConfig:
 					setattr(self, option, self.default_options[option])
 
 	def get_recording_subdirectory_path(self, id_: int) -> str:
-		""" Retrieves the absolute path of a snapshot recording given its ID. """
+		""" Retrieves the absolute path of a snapshot recording from its ID. """
 		bucket = ceil(id_ / self.max_recordings_per_directory) * self.max_recordings_per_directory
 		return os.path.join(self.recordings_path, str(bucket))
 
@@ -730,6 +730,7 @@ class Snapshot:
 	Tags: list[str]
 
 	# Determined at runtime.
+	PriorityName: str
 	WaybackUrl: str
 	OldestTimestamp: str
 	OldestDatetime: datetime
@@ -751,12 +752,11 @@ class Snapshot:
 
 	STATE_NAMES: dict[int, str]
 
-	NO_PRIORITY = 0
-	SCOUT_PRIORITY = 1
-	RECORD_PRIORITY = 2
-	PUBLISH_PRIORITY = 3
-
-	PRIORITY_NAMES: dict[int, str]
+	PRIORITY_SIZE = 1000
+	NO_PRIORITY = 0 * PRIORITY_SIZE
+	SCOUT_PRIORITY = 1 * PRIORITY_SIZE
+	RECORD_PRIORITY = 2 * PRIORITY_SIZE
+	PUBLISH_PRIORITY = 3 * PRIORITY_SIZE
 
 	TIMESTAMP_FORMAT = '%Y%m%d%H%M%S'
 
@@ -804,6 +804,8 @@ class Snapshot:
 		if self.MediaExtensionOverride is not None:
 			self.MediaExtension = self.MediaExtensionOverride
 
+		self.PriorityName = Snapshot.get_priority_name(self.Priority)
+
 		modifier = Snapshot.OBJECT_EMBED_MODIFIER if self.IsMedia else Snapshot.IFRAME_MODIFIER
 		self.WaybackUrl = compose_wayback_machine_snapshot_url(timestamp=self.Timestamp, modifier=modifier, url=self.Url)
 
@@ -849,6 +851,25 @@ class Snapshot:
 	def __str__(self):
 		return f'({self.Url}, {self.Timestamp})'
 
+	@staticmethod
+	def get_priority_name(priority: int) -> str:
+		""" Retrieves the name of a priority from its value. """
+
+		priority //= Snapshot.PRIORITY_SIZE
+
+		if priority == 0:
+			name = 'None'
+		elif priority == 1:
+			name = 'Scout'
+		elif priority == 2:
+			name = 'Record'
+		elif priority == 3:
+			name = 'Publish'
+		else:
+			name = 'Unknown'
+
+		return name
+
 Snapshot.STATE_NAMES = {
 	Snapshot.QUEUED: 'Queued',
 	Snapshot.INVALID: 'Invalid',
@@ -859,13 +880,6 @@ Snapshot.STATE_NAMES = {
 	Snapshot.APPROVED: 'Approved',
 	Snapshot.PUBLISHED: 'Published',
 	Snapshot.WITHHELD: 'Withheld',
-}
-
-Snapshot.PRIORITY_NAMES = {
-	Snapshot.NO_PRIORITY: 'None',
-	Snapshot.SCOUT_PRIORITY: 'Scout',
-	Snapshot.RECORD_PRIORITY: 'Record',
-	Snapshot.PUBLISH_PRIORITY: 'Publish',
 }
 
 @dataclass

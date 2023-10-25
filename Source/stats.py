@@ -88,14 +88,22 @@ if __name__ == '__main__':
 			percent = total_prioritized / total_snapshots * 100 if total_snapshots > 0 else 0
 			print(f'- Prioritized: {total_prioritized} ({percent:.2f}%)')
 
-			cursor = db.execute('SELECT Priority, COUNT(*) AS Total FROM Snapshot GROUP BY Priority ORDER BY Priority;')
-			priority_total = {row['Priority']: row['Total'] for row in cursor}
+			cursor = db.execute('''
+								SELECT Priority / :priority_size AS PriorityKey, COUNT(*) AS Total
+								FROM Snapshot
+								WHERE Priority > 0
+								GROUP BY PriorityKey
+								ORDER BY PriorityKey;
+								''',
+								{'priority_size': Snapshot.PRIORITY_SIZE})
 
-			for priority, name in Snapshot.PRIORITY_NAMES.items():
-				if priority != Snapshot.NO_PRIORITY:
-					total = priority_total.get(priority, 0)
-					percent = total / total_snapshots * 100 if total_snapshots > 0 else 0
-					print(f'-> {name}: {total} ({percent:.2f}%)')
+			priority_total = {row['PriorityKey']: row['Total'] for row in cursor}
+
+			for key, total in priority_total.items():
+				priority = key * Snapshot.PRIORITY_SIZE
+				name = Snapshot.get_priority_name(priority)
+				percent = total / total_snapshots * 100 if total_snapshots > 0 else 0
+				print(f'-> {name}: {total} ({percent:.2f}%)')
 
 			print()
 

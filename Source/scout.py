@@ -467,7 +467,7 @@ if __name__ == '__main__':
 										''',
 										{'scouted_state': Snapshot.SCOUTED, 'media_extension': media_extension, 'id': snapshot.Id})
 							
-							if snapshot.Priority == Snapshot.SCOUT_PRIORITY:
+							if snapshot.PriorityName == 'Scout':
 								db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
 							
 							db.commit()
@@ -770,7 +770,7 @@ if __name__ == '__main__':
 								  	 'page_title': page_title, 'page_uses_plugins': page_uses_plugins,
 									 'id': snapshot.Id})
 
-						if snapshot.Priority == Snapshot.SCOUT_PRIORITY:
+						if snapshot.PriorityName == 'Scout':
 							db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
 						
 						db.commit()

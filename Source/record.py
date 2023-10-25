@@ -1586,7 +1586,7 @@ if __name__ == '__main__':
 										{'snapshot_id': snapshot.Id, 'has_audio': has_audio, 'upload_filename': upload_filename,
 										 'archive_filename': archive_filename, 'text_to_speech_filename': text_to_speech_filename})
 
-							if snapshot.Priority == Snapshot.RECORD_PRIORITY:
+							if snapshot.PriorityName == 'Record':
 								db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
 
 						else:

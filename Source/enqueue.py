@@ -13,10 +13,8 @@ from common import (
 
 if __name__ == '__main__':
 
-	names_to_values = {name.lower(): priority for priority, name in Snapshot.PRIORITY_NAMES.items() if priority != Snapshot.NO_PRIORITY}
-
 	parser = ArgumentParser(description='Adds a Wayback Machine snapshot to the queue with a given priority. This can be used to scout, record, or publish any existing or new snapshots as soon as possible.')
-	parser.add_argument('priority', choices=list(names_to_values), help='The priority to assign to the snapshot.')
+	parser.add_argument('priority_name', choices=['scout', 'record', 'publish'], help='The priority to assign to the snapshot.')
 	parser.add_argument('url', help='The URL of the snapshot.')
 	parser.add_argument('timestamp', nargs='?', help='The timestamp of the snapshot. May be omitted if the URL already points to a Wayback Machine snapshot.')
 	args = parser.parse_args()
@@ -28,7 +26,8 @@ if __name__ == '__main__':
 	elif args.timestamp is None:
 		parser.error('The timestamp cannot be omitted unless the URL already points to a Wayback Machine snapshot.')
 
-	priority = names_to_values[args.priority]
+	names_to_values = {'scout': Snapshot.SCOUT_PRIORITY, 'record': Snapshot.RECORD_PRIORITY, 'publish': Snapshot.PUBLISH_PRIORITY}
+	priority = names_to_values[args.priority_name]
 
 	with Database() as db:
 
@@ -40,7 +39,7 @@ if __name__ == '__main__':
 			scout_time = Database.get_current_timestamp() if is_media else None
 
 			# Media files shouldn't be scouted.
-			if is_media and priority == Snapshot.SCOUT_PRIORITY:
+			if is_media and args.priority_name == 'scout':
 				priority = Snapshot.NO_PRIORITY
 
 			try:
@@ -54,10 +53,10 @@ if __name__ == '__main__':
 				db.commit()
 				
 				snapshot_type = 'media file' if is_media else 'web page'
-				print(f'Added the {snapshot_type} snapshot ({best_snapshot.original}, {best_snapshot.timestamp}) with the "{args.priority}" priority.')
+				print(f'Added the {snapshot_type} snapshot ({best_snapshot.original}, {best_snapshot.timestamp}) with the {args.priority_name} priority.')
 				
-				if first_state == Snapshot.QUEUED and priority > Snapshot.SCOUT_PRIORITY:
-					print('The snapshot must be scouted before it can be recorded or published.')
+				if first_state == Snapshot.QUEUED and args.priority_name in ['record', 'publish']:
+					print('The snapshot must be scouted before it can be recorded.')
 
 			except sqlite3.IntegrityError:
 				
@@ -70,24 +69,25 @@ if __name__ == '__main__':
 						
 						snapshot = Snapshot(**row)
 						old_state = snapshot.State
+						priority = max(priority, snapshot.Priority)
 
-						if priority == Snapshot.SCOUT_PRIORITY:
+						if args.priority_name == 'scout':
 							new_state = first_state
-						elif priority == Snapshot.RECORD_PRIORITY:
+						elif args.priority_name == 'record':
 							new_state = Snapshot.SCOUTED if old_state >= Snapshot.SCOUTED else first_state
-						elif priority == Snapshot.PUBLISH_PRIORITY:
+						elif args.priority_name == 'publish':
 							new_state = Snapshot.RECORDED if old_state >= Snapshot.RECORDED else (Snapshot.SCOUTED if old_state >= Snapshot.SCOUTED else first_state)
 						else:
-							assert False, f'Unhandled priority "{args.priority}" ({priority}).'
+							assert False, f'Unhandled priority "{args.priority_name}".'
 
 						db.execute('UPDATE Snapshot SET State = :state, Priority = :priority WHERE Id = :id;', {'state': new_state, 'priority': priority, 'id': snapshot.Id})
 						db.commit()
 						
 						snapshot_type = 'media file' if snapshot.IsMedia else 'web page'
-						print(f'Updated the {snapshot_type} snapshot {snapshot} to the "{args.priority}" priority.')
+						print(f'Updated the {snapshot_type} snapshot {snapshot} to the {args.priority_name} priority.')
 
-						if new_state == Snapshot.QUEUED and priority > Snapshot.SCOUT_PRIORITY:
-							print('The snapshot must be scouted before it can be recorded or published.')
+						if new_state == Snapshot.QUEUED and args.priority_name in ['record', 'publish']:
+							print('The snapshot must be scouted before it can be recorded.')
 					else:
 						print(f'Could not add or update the snapshot ({best_snapshot.original}, {best_snapshot.timestamp}) since another one with the same digest but different URL and timestamp values already exists.')
 				

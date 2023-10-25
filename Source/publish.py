@@ -594,7 +594,7 @@ if __name__ == '__main__':
 						# cases where there is more than one video file. See the LastCreationTime part in the main query.
 						db.execute('UPDATE Recording SET IsProcessed = TRUE WHERE SnapshotId = :snapshot_id;', {'snapshot_id': snapshot.Id})
 
-						if snapshot.Priority == Snapshot.PUBLISH_PRIORITY:
+						if snapshot.PriorityName == 'Publish':
 							db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
 
 						db.commit()
