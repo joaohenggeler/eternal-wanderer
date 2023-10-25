@@ -44,7 +44,6 @@ class PublishConfig(CommonConfig):
 	enable_tumblr: bool
 
 	require_approval: bool
-	show_media_metadata: bool
 	reply_with_text_to_speech: bool
 	delete_files_after_upload: bool
 
@@ -537,7 +536,7 @@ if __name__ == '__main__':
 					log.info(f'[{recording_index+1} of {num_recordings}] Publishing recording #{recording.Id} of snapshot #{snapshot.Id} {snapshot} (approved = {snapshot.State == Snapshot.APPROVED}).')
 					
 					title = snapshot.DisplayTitle
-					display_metadata = snapshot.DisplayMetadata if config.show_media_metadata else None
+					display_metadata = snapshot.DisplayMetadata
 
 					media_identifier = '\N{DVD}' if snapshot.IsMedia else ('\N{Jigsaw Puzzle Piece}' if snapshot.PageUsesPlugins else None)
 					sensitive_identifier = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None

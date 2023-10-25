@@ -497,8 +497,6 @@
 		"media_width": "90%",
 		"media_height": "90%",
 		"media_background_color": "#000000",
-
-		"fullscreen_browser": true,
 		
 		"plugin_syncing_page_type": "unload",
 		"plugin_syncing_media_type": "unload",
@@ -581,7 +579,6 @@
 		},
 
 		"enable_text_to_speech": true,
-		"text_to_speech_read_image_alt_text": true,
 		"text_to_speech_audio_format_type": "SAFT22kHz16BitMono",
 		"text_to_speech_rate": 0,
 		"text_to_speech_default_voice": "David",
@@ -695,7 +692,6 @@
 		"enable_tumblr": true,
 
 		"require_approval": true,
-		"show_media_metadata": true,
 		"reply_with_text_to_speech": true,
 		"delete_files_after_upload": false,
 

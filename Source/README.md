@@ -401,8 +401,6 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `media_background_color`: the background color of the page that embeds the media file (in hexadecimal). For Flash movies and any file formats supported by VLC, this value also sets the background color of the media itself. Only used by media snapshots.
 
-* `fullscreen_browser`: enable to display the browser window in fullscreen before recording.
-
 * `plugin_syncing_page_type`: the method used to sync plugin media so that different page elements start playing at the same time. Set to `reload_before` to restart all plugin media before recording. Set to `reload_twice` to do the same as `reload_before` while also reloading a second time immediately after the recording starts. Useful for pages that play a short audio file after loading. Set to `unload` to only start playing plugin media after the recording starts. Set to `none` to disable this feature. No other values are allowed. While `unload` is meant to be a more robust version of `reload_before`, the underlying implementation may not always work correctly.
 
 * `plugin_syncing_media_type`: same as `plugin_syncing_page_type` but for media snapshots.
@@ -447,8 +445,6 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `enable_text_to_speech`: enable to generate a text-to-speech recording of a page snapshot's content.
 
-* `text_to_speech_read_image_alt_text`: enable to include the alt text from images in the text-to-speech recording. Only used if `enable_text_to_speech` is enabled.
-
 * `text_to_speech_audio_format_type`: the text-to-speech audio format. Must be an enum name from [this page](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ee125189(v=vs.85)) (e.g. `SAFT22kHz16BitMono`). Set to null to use the default format. Only used if `enable_text_to_speech` is enabled. 
 
 * `text_to_speech_rate`: the text-to-speech voice's speaking rate. Must be a number between -10 and 10 as mentioned on [this page](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ms723606(v=vs.85)). Set to null to use the default rate. Only used if `enable_text_to_speech` is enabled.
@@ -492,8 +488,6 @@ Used by `publish.py` and `approve.py`.
 * `enable_tumblr`: enable to publish on Tumblr.
 
 * `require_approval`: enable to only publish recordings that have been manually approved using `approve.py`.
-
-* `show_media_metadata`: enable to show the title and author metadata of a media snapshot in the post.
 
 * `reply_with_text_to_speech`: enable to add the text-to-speech recording as a reply to the post. When publishing on Twitter, the recording may have to be split into multiple replies. Not supported when publishing on Tumblr.
 

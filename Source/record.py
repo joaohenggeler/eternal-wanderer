@@ -92,8 +92,6 @@ class RecordConfig(CommonConfig):
 	media_width: str
 	media_height: str
 	media_background_color: str
-
-	fullscreen_browser: bool
 	
 	plugin_syncing_page_type: str
 	plugin_syncing_media_type: str
@@ -122,7 +120,6 @@ class RecordConfig(CommonConfig):
 	upload_ffmpeg_output_args: dict[str, Union[None, int, str]]
 
 	enable_text_to_speech: bool
-	text_to_speech_read_image_alt_text: bool
 	text_to_speech_audio_format_type: Optional[str]
 	text_to_speech_rate: Optional[int]
 	text_to_speech_default_voice: Optional[str]
@@ -758,6 +755,7 @@ if __name__ == '__main__':
 			with Database() as db, Browser(extra_preferences=extra_preferences, use_extensions=True, use_plugins=True, use_autoit=True) as (browser, driver), TemporaryRegistry() as registry:
 
 				browser.go_to_blank_page_with_text('\N{Broom} Initializing \N{Broom}')
+				browser.toggle_fullscreen()
 
 				def generate_media_page(wayback_url: str, media_extension: Optional[str] = None) -> tuple[bool, Optional[str], str, float, Optional[str], Optional[str]]:
 					""" Generates the page where a media file is embedded using both the information from the configuration as well as the file's metadata. """
@@ -848,9 +846,6 @@ if __name__ == '__main__':
 					return media_extension in config.allowed_media_extensions
 
 				db.create_function('IS_MEDIA_EXTENSION_ALLOWED', 1, is_media_extension_allowed)
-
-				if config.fullscreen_browser:
-					browser.toggle_fullscreen()
 
 				registry.clear('HKEY_CURRENT_USER\\SOFTWARE\\screen-capture-recorder')
 
@@ -1102,15 +1097,14 @@ if __name__ == '__main__':
 										# when generating the text-to-speech file. An extra delimiter is
 										# added to prevent run-on sentences.
 										# E.g. https://web.archive.org/web/20000413210520if_/http://www.geocities.com:80/Athens/Acropolis/5551/index.html
-										if config.text_to_speech_read_image_alt_text:
-											driver.execute_script(	'''
-																	const image_nodes = document.querySelectorAll("img[alt]");
-																	for(const element of image_nodes)
-																	{
-																		const alt_text = element.getAttribute("alt");
-																		element.replaceWith(alt_text + ". ");
-																	}
-																	''')
+										driver.execute_script(	'''
+																const image_nodes = document.querySelectorAll("img[alt]");
+																for(const element of image_nodes)
+																{
+																	const alt_text = element.getAttribute("alt");
+																	element.replaceWith(alt_text + ". ");
+																}
+																''')
 
 										frame_text = driver.execute_script('return document.documentElement.innerText;')
 										frame_text_list.append(frame_text)

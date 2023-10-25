@@ -195,12 +195,7 @@ class CommonConfig:
 		'min_duration',
 		'max_duration',
 
-		'text_to_speech_read_image_alt_text',
-
 		'enable_media_conversion',
-
-		# For the publisher script.
-		'show_media_metadata',
 	]
 
 	def __init__(self):
