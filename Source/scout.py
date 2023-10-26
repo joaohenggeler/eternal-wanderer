@@ -507,7 +507,7 @@ if __name__ == '__main__':
 						# We'll avoid counting words (and later tags) from 404 Wayback Machine pages by skipping any
 						# missing snapshots. Keeping the Wayback Machine URL format is also necessary when counting
 						# tags later on in the script.
-						frame_text_list = []
+						frame_text_list = [driver.title]
 						for frame_url in browser.traverse_frames(format_wayback_urls=True, skip_missing=True):
 
 							# Retrieve links from all href attributes.
@@ -652,7 +652,7 @@ if __name__ == '__main__':
 							continue
 
 						if config.detect_page_language:
-							# The fastText library requires a single sentence.
+							# The fastText library requires a single line.
 							page_text = '. '.join(frame_text_list).replace('\n', ' ')
 							prediction = language_model.predict(page_text)
 							# E.g. (('__label__en',), array([0.97309864])) -> "en"
