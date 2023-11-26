@@ -250,7 +250,7 @@
 		"wayback_machine_rate_limit_window": 20,
 		
 		"cdx_api_rate_limit_amount": 2,
-		"cdx_api_rate_limit_window": 3,
+		"cdx_api_rate_limit_window": 5,
 		
 		"save_api_rate_limit_amount": 3,
 		"save_api_rate_limit_window": 60,
