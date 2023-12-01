@@ -105,7 +105,7 @@ class CommonConfig:
 	plugins: dict[str, bool]
 
 	shockwave_renderer: str
-	
+
 	java_show_console: bool
 	java_add_to_path: bool
 	java_arguments: list[str]
@@ -128,27 +128,27 @@ class CommonConfig:
 
 	wayback_machine_rate_limit_amount: int
 	wayback_machine_rate_limit_window: int
-	
+
 	cdx_api_rate_limit_amount: int
 	cdx_api_rate_limit_window: int
-	
+
 	save_api_rate_limit_amount: int
 	save_api_rate_limit_window: int
-	
+
 	rate_limit_poll_frequency: float
-	
+
 	wayback_machine_retry_backoff: float
 	wayback_machine_retry_max_wait: int
 
 	allowed_domains: list[list[str]] # Different from the config data type.
 	disallowed_domains: list[list[str]] # Different from the config data type.
-	
+
 	enable_fallback_encoding: bool
 	use_guessed_encoding_as_fallback: bool
 
 	ffmpeg_path: Optional[str]
 	ffmpeg_global_args: list[str]
-	
+
 	language_names: dict[str, str]
 
 	# Determined at runtime.
@@ -161,7 +161,7 @@ class CommonConfig:
 		# For the recorder script.
 		'page_cache_wait',
 		'media_cache_wait',
-		
+
 		'plugin_load_wait',
 		'base_plugin_crash_timeout',
 
@@ -172,23 +172,23 @@ class CommonConfig:
 		'wait_after_scroll_per_plugin_instance',
 		'wait_for_plugin_playback_after_load',
 		'base_media_wait_after_load',
-		
+
 		'media_fallback_duration',
-		'media_width', 
+		'media_width',
 		'media_height',
 		'media_background_color',
-				
+
 		'plugin_syncing_page_type',
 		'plugin_syncing_media_type',
 		'plugin_syncing_unload_delay',
 		'plugin_syncing_reload_vrml_from_cache',
 
-		'enable_plugin_input_repeater', 
+		'enable_plugin_input_repeater',
 		'plugin_input_repeater_initial_wait',
 		'plugin_input_repeater_wait_per_cycle',
 		'plugin_input_repeater_min_window_size',
 		'plugin_input_repeater_keystrokes',
-		
+
 		'enable_cosmo_player_viewpoint_cycler',
 		'cosmo_player_viewpoint_wait_per_cycle',
 
@@ -202,7 +202,7 @@ class CommonConfig:
 
 		with open('config.json', encoding='utf-8') as file:
 			self.json_config = json.load(file)
-		
+
 		self.load_subconfig('common')
 
 		self.database_path = os.path.abspath(self.database_path)
@@ -236,9 +236,9 @@ class CommonConfig:
 			domain_patterns = []
 
 			if domain_list is not None:
-				
+
 				for domain in container_to_lowercase(domain_list):
-					
+
 					# Reversed because it makes it easier to work with a snapshot's URL key.
 					components = domain.split('.')
 					components.reverse()
@@ -250,7 +250,7 @@ class CommonConfig:
 						extra_components = components.copy()
 						extra_components.insert(0, '*')
 						domain_patterns.append(extra_components)
-					
+
 			return domain_patterns
 
 		self.allowed_domains = parse_domain_list(self.allowed_domains)
@@ -258,7 +258,7 @@ class CommonConfig:
 
 		self.ffmpeg_global_args = container_to_lowercase(self.ffmpeg_global_args)
 		self.language_names = container_to_lowercase(self.language_names)
-		
+
 		self.default_options = {}
 
 	def load_subconfig(self, name: str) -> None:
@@ -341,7 +341,7 @@ def setup_logger(name: str) -> logging.Logger:
 	global log
 	log.addHandler(stream_handler)
 	log.addHandler(file_handler)
-	
+
 	return log
 
 class RateLimiter:
@@ -364,7 +364,7 @@ class RateLimiter:
 		self.wayback_machine_memory_storage = MemoryStorage()
 		self.wayback_machine_rate_limiter = MovingWindowRateLimiter(self.wayback_machine_memory_storage)
 		self.wayback_machine_requests_per_minute = RateLimitItemPerSecond(config.wayback_machine_rate_limit_amount, config.wayback_machine_rate_limit_window)
-		
+
 		self.cdx_api_memory_storage = MemoryStorage()
 		self.cdx_api_rate_limiter = MovingWindowRateLimiter(self.cdx_api_memory_storage)
 		self.cdx_api_requests_per_second = RateLimitItemPerSecond(config.cdx_api_rate_limit_amount, config.cdx_api_rate_limit_window)
@@ -401,17 +401,17 @@ def url_key_matches_domain_pattern(url_key: str, domain_patterns: list[list[str]
 
 		# E.g. "com,geocities)/hollywood/hills/5988"
 		domain, *_ = url_key.lower().partition(')')
-		
+
 		# E.g. "com,sun,java:8081)/products/javamail/index.html"
 		domain, *_ = domain.partition(':')
-			
+
 		if domain in cache:
 			return cache[domain]
 
 		component_list = domain.split(',')
 
 		for pattern_component_list in domain_patterns:
-			
+
 			# If the domain has fewer components then it can't match the allowed pattern.
 			if len(component_list) < len(pattern_component_list):
 				continue
@@ -448,7 +448,7 @@ class Database:
 		os.makedirs(os.path.dirname(config.database_path), exist_ok=True)
 
 		self.connection = sqlite3.connect(config.database_path)
-		
+
 		def dict_factory(cursor: sqlite3.Cursor, row: tuple) -> dict:
 			""" Converts a SQLite row into a dictionary. """
 			# Adapted from: https://docs.python.org/3/library/sqlite3.html#how-to-create-and-use-row-factories
@@ -464,7 +464,7 @@ class Database:
 
 		def rank_snapshot_by_points(points: Optional[int], offset: Optional[int]) -> float:
 			""" Ranks a snapshot by its points so that the highest ranked one will be scouted or recorded next. """
-			
+
 			if offset is None:
 				return random()
 
@@ -472,14 +472,14 @@ class Database:
 			# - https://stackoverflow.com/a/56006340/18442724
 			# - https://stackoverflow.com/a/51090191/18442724
 			# - http://utopia.duth.gr/~pefraimi/research/data/2007EncOfAlg.pdf
-			
+
 			# For snapshots without a parent during scouting.
 			if points is None:
 				return 0
 
 			sign = 1 if points >= 0 else -1
 			return sign * random() ** (1 / (abs(points) + 1 + offset))
-	
+
 		self.connection.create_function('IS_URL_KEY_ALLOWED', 1, is_url_key_allowed)
 		self.connection.create_function('RANK_SNAPSHOT_BY_POINTS', 2, rank_snapshot_by_points)
 
@@ -493,7 +493,7 @@ class Database:
 		# Notice how the UrlKey and Digest are the same, even though the URLs and timestamps are different.
 		# - http://www.geocities.com/Heartland/Plains/1036/africa.gif	20090730213441	com,geocities)/heartland/plains/1036/africa.gif	RRCC3TTUVIQTMFN6BDRRIXR7OBNCGS6X
 		# - http://geocities.com/Heartland/Plains/1036/africa.gif		20090820053240	com,geocities)/heartland/plains/1036/africa.gif	RRCC3TTUVIQTMFN6BDRRIXR7OBNCGS6X
-		# - http://geocities.com/Heartland/Plains/1036/africa.gif		20091026145159	com,geocities)/heartland/plains/1036/africa.gif	RRCC3TTUVIQTMFN6BDRRIXR7OBNCGS6X	
+		# - http://geocities.com/Heartland/Plains/1036/africa.gif		20091026145159	com,geocities)/heartland/plains/1036/africa.gif	RRCC3TTUVIQTMFN6BDRRIXR7OBNCGS6X
 
 		self.connection.execute(f'''
 								CREATE TABLE IF NOT EXISTS Snapshot
@@ -738,7 +738,7 @@ class Snapshot:
 	DisplayTitle: str
 	DisplayMetadata: Optional[str]
 	LanguageName: Optional[str]
-	
+
 	# Constants. Each of these must be greater than the last.
 	QUEUED = 0
 	INVALID = 1
@@ -765,19 +765,19 @@ class Snapshot:
 	IDENTICAL_MODIFIER = 'id_'
 
 	def __init__(self, **kwargs):
-		
+
 		self.OldestYear = None
 		self.UrlHost = None
 		self.IsSensitive = None
 		self.Points = None
-		
+
 		field_names = set(field.name for field in dataclasses.fields(self))
 		self.__dict__.update({key: value for key, value in kwargs.items() if key in field_names})
-		
+
 		self.IsInitial = Database.bool_or_none(self.IsInitial)
 		self.IsExcluded = Database.bool_or_none(self.IsExcluded)
 		self.IsMedia = Database.bool_or_none(self.IsMedia)
-		self.PageUsesPlugins = Database.bool_or_none(self.PageUsesPlugins)	
+		self.PageUsesPlugins = Database.bool_or_none(self.PageUsesPlugins)
 		self.IsSensitiveOverride = Database.bool_or_none(self.IsSensitiveOverride)
 		self.IsSensitive = Database.bool_or_none(self.IsSensitive)
 
@@ -823,7 +823,7 @@ class Snapshot:
 			self.OldestTimestamp = self.Timestamp
 
 		self.OldestDatetime = datetime.strptime(self.OldestTimestamp, Snapshot.TIMESTAMP_FORMAT)
-		
+
 		# How the date is formatted depends on the current locale.
 		self.ShortDate = self.OldestDatetime.strftime('%b %Y')
 
@@ -832,7 +832,7 @@ class Snapshot:
 
 			parts = urlparse(unquote(self.Url))
 			self.DisplayTitle = os.path.basename(parts.path)
-			
+
 			if not self.DisplayTitle:
 				new_parts = parts._replace(netloc=parts.hostname, params='', query='', fragment='')
 				self.DisplayTitle = urlunparse(new_parts)
@@ -909,10 +909,10 @@ class Recording:
 	CompilationSegmentFilePath: Optional[str]
 
 	def __init__(self, **kwargs):
-		
+
 		field_names = set(field.name for field in dataclasses.fields(self))
 		self.__dict__.update({key: value for key, value in kwargs.items() if key in field_names})
-		
+
 		self.IsProcessed = Database.bool_or_none(self.IsProcessed)
 		self.HasAudio = Database.bool_or_none(self.HasAudio)
 
@@ -931,7 +931,7 @@ class Browser:
 	firefox_path: str
 	firefox_directory_path: str
 	webdriver_path: str
-	
+
 	registry: 'TemporaryRegistry'
 	java_deployment_path: str
 	java_bin_path: Optional[str]
@@ -941,10 +941,10 @@ class Browser:
 	version: str
 	profile_path: str
 	pid: int
-	
+
 	application: Optional[WindowsApplication]
 	window: Optional[WindowSpecification]
-	
+
 	BLANK_URL = 'about:blank'
 	CONFIG_URL = 'about:config'
 
@@ -965,7 +965,7 @@ class Browser:
 		self.firefox_path = config.headless_firefox_path if headless else config.gui_firefox_path
 		self.firefox_directory_path = os.path.dirname(self.firefox_path)
 		self.webdriver_path = config.headless_webdriver_path if headless else config.gui_webdriver_path
-		
+
 		self.registry = TemporaryRegistry()
 		self.java_deployment_path = os.path.join(os.environ['USERPROFILE'], 'AppData', 'LocalLow', 'Sun', 'Java', 'Deployment')
 		self.java_bin_path = None
@@ -984,7 +984,7 @@ class Browser:
 
 			tree = ElementTree.parse(scripts_config_path)
 			for script in tree.getroot():
-				
+
 				name = script.get('name')
 				directory = script.get('basedir')
 
@@ -1018,10 +1018,10 @@ class Browser:
 
 			plugin_paths = [''] * len(config.plugins)
 			plugin_precedence = {key: i for i, key in enumerate(config.plugins)}
-			
+
 			plugin_search_path = os.path.join(config.plugins_path, '**', 'np*.dll')
 			for path in iglob(plugin_search_path, recursive=True):
-				
+
 				filename = os.path.basename(path).lower()
 				if filename in config.plugins:
 
@@ -1050,7 +1050,7 @@ class Browser:
 		if use_extensions:
 
 			for filename, enabled in config.extensions_before_running.items():
-				
+
 				filtered = extension_filter is not None and filename not in extension_filter
 
 				if enabled and not filtered:
@@ -1088,7 +1088,7 @@ class Browser:
 		os.environ['__COMPAT_LAYER'] = 'GDIDPISCALING DPIUNAWARE'
 
 		log.info('Creating the Firefox WebDriver.')
-		
+
 		while True:
 			try:
 				self.driver = webdriver.Firefox(executable_path=self.webdriver_path, options=options, service_log_path=None)
@@ -1121,11 +1121,11 @@ class Browser:
 				self.window = self.application.top_window()
 			except (WindowProcessNotFoundError, WindowTimeoutError) as error:
 				log.error(f'Failed to connect to the Firefox executable with the error: {repr(error)}')
-			
+
 		if use_extensions:
 
 			for filename, enabled in config.extensions_after_running.items():
-				
+
 				filtered = extension_filter is not None and filename not in extension_filter
 
 				if enabled and not filtered:
@@ -1149,16 +1149,16 @@ class Browser:
 
 						log.info(f'Running the AutoIt script "{filename}".')
 						script_path = os.path.join(config.autoit_path, filename)
-						
+
 						kill_processes_by_path(script_path)
 						process = Popen([script_path, str(config.autoit_poll_frequency)])
 						self.autoit_processes.append(process)
-					
+
 					except OSError as error:
 						log.error(f'Failed to run the AutoIt script "{filename}" with the error: {repr(error)}')
 				else:
 					log.info(f'Skipping the AutoIt script "{filename}" at the user\'s request.')
-		
+
 	def configure_shockwave_player(self) -> None:
 		""" Configures the Shockwave Player by setting the appropriate registry keys. """
 
@@ -1166,7 +1166,7 @@ class Browser:
 
 		# The values we're changing here are the default ones that are usually displayed as "(Default)",
 		# even though their actually empty strings.
-		
+
 		# Enable the legacy Shockwave 10 player that's included to play older movies.
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\allowfallback\\', 'y')
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\allowfallback\\', 'y')
@@ -1187,10 +1187,10 @@ class Browser:
 
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Macromedia\\Shockwave 10\\renderer3dsetting\\', renderer)
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Macromedia\\Shockwave 10\\renderer3dsettingPerm\\', renderer)
-		
+
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\renderer3dsetting\\', renderer)
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 11\\renderer3dsettingPerm\\', renderer)
-		
+
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\renderer3dsetting\\', renderer)
 		self.registry.set('HKEY_CURRENT_USER\\SOFTWARE\\AppDataLow\\Software\\Adobe\\Shockwave 12\\renderer3dsettingPerm\\', renderer)
 
@@ -1224,7 +1224,7 @@ class Browser:
 
 		content = content.replace('{comment}', f'Generated by "{__file__}" on {Database.get_current_timestamp()}.')
 		content = content.replace('{system_config_path}', java_properties_path.replace('\\', '/').replace(' ', '\\u0020'))
-		
+
 		with open(java_config_path, 'w', encoding='utf-8') as file:
 			file.write(content)
 
@@ -1295,7 +1295,7 @@ class Browser:
 
 	def configure_cosmo_player(self) -> None:
 		""" Configures the Cosmo Player by setting the appropriate registry keys. """
-		
+
 		cosmo_player_search_path = os.path.join(config.plugins_path, '**', 'npcosmop211.dll')
 		cosmo_player_path = next(iglob(cosmo_player_search_path, recursive=True), None)
 		if cosmo_player_path is None:
@@ -1327,7 +1327,7 @@ class Browser:
 		required_registry_keys: dict[str, Union[int, str]] = {
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia AudioRenderer3',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\': os.path.join(cosmo_player_system32_path, 'cm12_dshow.dll'),
-			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\THREADINGMODEL': 'Both',	
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\THREADINGMODEL': 'Both',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\MERIT': 2097152,
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\DIRECTION': 0,
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\ISRENDERED': 0,
@@ -1335,7 +1335,7 @@ class Browser:
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\ALLOWEDMANY': 0,
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\CONNECTSTOPIN': 'Output',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\TYPES\\{73647561-0000-0010-8000-00AA00389B71}\\{00000000-0000-0000-0000-000000000000}\\': '',
-			
+
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia AudioRenderer3',
 
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia VideoRenderer3',
@@ -1348,7 +1348,7 @@ class Browser:
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\INPUT\\ALLOWEDMANY': 0,
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\INPUT\\CONNECTSTOPIN': 'Output',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\INS\\INPUT\\TYPES\\{73646976-0000-0010-8000-00AA00389B71}\\{00000000-0000-0000-0000-000000000000}\\': '',
-			
+
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia VideoRenderer3',
 
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\D3D\\PATH': os.path.join(cosmo_player_system32_path, 'rob10_d3d.dll'),
@@ -1386,7 +1386,7 @@ class Browser:
 
 			# These don't require elevated privileges but there's no point in setting them if the Cosmo Player isn't set up correctly.
 			self.registry.clear('HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1')
-			
+
 			for key, value in settings_registry_keys.items():
 				self.registry.set(key, value)
 
@@ -1437,7 +1437,7 @@ class Browser:
 			log.error(f'Failed to quit the WebDriver with the error: {repr(error)}')
 
 		temporary_path = tempfile.gettempdir()
-		
+
 		# Delete the temporary files directories from previous executions. Remeber that there's a bug
 		# when running the Firefox WebDriver on Windows that prevents it from shutting down properly
 		# if Ctrl-C is used.
@@ -1508,7 +1508,7 @@ class Browser:
 		""" Changes Firefox's fallback character encoding to the best charset for a given Wayback Machine snapshot.
 		This will either be a user-defined charset or an autodetected charset determined by the Wayback Machine.
 		Note that this function will retry this last operation if the Wayback Machine is unavailable. """
-		
+
 		if not config.enable_fallback_encoding:
 			return
 
@@ -1525,7 +1525,7 @@ class Browser:
 					global_rate_limiter.wait_for_wayback_machine_rate_limit()
 					response = global_session.head(snapshot.WaybackUrl)
 					response.raise_for_status()
-					
+
 					# This header requires a snapshot URL with the iframe modifier.
 					encoding = response.headers.get('x-archive-guessed-charset', '')
 
@@ -1597,7 +1597,7 @@ class Browser:
 		Does nothing if Firefox is running in headless mode. """
 
 		if self.window is not None:
-			
+
 			self.window.send_keystrokes('{F5}')
 
 			try:
@@ -1609,7 +1609,7 @@ class Browser:
 	def was_wayback_url_redirected(self, expected_wayback_url: str) -> tuple[bool, Optional[str], Optional[str]]:
 		""" Checks if a Wayback Machine page was redirected. In order to cover all edge cases, this function only works with snapshot URLs
 		and not any generic website. """
-		
+
 		# The redirectCount only seems be greater than zero for some redirected snapshots when opened in Firefox 52 ESR.
 		# In modern Firefox versions, the redirectCount is more accurate. That being said, the tests in Firefox 52 didn't
 		# result in any false positives so we'll use it too.
@@ -1690,7 +1690,7 @@ class Browser:
 
 	def go_to_blank_page_with_text(self, *args) -> None:
 		""" Navigates to an autogenerated page where each argument is displayed in a different line. """
-		
+
 		text = '<br>'.join(args)
 		html = f'''
 				<!DOCTYPE html>
@@ -1752,7 +1752,7 @@ class Browser:
 					wayback_parts.modifier = root_wayback_parts.modifier
 				else:
 					wayback_parts = dataclasses.replace(root_wayback_parts, url=current_url)
-				
+
 				current_url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
 
 			if skip_missing and format_wayback_urls:
@@ -1770,10 +1770,10 @@ class Browser:
 
 			log.debug(f'Traversing the frame "{current_url}".')
 			yield current_url
-			
+
 			frame_list = self.driver.find_elements_by_tag_name('frame') + self.driver.find_elements_by_tag_name('iframe')
 			for frame in frame_list:
-				
+
 				frame_source = frame.get_attribute('src')
 
 				# Skip missing frames whose source would otherwise be converted to "https://web.archive.org/".
@@ -1803,7 +1803,7 @@ class Browser:
 				except TimeoutException:
 					log.debug('Timed out while waiting for the frame to be available.')
 					continue
-				
+
 				yield from recurse(frame_source)
 				self.driver.switch_to.parent_frame()
 
@@ -1813,7 +1813,7 @@ class Browser:
 			log.error(f'Failed to traverse the frames with the error: {repr(error)}')
 
 		self.driver.switch_to.default_content()
-	
+
 	def close_all_windows(self) -> None:
 		""" Closes every Firefox tab and window, leaving only a single blank page. """
 
@@ -1957,7 +1957,7 @@ class Browser:
 		""" Toggles fullscreen Firefox. Does nothing if Firefox is running in headless mode. """
 		if self.window is not None:
 			self.window.send_keystrokes('{F11}')
-		
+
 	def bring_to_front(self) -> None:
 		""" Focuses and brings the Firefox window to front. Does nothing if Firefox is running in headless mode. """
 		if self.window is not None:
@@ -2037,15 +2037,15 @@ class TemporaryRegistry:
 		""" Sets the value of a registry key. Any missing intermediate keys are automatically created. """
 
 		hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
-		
+
 		if type_ is None:
 			if isinstance(value, int):
 				type_ = winreg.REG_DWORD
 			elif isinstance(value, str):
 				type_ = winreg.REG_SZ
 			else:
-				raise ValueError(f'The type of the value "{value}" could not be autodetected for the registry key "{key}".')	
-	
+				raise ValueError(f'The type of the value "{value}" could not be autodetected for the registry key "{key}".')
+
 		if (hkey, key_path) not in self.key_paths_to_delete:
 
 			intermediate_keys = key_path.split('\\')
@@ -2127,8 +2127,8 @@ class TemporaryRegistry:
 		key_path += '\\' + sub_key
 
 		try:
-			with OpenKey(hkey, key_path, access=winreg.KEY_READ | winreg.KEY_WOW64_32KEY) as key_handle: 
-				
+			with OpenKey(hkey, key_path, access=winreg.KEY_READ | winreg.KEY_WOW64_32KEY) as key_handle:
+
 				num_keys, num_values, _ = QueryInfoKey(key_handle)
 
 				for i in range(num_values):
@@ -2158,8 +2158,8 @@ class TemporaryRegistry:
 		key_path += '\\' + sub_key
 
 		try:
-			with OpenKey(hkey, key_path, access=winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_32KEY) as key_handle: 
-				
+			with OpenKey(hkey, key_path, access=winreg.KEY_ALL_ACCESS | winreg.KEY_WOW64_32KEY) as key_handle:
+
 				num_keys, _, _ = QueryInfoKey(key_handle)
 
 				for i in range(num_keys):
@@ -2256,7 +2256,7 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 		global_rate_limiter.wait_for_wayback_machine_rate_limit()
 		response = global_session.head(wayback_url)
 		response.raise_for_status()
-		
+
 		last_modified_header = response.headers.get('x-archive-orig-last-modified')
 		if last_modified_header is not None:
 
@@ -2297,7 +2297,7 @@ def find_extra_wayback_machine_snapshot_info(wayback_url: str) -> Optional[str]:
 	except (ValueError, TypeError) as error:
 		# Catching TypeError is necessary for other unhandled broken dates.
 		log.error(f'Failed to parse the last modified time "{last_modified_header}" of the snapshot "{wayback_url}" with the error: {repr(error)}')
-	
+
 	return last_modified_time
 
 @dataclass
@@ -2310,12 +2310,12 @@ WAYBACK_MACHINE_SNAPSHOT_URL_REGEX = re.compile(r'https?://web\.archive\.org/web
 
 def parse_wayback_machine_snapshot_url(url: str) -> Optional[WaybackParts]:
 	""" Divides the URL of a Wayback Machine snapshot into its basic components. """
-	
+
 	result = None
 
 	match = WAYBACK_MACHINE_SNAPSHOT_URL_REGEX.fullmatch(url)
 	if match is not None:
-		
+
 		timestamp = match['timestamp']
 		modifier = match['modifier']
 		url = match['url']
@@ -2340,7 +2340,7 @@ def compose_wayback_machine_snapshot_url(*, timestamp: Optional[str] = None, mod
 
 def is_url_available(url: str, allow_redirects: bool = False) -> bool:
 	""" Checks if a URL is available. """
-	
+
 	try:
 		response = requests.head(url, allow_redirects=allow_redirects)
 		result = response.status_code < 400 if allow_redirects else response.status_code == 200
@@ -2409,7 +2409,7 @@ def kill_process_by_pid(pid: int) -> None:
 	try:
 		application = WindowsApplication(backend='win32')
 		application.connect(process=pid, timeout=5)
-		application.kill(soft=False)	
+		application.kill(soft=False)
 	except (WindowProcessNotFoundError, WindowTimeoutError):
 		pass
 	except Exception as error:

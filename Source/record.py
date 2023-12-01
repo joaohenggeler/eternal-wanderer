@@ -69,7 +69,7 @@ class RecordConfig(CommonConfig):
 	proxy_convert_realmedia_metadata_snapshots: bool
 	proxy_find_missing_snapshots_using_cdx: bool
 	proxy_max_cdx_path_components: Optional[int]
-	proxy_save_missing_snapshots_that_still_exist_online: bool 
+	proxy_save_missing_snapshots_that_still_exist_online: bool
 	proxy_max_consecutive_save_tries: int
 	proxy_max_total_save_tries: int
 	proxy_cache_missing_responses: bool
@@ -92,12 +92,12 @@ class RecordConfig(CommonConfig):
 	media_width: str
 	media_height: str
 	media_background_color: str
-	
+
 	plugin_syncing_page_type: str
 	plugin_syncing_media_type: str
 	plugin_syncing_unload_delay: float
 	plugin_syncing_reload_vrml_from_cache: bool
-	
+
 	enable_plugin_input_repeater: bool
 	plugin_input_repeater_initial_wait: int
 	plugin_input_repeater_wait_per_cycle: int
@@ -112,7 +112,7 @@ class RecordConfig(CommonConfig):
 	max_duration: int
 	save_archive_copy: bool
 	screen_capture_recorder_settings: dict[str, Optional[int]]
-	
+
 	raw_ffmpeg_input_name: str
 	raw_ffmpeg_input_args: dict[str, Union[None, int, str]]
 	raw_ffmpeg_output_args: dict[str, Union[None, int, str]]
@@ -145,7 +145,7 @@ class RecordConfig(CommonConfig):
 	height_dpi_scaling: float
 
 	def __init__(self):
-		
+
 		super().__init__()
 		self.load_subconfig('record')
 
@@ -165,7 +165,7 @@ class RecordConfig(CommonConfig):
 		assert self.plugin_syncing_media_type in ['none', 'reload_before', 'reload_twice', 'unload'], f'Unknown plugin syncing media type "{self.plugin_syncing_media_type}".'
 
 		self.screen_capture_recorder_settings = container_to_lowercase(self.screen_capture_recorder_settings)
-		
+
 		self.raw_ffmpeg_input_args = container_to_lowercase(self.raw_ffmpeg_input_args)
 		self.raw_ffmpeg_output_args = container_to_lowercase(self.raw_ffmpeg_output_args)
 		self.archive_ffmpeg_output_args = container_to_lowercase(self.archive_ffmpeg_output_args)
@@ -247,7 +247,7 @@ if __name__ == '__main__':
 		in other subdomains via the CDX API while also allowing plugin media that loads slowly to finish requesting assets. """
 
 		port: int
-		
+
 		process: Popen
 		queue: Queue
 		timestamp: Optional[str]
@@ -262,7 +262,7 @@ if __name__ == '__main__':
 			super().__init__(name='proxy', daemon=True)
 
 			self.port = port
-			
+
 			os.environ['PYTHONUNBUFFERED'] = '1'
 			self.process = Popen(['mitmdump', '--quiet', '--listen-port', str(self.port), '--script', 'wayback_proxy_addon.py'], stdin=PIPE, stdout=PIPE, stderr=STDOUT, bufsize=1, encoding='utf-8')
 			self.queue = Queue()
@@ -284,7 +284,7 @@ if __name__ == '__main__':
 					error = proxy.get(timeout=10)
 					log.error(f'Failed to create the proxy with the error: {error}')
 					proxy.task_done()
-					
+
 					proxy.process.kill()
 					sleep(5)
 					port = free_port()
@@ -342,16 +342,16 @@ if __name__ == '__main__':
 		""" A special timer that kills Firefox's plugin container child processes after a given time has elapsed (e.g. the recording duration). """
 
 		timeout: float
-		
+
 		plugin_container_path: str
 		java_plugin_launcher_path: Optional[str]
 		timer: Timer
 		crashed: bool
 
 		def __init__(self, browser: Browser, timeout: float):
-			
+
 			self.timeout = timeout
-			
+
 			self.plugin_container_path = os.path.join(browser.firefox_directory_path, 'plugin-container.exe')
 			self.java_plugin_launcher_path = os.path.join(browser.java_bin_path, 'jp2launcher.exe') if browser.java_bin_path is not None else None
 
@@ -378,10 +378,10 @@ if __name__ == '__main__':
 
 		def kill_plugin_containers(self) -> None:
 			log.warning(f'Killing all plugin containers since {self.timeout:.1f} seconds have passed without the timer being reset.')
-			
+
 			if self.java_plugin_launcher_path is not None:
 				kill_processes_by_path(self.java_plugin_launcher_path)
-			
+
 			kill_processes_by_path(self.plugin_container_path)
 
 	class ScreenCapture:
@@ -390,13 +390,13 @@ if __name__ == '__main__':
 		raw_path: str
 		upload_path: str
 		archive_path: Optional[str]
-		
+
 		stream: ffmpeg.Stream
 		process: Popen
 		failed: bool
 
 		def __init__(self, output_path_prefix: str):
-			
+
 			self.raw_path = output_path_prefix + '.raw.mkv'
 			self.upload_path = output_path_prefix + '.mp4'
 			self.archive_path = output_path_prefix + '.mkv' if config.save_archive_copy else None
@@ -412,24 +412,24 @@ if __name__ == '__main__':
 
 			log.debug(f'Recording with the FFmpeg arguments: {self.stream.get_args()}')
 			self.failed = False
-			
+
 			# Connecting a pipe to stdin is required to stop the recording by pressing Q.
 			# See: https://github.com/kkroening/ffmpeg-python/issues/162
 			# Connecting a pipe to stdout and stderr is useful to check for any FFmpeg error messages.
-			self.process = self.stream.run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)		
+			self.process = self.stream.run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
 
 		def stop(self) -> None:
 			""" Stops the FFmpeg screen capture process gracefully or kills it doesn't respond. """
 
 			try:
 				output, errors = self.process.communicate(b'q', timeout=10)
-				
+
 				for line in output.decode(errors='ignore').splitlines():
 					log.info(f'FFmpeg output: {line}')
-				
+
 				for line in errors.decode(errors='ignore').splitlines():
 					log.warning(f'FFmpeg warning/error: {line}')
-			
+
 			except TimeoutExpired:
 				log.error('Failed to stop the recording gracefully.')
 				self.failed = True
@@ -441,14 +441,14 @@ if __name__ == '__main__':
 
 		def __exit__(self, exception_type, exception_value, traceback):
 			self.stop()
-			
+
 		def perform_post_processing(self) -> None:
 			""" Converts the lossless MKV recording into a lossy MP4 video, and optionally reduces the size of the lossless copy for archival. """
 
 			if not self.failed:
 
 				output_types = [(self.upload_path, config.upload_ffmpeg_output_args)]
-				
+
 				if self.archive_path is not None:
 					output_types.append((self.archive_path, config.archive_ffmpeg_output_args))
 
@@ -466,14 +466,14 @@ if __name__ == '__main__':
 						log.error(f'Failed to process "{self.raw_path}" into "{output_path}" with the error: {repr(error)}')
 						self.failed = True
 						break
-			
+
 			delete_file(self.raw_path)
 
 	if config.enable_text_to_speech:
-		
+
 		from comtypes import COMError # type: ignore
 		from comtypes.client import CreateObject # type: ignore
-		
+
 		# We need to create a speech engine at least once before importing SpeechLib. Otherwise, we'd get an ImportError.
 		CreateObject('SAPI.SpVoice')
 		from comtypes.gen import SpeechLib # type: ignore
@@ -488,13 +488,13 @@ if __name__ == '__main__':
 			language_to_voice: dict[Optional[str], SpeechLib.ISpeechObjectToken]
 
 			def __init__(self):
-				
+
 				# See:
 				# - https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ms723602(v=vs.85)
 				# - https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ms722561(v=vs.85)
 				self.engine = CreateObject('SAPI.SpVoice')
 				self.stream = CreateObject('SAPI.SpFileStream')
-				
+
 				# We have to close the temporary file so SpFileStream.Open() doesn't fail.
 				self.temporary_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.wav', delete=False)
 				self.temporary_file.close()
@@ -520,13 +520,13 @@ if __name__ == '__main__':
 					vendor = voice.GetAttribute('Vendor')
 					description = voice.GetDescription()
 					log.info(f'Found the text-to-speech voice ({name}, {language}, {gender}, {age}, {vendor}): "{description}".')
-					
+
 				default_voice = self.engine.Voice
 				if config.text_to_speech_default_voice is not None:
 					default_voice = next((voice for name, voice in voices.items() if config.text_to_speech_default_voice.lower() in name.lower()), default_voice)
-					
+
 				self.language_to_voice = defaultdict(lambda: default_voice)
-				
+
 				for language, voice_name in config.text_to_speech_language_voices.items():
 					voice = next((voice for name, voice in voices.items() if voice_name.lower() in name.lower()), None)
 					if voice is not None:
@@ -536,11 +536,11 @@ if __name__ == '__main__':
 				""" Generates a video file that contains the text-to-speech in the audio track and a blank screen on the video one.
 				The voice used by the Speech API is specified in the configuration file and depends on the page's language.
 				The correct voice packages have been installed on Windows, otherwise a default voice is used instead. """
-				
+
 				# Add some context XML so the date is spoken correctly no matter the language.
 				# See: https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125665(v=vs.85)
 				date_xml = f'<context id="date_ymd">{date.year}/{date.month}/{date.day}</context>'
-				
+
 				output_path: Optional[str] = output_path_prefix + (f'.tts.{language}.mp4' if language is not None else '.tts.mp4')
 
 				try:
@@ -561,7 +561,7 @@ if __name__ == '__main__':
 					target_stream = ffmpeg.output(video_stream, audio_stream, output_path, **config.text_to_speech_ffmpeg_output_args)
 					target_stream = target_stream.global_args(*config.ffmpeg_global_args)
 					target_stream = target_stream.overwrite_output()
-					
+
 					log.debug(f'Generating the text-to-speech file with the FFmpeg arguments: {target_stream.get_args()}')
 					target_stream.run()
 
@@ -584,7 +584,7 @@ if __name__ == '__main__':
 		def __init__(self, firefox_window: Optional[WindowSpecification], thread_name='plugin_input_repeater'):
 
 			super().__init__(name=thread_name, daemon=True)
-			
+
 			self.firefox_window = firefox_window
 			self.running = False
 
@@ -597,7 +597,7 @@ if __name__ == '__main__':
 			first = True
 
 			while self.running:
-				
+
 				if first:
 					sleep(config.plugin_input_repeater_initial_wait)
 				else:
@@ -612,12 +612,12 @@ if __name__ == '__main__':
 					# E.g. https://web.archive.org/web/20010306033409if_/http://www.big.or.jp/~frog/others/button1.html
 					# E.g. https://web.archive.org/web/20030117223552if_/http://www.miniclip.com:80/dancingbush.htm
 					plugin_windows = self.firefox_window.children(class_name='GeckoPluginWindow')
-					
+
 					# For the Shockwave Player.
 					# No known examples at the time of writing.
 					plugin_windows += self.firefox_window.children(class_name='ImlWinCls')
 					plugin_windows += self.firefox_window.children(class_name='ImlWinClsSw10')
-					
+
 					# For the Java Plugin.
 					# E.g. https://web.archive.org/web/20050901064800if_/http://www.javaonthebrain.com/java/iceblox/
 					# E.g. https://web.archive.org/web/19970606032004if_/http://www.brown.edu:80/Students/Japanese_Cultural_Association/java/
@@ -671,12 +671,12 @@ if __name__ == '__main__':
 
 		def run(self):
 			""" Runs the viewpoint cycler on a loop, sending the "Next Viewpoint" hotkey periodically to any Cosmo Player windows. """
-			
+
 			if self.firefox_window is None:
 				return
 
 			while self.running:
-				
+
 				sleep(config.cosmo_player_viewpoint_wait_per_cycle)
 
 				try:
@@ -686,13 +686,13 @@ if __name__ == '__main__':
 					for window in cosmo_player_windows:
 						window.send_keystrokes('{PGDN}')
 				except Exception as error:
-					log.error(f'Failed to send the input to the Cosmo Player windows with the error: {repr(error)}')				
+					log.error(f'Failed to send the input to the Cosmo Player windows with the error: {repr(error)}')
 
 	scheduler = BlockingScheduler()
 
 	def record_snapshots(num_snapshots: int) -> None:
 		""" Records a given number of snapshots in a single batch. """
-		
+
 		log.info(f'Recording {num_snapshots} snapshots.')
 
 		if config.enable_proxy:
@@ -722,7 +722,7 @@ if __name__ == '__main__':
 		extra_preferences: dict = {
 			# Always use the cached page.
 			'browser.cache.check_doc_frequency': 2,
-			
+
 			# Don't show a prompt or try to kill a plugin if it stops responding.
 			# We want the PluginCrashTimer to handle these silently in the background.
 			# See:
@@ -734,7 +734,7 @@ if __name__ == '__main__':
 			'dom.ipc.plugins.processLaunchTimeoutSecs': -1,
 			'dom.ipc.plugins.timeoutSecs': -1,
 			'dom.ipc.plugins.unloadTimeoutSecs': -1,
-		} 
+		}
 
 		if config.enable_proxy:
 			extra_preferences.update({
@@ -766,7 +766,7 @@ if __name__ == '__main__':
 					wayback_parts = parse_wayback_machine_snapshot_url(wayback_url)
 					parts = urlparse(wayback_parts.url if wayback_parts is not None else wayback_url)
 					filename = os.path.basename(parts.path)
-						
+
 					if media_extension is None:
 						_, media_extension = os.path.splitext(filename)
 						media_extension = media_extension.lower().removeprefix('.')
@@ -776,24 +776,24 @@ if __name__ == '__main__':
 					duration: float = config.media_fallback_duration
 					title = None
 					author = None
-					
+
 					# If a media file points to other resources (e.g. VRML worlds or RealMedia metadata), we don't
 					# want to download it since other files from the Wayback Machine may be required to play it.
 					# If it doesn't (i.e. audio and video formats), we'll just download and play it from disk.
 					if media_extension not in config.multi_asset_media_extensions:
-						
+
 						try:
 							global_rate_limiter.wait_for_wayback_machine_rate_limit()
 							response = global_session.get(wayback_url)
 							response.raise_for_status()
-							
+
 							# We need to keep the file extension so Firefox can choose the right plugin to play it.
 							download_path = os.path.join(media_download_directory.name, filename)
 							with open(download_path, 'wb') as file:
 								file.write(response.content)
-						
+
 							log.debug(f'Downloaded the media file "{wayback_url}" to "{download_path}".')
-							
+
 							embed_url = f'file:///{download_path}'
 							loop = 'false'
 
@@ -807,13 +807,13 @@ if __name__ == '__main__':
 
 							duration = float(probe['format']['duration'])
 							log.debug(f'The media file has a duration of {duration:.2f} seconds.')
-						
+
 						except RequestException as error:
 							log.error(f'Failed to download the media file "{wayback_url}" with the error: {repr(error)}')
 							success = False
 						except (ffmpeg.Error, KeyError, ValueError) as error:
 							log.warning(f'Could not parse the media file\'s metadata with the error: {repr(error)}')
-							
+
 					content = config.media_template
 					content = content.replace('{comment}', f'Generated by "{__file__}" on {Database.get_current_timestamp()}.')
 					content = content.replace('{background_color}', config.media_background_color)
@@ -821,7 +821,7 @@ if __name__ == '__main__':
 					content = content.replace('{height}', config.media_height)
 					content = content.replace('{url}', embed_url)
 					content = content.replace('{loop}', loop)
-					
+
 					# Overwrite the temporary media page.
 					media_page_file.seek(0)
 					media_page_file.truncate(0)
@@ -850,7 +850,7 @@ if __name__ == '__main__':
 				registry.clear('HKEY_CURRENT_USER\\SOFTWARE\\screen-capture-recorder')
 
 				for key, value in config.screen_capture_recorder_settings.items():
-					
+
 					registry_key = f'HKEY_CURRENT_USER\\SOFTWARE\\screen-capture-recorder\\{key}'
 					registry_value: int
 
@@ -874,18 +874,18 @@ if __name__ == '__main__':
 							continue
 					else:
 						registry_value = value
-					
+
 					registry.set(registry_key, registry_value)
-				
+
 				# E.g. "[silencedetect @ 0000022c2f32bf40] silence_end: 4.54283 | silence_duration: 0.377167"
 				SILENCE_DURATION_REGEX = re.compile(r'^\[silencedetect.*silence_duration: (?P<duration>\d+\.\d+)', re.MULTILINE)
 
 				for snapshot_index in range(num_snapshots):
 
 					if was_exit_command_entered():
-						
+
 						log.info('Stopping at the user\'s request.')
-						
+
 						try:
 							scheduler.shutdown(wait=False)
 						except SchedulerNotRunningError:
@@ -949,14 +949,14 @@ if __name__ == '__main__':
 											 'min_year': config.min_year, 'max_year': config.max_year,
 											 'record_sensitive_snapshots': config.record_sensitive_snapshots,
 											 'min_recordings_for_same_host': config.min_recordings_for_same_host})
-						
+
 						row = cursor.fetchone()
 						if row is not None:
-							
+
 							snapshot = Snapshot(**row)
 
 							assert snapshot.Points is not None, 'The Points column is not being computed properly.'
-							
+
 							config.apply_snapshot_options(snapshot)
 							browser.set_fallback_encoding_for_snapshot(snapshot)
 
@@ -1016,7 +1016,7 @@ if __name__ == '__main__':
 
 						if config.enable_proxy:
 							proxy.timestamp = snapshot.Timestamp
-						
+
 						cache_wait = config.media_cache_wait if snapshot.IsMedia else config.page_cache_wait
 						proxy_wait = config.proxy_queue_timeout + config.proxy_total_timeout if config.enable_proxy else 0
 
@@ -1050,7 +1050,7 @@ if __name__ == '__main__':
 							log.debug(f'Found {num_plugin_instances} plugin instances.')
 
 							if snapshot.PageUsesPlugins and num_plugin_instances == 0:
-								
+
 								# The bgsound and app tags are used in the scout script but not here
 								# because the former was already converted to an embed tag and the
 								# latter isn't supported by this browser.
@@ -1060,7 +1060,7 @@ if __name__ == '__main__':
 
 								num_plugin_instances = max(num_plugin_instances, 1)
 								log.warning(f'Could not find any plugin instances when at least one was expected. Assuming {num_plugin_instances} instances.')
-							
+
 							wait_after_load: float
 							wait_per_scroll: float
 
@@ -1143,7 +1143,7 @@ if __name__ == '__main__':
 								min_wait_after_load = max(config.min_duration, config.base_wait_after_load + min(num_plugin_instances, 1) * config.wait_after_load_per_plugin_instance)
 								max_wait_after_load = max(config.max_duration - num_scrolls * wait_per_scroll, 0)
 								wait_after_load = clamp(wait_after_load, min_wait_after_load, max_wait_after_load)
-						
+
 								max_wait_per_scroll = (max(config.max_duration - wait_after_load, 0) / num_scrolls) if num_scrolls > 0 else 0
 								wait_per_scroll = clamp(wait_per_scroll, 0, max_wait_per_scroll)
 
@@ -1152,15 +1152,15 @@ if __name__ == '__main__':
 
 							# Keep waiting if the page or any plugins are still requesting data.
 							if config.enable_proxy:
-								
+
 								log.debug('Waiting for the proxy.')
 								begin_proxy_time = monotonic()
-								
+
 								proxy_status_codes: Counter = Counter()
 
 								try:
 									while True:
-										
+
 										elapsed_proxy_time = monotonic() - begin_proxy_time
 										if elapsed_proxy_time > config.proxy_total_timeout:
 											log.debug('Timed out while reading proxy messages.')
@@ -1168,24 +1168,24 @@ if __name__ == '__main__':
 
 										message = proxy.get(timeout=config.proxy_queue_timeout)
 										log.debug(message)
-										
+
 										response_match = Proxy.RESPONSE_REGEX.fullmatch(message)
 										save_match = Proxy.SAVE_REGEX.fullmatch(message) if config.proxy_save_missing_snapshots_that_still_exist_online else None
 										realmedia_match = Proxy.REALMEDIA_REGEX.fullmatch(message) if config.proxy_convert_realmedia_metadata_snapshots else None
 
 										if response_match is not None:
-											
+
 											status_code = response_match['status_code']
 											mark = response_match['mark']
 											proxy_status_codes[(status_code, mark)] += 1
 
 										elif save_match is not None:
-											
+
 											url = save_match['url']
 											missing_urls.append(url)
 
 										elif realmedia_match is not None:
-											
+
 											realmedia_url = realmedia_match['url']
 
 										proxy.task_done()
@@ -1208,14 +1208,14 @@ if __name__ == '__main__':
 								continue
 
 						if config.debug and browser.window is not None:
-							
+
 							plugin_windows = browser.window.children(class_name='GeckoPluginWindow')
 							for window in plugin_windows:
-								
+
 								rect = window.rectangle()
 								width = round(rect.width() / config.width_dpi_scaling)
 								height = round(rect.height() / config.height_dpi_scaling)
-								
+
 								log.debug(f'Found a plugin instance with a size of {width}x{height}.')
 
 						# Prepare the recording phase.
@@ -1257,12 +1257,12 @@ if __name__ == '__main__':
 							try:
 								probe = ffmpeg.probe(media_path)
 								has_video_stream = any(stream for stream in probe['streams'] if stream['codec_type'] == 'video')
-							
+
 								# Add a video stream to the recording if the media file doesn't have one.
 								media_stream = ffmpeg.input(media_path, guess_layout_max=0)
 								video_stream = None if has_video_stream else ffmpeg.input(config.media_conversion_ffmpeg_input_name, **config.media_conversion_ffmpeg_input_args)
 								input_streams: list[ffmpeg.Stream] = list(filter(None, [media_stream, video_stream]))
-								
+
 								if config.media_conversion_add_subtitles and not has_video_stream:
 
 									log.debug('Adding subtitles to the converted media file.')
@@ -1299,7 +1299,7 @@ if __name__ == '__main__':
 
 								for line in output.decode(errors='ignore').splitlines():
 									log.info(f'FFmpeg output: {line}')
-								
+
 								for line in errors.decode(errors='ignore').splitlines():
 									log.warning(f'FFmpeg warning/error: {line}')
 
@@ -1310,7 +1310,7 @@ if __name__ == '__main__':
 							# Record the snapshot. The page should load faster now that its resources are cached.
 
 							with PluginCrashTimer(browser, plugin_crash_timeout) as crash_timer:
-								
+
 								try:
 									browser.bring_to_front()
 									pywinauto.mouse.move((0, config.physical_screen_height // 2))
@@ -1369,9 +1369,9 @@ if __name__ == '__main__':
 
 										for _ in browser.traverse_frames():
 											driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
-										
+
 										sleep(wait_per_scroll)
-						
+
 							if plugin_syncing_type == 'unload':
 								delayed_sync_plugins_thread.join()
 
@@ -1397,17 +1397,17 @@ if __name__ == '__main__':
 								state = Snapshot.RECORDED
 
 							text_to_speech_path = None
-							
+
 							if config.enable_text_to_speech and not snapshot.IsMedia and state == Snapshot.RECORDED:
-								
+
 								browser.go_to_blank_page_with_text('\N{Speech Balloon} Generating Text-to-Speech \N{Speech Balloon}', str(snapshot))
-								
+
 								page_text = '.\n'.join(frame_text_list)
 								text_to_speech_path = text_to_speech.generate_text_to_speech_file(snapshot.DisplayTitle, snapshot.OldestDatetime, page_text, snapshot.PageLanguage, recording_path_prefix)
 
 								if text_to_speech_path is not None:
 									log.info(f'Saved the text-to-speech file to "{text_to_speech_path}".')
-						
+
 						has_audio = False
 
 						if state == Snapshot.RECORDED:
@@ -1430,7 +1430,7 @@ if __name__ == '__main__':
 								# The filter's output goes to stderr.
 								log.debug(f'Detecting silence with the FFmpeg arguments: {stream.get_args()}')
 								_, errors = stream.run(capture_stderr=True)
-								
+
 								output = errors.decode(errors='ignore')
 								match = SILENCE_DURATION_REGEX.search(output)
 
@@ -1457,7 +1457,7 @@ if __name__ == '__main__':
 
 							if missing_urls:
 								log.info(f'Locating files based on {len(missing_urls)} missing URLs.')
-							
+
 							# Remove any duplicates to minimize the amount of requests to the Save API
 							# and to improve look up operations when trying to find other missing URLs.
 							extra_missing_urls = set(url for url in missing_urls)
@@ -1467,7 +1467,7 @@ if __name__ == '__main__':
 							# other values, both above and below 3.
 							# E.g. https://web.archive.org/cdx/search/cdx?url=disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/cutplane/*&fl=original,timestamp,statuscode&collapse=urlkey
 							for i, url in enumerate(missing_urls, start=1):
-								
+
 								browser.go_to_blank_page_with_text('\N{Left-Pointing Magnifying Glass} Locating Missing URLs \N{Left-Pointing Magnifying Glass}', f'{i} of {len(missing_urls)}')
 
 								parts = urlparse(url)
@@ -1574,7 +1574,7 @@ if __name__ == '__main__':
 						db.execute('UPDATE Snapshot SET State = :state WHERE Id = :id;', {'state': state, 'id': snapshot.Id})
 
 						if state == Snapshot.RECORDED:
-							
+
 							upload_filename = os.path.basename(upload_path)
 							archive_filename = os.path.basename(archive_path) if archive_path is not None else None
 							text_to_speech_filename = os.path.basename(text_to_speech_path) if text_to_speech_path is not None else None
@@ -1591,17 +1591,17 @@ if __name__ == '__main__':
 
 						else:
 							delete_file(upload_path)
-							
+
 							if archive_path is not None:
 								delete_file(archive_path)
-							
+
 							if text_to_speech_path is not None:
 								delete_file(text_to_speech_path)
 
 						if snapshot.IsMedia and all(metadata is None for metadata in [snapshot.MediaTitle, snapshot.MediaAuthor]):
 							db.execute(	'UPDATE Snapshot SET MediaTitle = :media_title, MediaAuthor = :media_author WHERE Id = :id;',
 										{'media_title': media_title, 'media_author': media_author, 'id': snapshot.Id})
-						
+
 						# For cases where looking at the plugin tags while scouting isn't enough.
 						# E.g. https://web.archive.org/web/19961221002554if_/http://www.geocities.com:80/Hollywood/Hills/5988/
 						if not snapshot.IsMedia and not snapshot.PageUsesPlugins and num_plugin_instances > 0:
@@ -1623,7 +1623,7 @@ if __name__ == '__main__':
 						db.rollback()
 						sleep(config.database_error_wait)
 						continue
-		
+
 		except sqlite3.Error as error:
 			log.error(f'Failed to connect to the database with the error: {repr(error)}')
 		except KeyboardInterrupt:
@@ -1641,7 +1641,7 @@ if __name__ == '__main__':
 
 			media_page_file.close()
 			delete_file(media_page_file.name)
-			
+
 			subtitles_file.close()
 			delete_file(subtitles_file.name)
 

@@ -18,7 +18,7 @@ if __name__ == '__main__':
 	with Database() as db:
 
 		if args.trace:
-			
+
 			snapshot_list = []
 			next_id = args.trace
 

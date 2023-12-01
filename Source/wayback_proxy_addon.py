@@ -59,7 +59,7 @@ Thread(target=listen_for_commands, daemon=True).start()
 
 @concurrent
 def request(flow: http.HTTPFlow) -> None:
-	
+
 	request = flow.request
 
 	if config.proxy_block_requests_outside_internet_archive and not is_url_from_domain(request.url, 'archive.org'):
@@ -81,11 +81,11 @@ def request(flow: http.HTTPFlow) -> None:
 	# Not a Wayback Machine snapshot.
 	if wayback_parts is None:
 		return
-	
+
 	extracted_realmedia_url = False
 
 	if config.proxy_convert_realmedia_metadata_snapshots:
-		
+
 		parts = urlparse(wayback_parts.url)
 		_, file_extension = os.path.splitext(parts.path)
 
@@ -115,19 +115,19 @@ def request(flow: http.HTTPFlow) -> None:
 				url = next(metadata_response.iter_lines(decode_unicode=True), None)
 
 				if url is not None:
-					
+
 					# Checking for valid URLs using netloc only makes sense if it was properly decoded.
 					# E.g. "http%3A//www.geocities.com/Hollywood/Hills/5988/main.html" would result in
 					# an empty netloc instead of "www.geocities.com".
 					url = unquote(url)
 					parts = urlparse(url)
-					
+
 					if parts.netloc:
 						extracted_realmedia_url = True
 
 						parts = parts._replace(scheme='http')
 						url = urlunparse(parts)
-					
+
 						wayback_parts.url = url
 						request.url = compose_wayback_machine_snapshot_url(parts=wayback_parts)
 
@@ -161,7 +161,7 @@ def request(flow: http.HTTPFlow) -> None:
 	if config.proxy_find_missing_snapshots_using_cdx and wayback_response is not None:
 
 		if not found_snapshot:
-			
+
 			extract = tld_extract(wayback_parts.url)
 			parts = urlparse(wayback_parts.url)
 			split_path = parts.path.split('/')
@@ -184,7 +184,7 @@ def request(flow: http.HTTPFlow) -> None:
 			# E.g. "http://www.example.com/path1/path2/file.ext" -> "/path1/".
 			# If there is a path, the first split value is an empty string.
 			first_path_component = '/'.join(split_path[:2]) + '/' if len(split_path) >= 2 else None
-			
+
 			# Ideally, the previous query should work for all cases. Unfortunately, there are cases
 			# where the CDX API only returns results if the query specifies a domain and at least
 			# one path component. We'll perform this query first (if this component exists) since
@@ -234,7 +234,7 @@ def request(flow: http.HTTPFlow) -> None:
 	if config.proxy_save_missing_snapshots_that_still_exist_online and wayback_response is not None:
 
 		if not found_snapshot and is_url_available(wayback_parts.url):
-			
+
 			redirect_to_original = True
 			with lock:
 				print(f'[SAVE] [{wayback_parts.url}]')
@@ -259,7 +259,7 @@ def request(flow: http.HTTPFlow) -> None:
 	# and create the response ourselves.
 	request_came_from_vrml = False
 	referer = request.headers.get('referer')
-	
+
 	if referer is not None:
 
 		parts = urlparse(referer)
@@ -267,7 +267,7 @@ def request(flow: http.HTTPFlow) -> None:
 		_, file_extension = os.path.splitext(path)
 
 		if file_extension in ['.wrl', '.wrz'] or path.endswith('.wrl.gz'):
-			
+
 			request_came_from_vrml = True
 
 			try:
@@ -298,16 +298,16 @@ def request(flow: http.HTTPFlow) -> None:
 
 @concurrent
 def response(flow: http.HTTPFlow) -> None:
-	
+
 	if current_timestamp is None:
 		return
-	
+
 	request = flow.request
 	response = flow.response
 
 	mark = flow.marked or '-'
 	content_type = response.headers.get('content-type', '-')
-	
+
 	with lock:
 		print(f'[RESPONSE] [{response.status_code}] [{mark}] [{content_type}] [{request.url}] [{flow.id}]')
 

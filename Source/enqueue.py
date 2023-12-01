@@ -51,22 +51,22 @@ if __name__ == '__main__':
 							 'scout_time': scout_time, 'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp,
 							 'last_modified_time': last_modified_time, 'url_key': best_snapshot.urlkey, 'digest': best_snapshot.digest})
 				db.commit()
-				
+
 				snapshot_type = 'media file' if is_media else 'web page'
 				print(f'Added the {snapshot_type} snapshot ({best_snapshot.original}, {best_snapshot.timestamp}) with the {args.priority_name} priority.')
-				
+
 				if first_state == Snapshot.QUEUED and args.priority_name in ['record', 'publish']:
 					print('The snapshot must be scouted before it can be recorded.')
 
 			except sqlite3.IntegrityError:
-				
+
 				try:
 					cursor = db.execute('SELECT * FROM Snapshot WHERE Url = :url AND Timestamp = :timestamp;',
 										{'url': best_snapshot.original, 'timestamp': best_snapshot.timestamp})
-					
+
 					row = cursor.fetchone()
 					if row is not None:
-						
+
 						snapshot = Snapshot(**row)
 						old_state = snapshot.State
 						priority = max(priority, snapshot.Priority)
@@ -82,7 +82,7 @@ if __name__ == '__main__':
 
 						db.execute('UPDATE Snapshot SET State = :state, Priority = :priority WHERE Id = :id;', {'state': new_state, 'priority': priority, 'id': snapshot.Id})
 						db.commit()
-						
+
 						snapshot_type = 'media file' if snapshot.IsMedia else 'web page'
 						print(f'Updated the {snapshot_type} snapshot {snapshot} to the {args.priority_name} priority.')
 
@@ -90,7 +90,7 @@ if __name__ == '__main__':
 							print('The snapshot must be scouted before it can be recorded.')
 					else:
 						print(f'Could not add or update the snapshot ({best_snapshot.original}, {best_snapshot.timestamp}) since another one with the same digest but different URL and timestamp values already exists.')
-				
+
 				except sqlite3.Error as error:
 					print(f'Could not update the snapshot with the error: {repr(error)}')
 					db.rollback()
@@ -100,7 +100,7 @@ if __name__ == '__main__':
 				db.rollback()
 
 		except NoCDXRecordFound as error:
-			print(f'Could not find any snapshots at "{args.url}" near {args.timestamp}.')	
+			print(f'Could not find any snapshots at "{args.url}" near {args.timestamp}.')
 		except BlockedSiteError:
 			print(f'The snapshot at "{args.url}" near {args.timestamp} has been excluded from the Wayback Machine.')
 		except Exception as error:

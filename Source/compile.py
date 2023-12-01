@@ -44,12 +44,12 @@ if __name__ == '__main__':
 		try:
 			id_type = args.any[0]
 			id_list = args.any[1]
-			
+
 			include_id_list: list[int] = []
 			exclude_id_list: list[int] = []
-			
+
 			for id_ in id_list.split(','):
-				
+
 				current_list = exclude_id_list if id_.startswith('!') else include_id_list
 				id_ = id_.removeprefix('!')
 
@@ -79,7 +79,7 @@ if __name__ == '__main__':
 	config = RecordConfig()
 
 	with Database() as db:
-		
+
 		try:
 			# Find the next auto incremented row ID.
 			cursor = db.execute("SELECT seq + 1 AS NextCompilationId FROM sqlite_sequence WHERE name = 'Compilation';")
@@ -132,7 +132,7 @@ if __name__ == '__main__':
 
 			snapshots_and_recordings = []
 			for row in cursor:
-				
+
 				# Avoid naming conflicts with each table's primary key.
 				del row['Id']
 				snapshot = Snapshot(**row, Id=row['SnapshotId'])
@@ -199,7 +199,7 @@ if __name__ == '__main__':
 						raise
 
 					os.makedirs(config.compilations_path, exist_ok=True)
-					
+
 					id_identifier = str(compilation_id) if args.published else None
 					type_identifier = 'published' if args.published else f'any_{id_type}'
 
@@ -217,7 +217,7 @@ if __name__ == '__main__':
 
 					compilation_identifiers = [id_identifier, type_identifier, range_identifier, total_identifier, text_to_speech_identifier]
 					compilation_path_prefix = os.path.join(config.compilations_path, '_'.join(filter(None, compilation_identifiers)))
-					
+
 					compilation_path = compilation_path_prefix + '.mp4'
 					timestamps_path = compilation_path_prefix + '.txt'
 
@@ -226,11 +226,11 @@ if __name__ == '__main__':
 
 					try:
 						with open(timestamps_path, 'w', encoding='utf-8') as timestamps_file:
-							
+
 							print(f'Compiling {num_found} of {total_recordings} recordings.')
-							
+
 							for snapshot, recording in snapshots_and_recordings:
-								
+
 								print(f'- Adding recording #{recording.Id} of snapshot #{snapshot.Id} {snapshot}.')
 
 								# The recordings are remuxed to MPEG-TS to try to avoid any errors when concatenating every file.
@@ -260,11 +260,11 @@ if __name__ == '__main__':
 								media_identifier = '\N{DVD}' if snapshot.IsMedia else ('\N{Jigsaw Puzzle Piece}' if snapshot.PageUsesPlugins else None)
 								sensitive_identifier = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
 								audio_identifier = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
-								
+
 								recording_identifiers = [timestamp, snapshot.DisplayTitle, f'({snapshot.ShortDate})', media_identifier, sensitive_identifier, audio_identifier]
 								timestamp_line = ' '.join(filter(None, recording_identifiers)) + '\n'
 								timestamps_file.write(timestamp_line)
-								
+
 								probe = ffmpeg.probe(intermediate_file.name)
 								recording_duration = float(probe['format']['duration'])
 								current_duration += recording_duration + transition_duration
@@ -276,19 +276,19 @@ if __name__ == '__main__':
 
 							snapshot_ids = ','.join(str(snapshot.Id) for snapshot, _ in snapshots_and_recordings)
 							recording_ids = ','.join(str(recording.Id) for _, recording in snapshots_and_recordings)
-							
+
 							timestamps_file.write(f'Duration: {hours:02}:{minutes:02}:{seconds:02}\n')
 							timestamps_file.write(f'Total: {len(snapshots_and_recordings)}\n')
 							timestamps_file.write(f'Snapshots: {snapshot_ids}\n')
 							timestamps_file.write(f'Recordings: {recording_ids}\n')
-							
+
 							timestamps_file.write('\n')
-							
+
 							if args.published:
 								timestamps_file.write(f'Type: Published ({begin_date} to {end_date})\n')
 							else:
 								timestamps_file.write(f'Type: Any {id_type.title()} ({range_identifier})\n')
-							
+
 							timestamps_file.write(f'Text-to-Speech: {"Yes" if args.tts else "No"}\n')
 							timestamps_file.write(f'Transition Color: {args.color}\n')
 							timestamps_file.write(f'Transition Duration: {args.duration}\n')
@@ -342,10 +342,10 @@ if __name__ == '__main__':
 				finally:
 					transition_file.close()
 					delete_file(transition_file.name)
-					
+
 					concat_file.close()
 					delete_file(concat_file.name)
-						
+
 					for file in intermediate_file_list:
 						file.close()
 						delete_file(file.name)

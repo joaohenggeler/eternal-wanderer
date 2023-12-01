@@ -40,7 +40,7 @@ if __name__ == '__main__':
 	# Editor, change "Speech_OneCore" to "Speech", and then import them using the same tool.
 
 	if args.list:
-		
+
 		engine = CreateObject('SAPI.SpVoice')
 		voice_list = list(engine.GetVoices())
 		voice_list.sort(key=lambda x: (x.GetAttribute('Language'), x.GetAttribute('Name')))
@@ -48,14 +48,14 @@ if __name__ == '__main__':
 		print('Voices visible to the Microsoft Speech API (Name / Language / Gender / Age / Vendor / Description):')
 
 		for i, voice in enumerate(voice_list):
-			
+
 			name = voice.GetAttribute('Name')
 			language = voice.GetAttribute('Language')
 			gender = voice.GetAttribute('Gender')
 			age = voice.GetAttribute('Age')
 			vendor = voice.GetAttribute('Vendor')
 			description = voice.GetDescription()
-			
+
 			info = f'[{i+1} of {len(voice_list)}] {name} / {language} / {gender} / {age} / {vendor} / {description}'
 			print(info)
 
@@ -80,16 +80,16 @@ if __name__ == '__main__':
 				print(f'Could not find the voice "{name}" ({language}) specified in the configuration file.')
 
 	if args.registry:
-		
+
 		try:
 			filename = 'voices.reg'
 			subprocess.run(['reg', 'export', 'HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech_OneCore\\Voices\\Tokens', filename, '/y'], check=True, text=True, capture_output=True)
 
 			with open(filename, encoding='utf-16') as file:
 				content = file.read()
-			
+
 			content = content.replace('Speech_OneCore', 'Speech')
-			
+
 			with open(filename, 'w', encoding='utf-16') as file:
 				file.write(content)
 

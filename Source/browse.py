@@ -30,7 +30,7 @@ if __name__ == '__main__':
 		if args.dump:
 			port = free_port()
 			process = Popen(['mitmdump', '--quiet', '--listen-port', str(port), '--script', 'dump_proxy_addon.py'])
-			
+
 			extra_preferences.update({
 				'network.proxy.type': 1, # Manual proxy configuration (see below).
 				'network.proxy.share_proxy_settings': False,
@@ -44,13 +44,13 @@ if __name__ == '__main__':
 				'network.proxy.socks_port': port,
 				'network.proxy.no_proxies_on': 'localhost, 127.0.0.1',
 			})
-		
+
 			print(f'Created the dump proxy on port {port}.')
 
 		with Browser(multiprocess=args.multiprocess, extra_preferences=extra_preferences, use_extensions=True, use_plugins=True) as (browser, driver):
-			
+
 			if args.pluginreg:
-				
+
 				try:
 					plugin_reg_source_path = os.path.join(browser.profile_path, 'pluginreg.dat')
 					plugin_reg_destination_path = os.path.join(config.profile_path, 'pluginreg.dat')
@@ -75,7 +75,7 @@ if __name__ == '__main__':
 					content = content.replace('6|audio/x-aiff|AIFF|aif,aiff|$', '6||AIFF||$')
 					content = content.replace('7|audio/aiff|AIFF|aif,aiff|$', '7||AIFF||$')
 					content = content.replace('8|audio/basic|AU|au|$', '8||AU||$')
-					
+
 					with open(plugin_reg_destination_path, 'w', encoding='utf-8', newline='') as file:
 						file.write(content)
 

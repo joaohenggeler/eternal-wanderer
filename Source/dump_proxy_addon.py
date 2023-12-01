@@ -16,7 +16,7 @@ timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
 dump_file = open(f'mitmproxy.{timestamp}.dump', 'wb')
 flow_writer = io.FlowWriter(dump_file)
 
-def response(flow: http.HTTPFlow) -> None:	
+def response(flow: http.HTTPFlow) -> None:
 	flow_writer.add(flow)
 
 def done() -> None:

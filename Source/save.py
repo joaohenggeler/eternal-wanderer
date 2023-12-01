@@ -30,12 +30,12 @@ if __name__ == '__main__':
 					save = WaybackMachineSaveAPI(url)
 					wayback_url = save.save()
 					num_saved_urls += 1
-					
+
 					if save.cached_save:
 						print(f'Cached: "{wayback_url}"')
 					else:
 						print(f'Saved: "{wayback_url}".')
-				
+
 				except TooManyRequestsError as error:
 					print(f'Reached the Save API limit while trying to save the URL "{url}": {repr(error)}')
 					break

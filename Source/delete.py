@@ -31,13 +31,13 @@ if __name__ == '__main__':
 		num_deleted = 0
 
 		def delete(path: Optional[str]) -> None:
-			
+
 			nonlocal total, num_deleted
 
 			if path is not None:
 				total += 1
 				print(f'- Recording #{recording.Id} ({recording.CreationTime}): {path}')
-				
+
 				if delete_file(path):
 					num_deleted += 1
 
@@ -49,7 +49,7 @@ if __name__ == '__main__':
 		return num_deleted, total
 
 	with Database() as db:
-		
+
 		try:
 			if args.unapproved:
 
@@ -77,10 +77,10 @@ if __name__ == '__main__':
 
 				total_temporary = 0
 				num_temporary_deleted = 0
-				
+
 				temporary_search_path = os.path.join(tempfile.gettempdir(), CommonConfig.TEMPORARY_PATH_PREFIX + '*')
 				for path in iglob(temporary_search_path):
-					
+
 					total_temporary += 1
 					print(f'- Temporary: {path}')
 
@@ -123,7 +123,7 @@ if __name__ == '__main__':
 
 			if args.unapproved:
 				print(f'Deleted {num_unapproved_deleted} of {total_unapproved} unapproved recordings.')
-			
+
 			if args.compiled:
 				print(f'Deleted {num_compiled_deleted} of {total_compiled} compiled recordings.')
 

@@ -24,7 +24,7 @@ if __name__ == '__main__':
 			database_size = os.path.getsize(config.database_path) / 10 ** 9
 			print(f'- Path: {config.database_path}')
 			print(f'- Size: {database_size:.2f} GB')
-			
+
 			print()
 
 			cursor = db.execute('''
@@ -34,7 +34,7 @@ if __name__ == '__main__':
 									(SELECT COUNT(*) FROM Compilation) AS TotalCompilations,
 									(SELECT COUNT(*) FROM SavedUrl) AS TotalSaved;
 								''')
-			
+
 			row = cursor.fetchone()
 			total_snapshots = row['TotalSnapshots']
 			total_recordings = row['TotalRecordings']

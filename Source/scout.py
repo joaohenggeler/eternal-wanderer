@@ -42,9 +42,9 @@ class ScoutConfig(CommonConfig):
 
 	extension_filter: list[str]
 	user_script_filter: list[str]
-	
+
 	initial_snapshots: list[dict[str, str]]
-	
+
 	ranking_max_points: Optional[int]
 	ranking_offset: Optional[int]
 	min_year: Optional[int]
@@ -54,21 +54,21 @@ class ScoutConfig(CommonConfig):
 	min_snapshots_for_same_host: Optional[int]
 
 	excluded_url_tags: list[str]
-	
+
 	store_all_words_and_tags: bool
-	
+
 	word_points: dict[str, int]
 	tag_points: dict[str, int]
 	media_points: int
-	
+
 	sensitive_words: frozenset[str] # Different from the config data type.
-	
+
 	detect_page_language: bool
 	language_model_path: str
 	tokenize_japanese_text: bool
 
 	def __init__(self):
-		
+
 		super().__init__()
 		self.load_subconfig('scout')
 
@@ -77,17 +77,17 @@ class ScoutConfig(CommonConfig):
 		self.excluded_url_tags = container_to_lowercase(self.excluded_url_tags)
 		self.word_points = container_to_lowercase(self.word_points)
 		self.tag_points = container_to_lowercase(self.tag_points)
-	
+
 		decoded_sensitive_words = set()
 		for word in self.sensitive_words:
 			try:
 				if word.startswith('b64:'):
 					word = b64decode(word.removeprefix('b64:')).decode()
-				
+
 				decoded_sensitive_words.add(word.lower())
 			except binascii.Error as error:
 				log.error(f'Failed to decode the sensitive word "{word}" with the error: {repr(error)}')
-		
+
 		self.sensitive_words = frozenset(decoded_sensitive_words)
 
 		self.language_model_path = os.path.abspath(self.language_model_path)
@@ -113,7 +113,7 @@ if __name__ == '__main__':
 		import fugashi # type: ignore
 		log.info('Initializing the Japanese text tagger.')
 		japanese_tagger = fugashi.Tagger()
-		
+
 		for info in japanese_tagger.dictionary_info:
 			log.info(f'Found the Japanese dictionary: {info}')
 
@@ -149,7 +149,7 @@ if __name__ == '__main__':
 						  'digest': best_snapshot.digest}
 			except NoCDXRecordFound:
 				pass
-			
+
 			except BlockedSiteError:
 				# E.g. https://web.archive.org/web/20020924025743if_/http://www.yahoo.com/homet/?http://www.yahoo.com/picks/
 				# Which links to 13 excluded snapshots from the tvacres.com domain.
@@ -157,11 +157,11 @@ if __name__ == '__main__':
 				result = {'parent_id': parent_id, 'depth': depth, 'state': Snapshot.QUEUED, 'is_excluded': True,
 						  'is_media': None, 'media_extension': None, 'scout_time': None, 'url': url,
 						  'timestamp': timestamp, 'last_modified_time': None, 'url_key': None, 'digest': None}
-			
+
 			except Exception as error:
 				log.error(f'Failed to find the snapshot at "{url}" near {timestamp} with the error: {repr(error)}')
 				retry = not is_wayback_machine_available()
-			
+
 			finally:
 				if retry:
 					log.warning(f'Waiting {retry_wait} seconds for the Wayback Machine to become available again.')
@@ -176,7 +176,7 @@ if __name__ == '__main__':
 
 	def scout_snapshots(num_snapshots: int) -> None:
 		""" Scouts a given number of snapshots in a single batch. """
-		
+
 		log.info(f'Scouting {num_snapshots} snapshots.')
 
 		try:
@@ -189,16 +189,16 @@ if __name__ == '__main__':
 			with Database() as db, Browser(headless=True, use_extensions=True, extension_filter=config.extension_filter, user_script_filter=config.user_script_filter) as (browser, driver):
 
 				if args.initial:
-					
+
 					try:
 						log.info('Inserting the initial Wayback Machine snapshots.')
 
 						initial_snapshot_list = []
 						for page in config.initial_snapshots:
-							
+
 							url = page['url']
 							timestamp = page['timestamp']
-							
+
 							log.info(f'Inserting the initial snapshot at "{url}" near {timestamp}.')
 							initial_snapshot = find_child_snapshot(None, url, timestamp)
 
@@ -242,7 +242,7 @@ if __name__ == '__main__':
 					db.execute('UPDATE Word SET Points = 0, IsSensitive = FALSE;')
 
 					word_and_tag_points = []
-					
+
 					for word, points in config.word_points.items():
 						word_and_tag_points.append({'word': word, 'is_tag': False, 'points': points})
 
@@ -256,9 +256,9 @@ if __name__ == '__main__':
 									ON CONFLICT (Word, IsTag)
 									DO UPDATE SET Points = :points;
 									''', word_and_tag_points)
-					
+
 					sensitive_words = []
-					
+
 					for word in config.sensitive_words:
 						sensitive_words.append({'word': word, 'is_tag': False, 'is_sensitive': True})
 
@@ -301,7 +301,7 @@ if __name__ == '__main__':
 						try:
 							log.warning(f'Skipping the snapshot since it was redirected to "{url}".')
 							db.execute('UPDATE Snapshot SET State = :invalid_state WHERE Id = :id;', {'invalid_state': Snapshot.INVALID, 'id': snapshot.Id})
-						
+
 							# See example #4 in was_wayback_url_redirected().
 							if not is_url_from_domain(url, 'web.archive.org'):
 
@@ -328,7 +328,7 @@ if __name__ == '__main__':
 				# going to ask the CDX API what the real URLs are. The purpose of this pattern is to
 				# minimize the amount of requests to this endpoint.
 				URL_REGEX = re.compile(r'https?://.+', re.IGNORECASE)
-				
+
 				page_text_delimiters = []
 				for i in range(sys.maxunicode + 1):
 					try:
@@ -338,16 +338,16 @@ if __name__ == '__main__':
 							page_text_delimiters.append(char)
 					except ValueError:
 						pass
-				
+
 				log.debug(f'Found {len(page_text_delimiters)} page text delimiters out of {sys.maxunicode} Unicode code points.')
 				PAGE_TEXT_DELIMITER_REGEX = re.compile('|'.join(re.escape(delimiter) for delimiter in page_text_delimiters))
 
 				for snapshot_index in range(num_snapshots):
 
 					if was_exit_command_entered():
-						
+
 						log.info('Stopping at the user\'s request.')
-						
+
 						try:
 							scheduler.shutdown(wait=False)
 						except SchedulerNotRunningError:
@@ -407,13 +407,13 @@ if __name__ == '__main__':
 											 'min_year': config.min_year, 'max_year': config.max_year, 'max_depth': config.max_depth,
 											 'min_snapshots_for_same_host': config.min_snapshots_for_same_host,
 											 'max_required_depth': config.max_required_depth})
-						
+
 						row = cursor.fetchone()
 						if row is not None:
-							
+
 							snapshot = Snapshot(**row)
 							browser.set_fallback_encoding_for_snapshot(snapshot)
-							
+
 							parent_points = row['ParentPoints']
 							snapshots_since_same_host = row['SnapshotsSinceSameHost']
 
@@ -427,7 +427,7 @@ if __name__ == '__main__':
 						log.error(f'Failed to select the next snapshot with the error: {repr(error)}')
 						sleep(config.database_error_wait)
 						continue
-					
+
 					# Due to the way snapshots are labelled, it's possible that a web page will be
 					# marked as a media file and vice versa. Let's look at both cases:
 					# - If it's actually a web page, then it will be skipped since we don't scout
@@ -456,7 +456,7 @@ if __name__ == '__main__':
 
 						try:
 							log.warning('Skipping the snapshot since it was mislabeled as a media file.')
-							
+
 							media_extension = extract_media_extension_from_url(snapshot.Url)
 							db.execute(	'''
 										UPDATE Snapshot
@@ -466,12 +466,12 @@ if __name__ == '__main__':
 										WHERE Id = :id;
 										''',
 										{'scouted_state': Snapshot.SCOUTED, 'media_extension': media_extension, 'id': snapshot.Id})
-							
+
 							if snapshot.PriorityName == 'Scout':
 								db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
-							
+
 							db.commit()
-						
+
 						except sqlite3.Error as error:
 							log.error(f'Failed to update the mislabeled snapshot with the error: {repr(error)}')
 							db.rollback()
@@ -483,7 +483,7 @@ if __name__ == '__main__':
 					word_and_tag_counter: Counter = Counter()
 
 					url_list: list[tuple[str, Optional[str]]] = []
-					
+
 					try:
 						# Checking for redirects should only be done in this block since we're going to navigate to
 						# each individual frame below when counting tags. We'll do this before and after counting
@@ -546,7 +546,7 @@ if __name__ == '__main__':
 									parts = urlparse(url)
 									is_valid = parts.scheme in ['http', 'https'] and parts.netloc != ''
 									is_archive_org = is_url_from_domain(parts, 'archive.org')
-		
+
 									if is_valid and not is_archive_org:
 
 										# Handle URLs with non-HTTP schemes (FTP, Gopher, etc). In these cases, the
@@ -586,7 +586,7 @@ if __name__ == '__main__':
 											match = URL_REGEX.search(parts.query)
 											if match is not None:
 												url_list.append((match[0], wayback_timestamp))
-							
+
 							# Convert the URL to the unmodified page archive.
 							wayback_parts = parse_wayback_machine_snapshot_url(frame_url)
 							if wayback_parts is not None:
@@ -600,9 +600,9 @@ if __name__ == '__main__':
 							frame_text = driver.execute_script('return document.documentElement.innerText;')
 							frame_text_list.append(frame_text)
 							split_text = PAGE_TEXT_DELIMITER_REGEX.split(frame_text.lower())
-							
+
 							for text in filter(None, split_text):
-								
+
 								# Tokenizing Japanese text works best if Firefox can autodetect the correct character
 								# encoding for legacy pages that don't specify one. We'll do this by setting the
 								# "intl.charset.detector" preference to "ja_parallel_state_machine, which tells the
@@ -629,13 +629,13 @@ if __name__ == '__main__':
 								# - Does not require detector: https://web.archive.org/web/19980123230614if_/http://www.geocities.co.jp:80/Milkyway/
 								# - Requires the fallback encoding: https://web.archive.org/web/19991011153317if_/http://www.geocities.com/Athens/Delphi/1240/midigr.htm
 								if config.tokenize_japanese_text:
-									
+
 									# In order to avoid tokenizing non-Japanese text, we would need to determine
 									# if there's any Japanese text in a string. There were some solutions that
 									# used regex and Unicode blocks, but for the sake of consistency we'll use
 									# the fugashi library to do this by checking if a word is unknown.
 									word_list = [word.surface for word in japanese_tagger(text) if not word.is_unk]
-									
+
 									# If we weren't able to split the text into two or more words, just store the
 									# entire string. Checking for one word is probably redundant, but let's do it
 									# anyways just to be sure that nothing was removed from the text.
@@ -647,7 +647,7 @@ if __name__ == '__main__':
 								for word in word_list:
 									if config.store_all_words_and_tags or word in config.word_points:
 										word_and_tag_counter[(word, False)] += 1
-					
+
 						if check_snapshot_redirection(snapshot):
 							continue
 
@@ -669,7 +669,7 @@ if __name__ == '__main__':
 						log.error(f'Failed to retrieve the snapshot\'s page elements with the error: {repr(error)}')
 						invalidate_snapshot(snapshot)
 						continue
-			
+
 					log.debug(f'Found {len(raw_frame_url_list)} valid frames.')
 
 					# Remove any duplicates to minimize the amount of requests to the CDX API.
@@ -684,7 +684,7 @@ if __name__ == '__main__':
 						# while recording the snapshot (see the example below).
 						page_title = driver.title
 						page_uses_plugins = bool(snapshot.PageUsesPlugins)
-		
+
 						for raw_frame_url in raw_frame_url_list:
 
 							# Redirects are expected here since the frame's timestamp is inherited from the
@@ -728,12 +728,12 @@ if __name__ == '__main__':
 
 						timestamp = wayback_timestamp or snapshot.Timestamp
 						child_snapshot = find_child_snapshot(snapshot, url, timestamp)
-					
+
 						if child_snapshot is not None:
 							child_snapshot_list.append(child_snapshot)
 
 					log.info(f'Found {len(child_snapshot_list)} valid snapshots out of {len(url_list)} links.')
-			
+
 					try:
 						db.executemany(	'''
 										INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsMedia, MediaExtension, ScoutTime, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
@@ -772,7 +772,7 @@ if __name__ == '__main__':
 
 						if snapshot.PriorityName == 'Scout':
 							db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
-						
+
 						db.commit()
 
 					except sqlite3.Error as error:
@@ -780,7 +780,7 @@ if __name__ == '__main__':
 						db.rollback()
 						sleep(config.database_error_wait)
 						continue
-		
+
 		except sqlite3.Error as error:
 			log.error(f'Failed to connect to the database with the error: {repr(error)}')
 		except KeyboardInterrupt:

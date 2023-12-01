@@ -15,7 +15,7 @@
 		"headless_firefox_path": "Data/Firefox/56.0.2/App/Firefox/firefox.exe",
 
 		"profile_path": "Data/Profile",
-		
+
 		"preferences":
 		{
 			"app.update.auto": false,
@@ -54,7 +54,7 @@
 			"extensions.greasemonkey.showGrantsWarning": false,
 			"extensions.greasemonkey.stats.prompted": true,
 			"extensions.greasemonkey.sync.enabled": false,
-			
+
 			"gfx.canvas.azure.backends": "direct2d1.1,cairo",
 			"gfx.content.azure.backends": "direct2d1.1,cairo",
 			"gfx.font_rendering.cleartype.always_use_for_content": true,
@@ -200,7 +200,7 @@
 
 		"plugins_path": "Data/Plugins",
 		"use_master_plugin_registry": true,
-		
+
 		"plugins":
 		{
 			"NPSWF32_32_0_0_363.dll": true,
@@ -217,13 +217,13 @@
 			"npsid.dll": true,
 			"npvlc.dll": true
 		},
-		
+
 		"shockwave_renderer": "Auto",
 
 		"java_show_console": false,
 		"java_add_to_path": true,
 		"java_arguments": ["-Dfile.encoding=UTF8", "-Duser.language=ja", "-Duser.country=JP"],
-		
+
 		"cosmo_player_show_console": false,
 		"cosmo_player_renderer": "OpenGL",
 		"cosmo_player_animate_transitions": true,
@@ -248,15 +248,15 @@
 
 		"wayback_machine_rate_limit_amount": 15,
 		"wayback_machine_rate_limit_window": 20,
-		
+
 		"cdx_api_rate_limit_amount": 2,
 		"cdx_api_rate_limit_window": 5,
-		
+
 		"save_api_rate_limit_amount": 3,
 		"save_api_rate_limit_window": 60,
-		
+
 		"rate_limit_poll_frequency": 0.5,
-		
+
 		"wayback_machine_retry_backoff": 60.0,
 		"wayback_machine_retry_max_wait": 900,
 
@@ -441,7 +441,7 @@
 			"mid", "midi",
 			"it", "itz", "mdz", "med", "mod", "s3m", "s3z", "xm", "xmz",
 			"sid",
-			
+
 			"3g2", "3gp", "3gpp", "3gpp2",
 			"aac", "aif", "aifc", "aiff", "amr", "asf", "asx", "au", "avi", "awb",
 			"dif", "divx", "dv",
@@ -484,7 +484,7 @@
 
 		"plugin_load_wait": 5,
 		"base_plugin_crash_timeout": 60,
-		
+
 		"viewport_scroll_percentage": 0.85,
 		"base_wait_after_load": 10,
 		"wait_after_load_per_plugin_instance": 15,
@@ -497,7 +497,7 @@
 		"media_width": "90%",
 		"media_height": "90%",
 		"media_background_color": "#000000",
-		
+
 		"plugin_syncing_page_type": "unload",
 		"plugin_syncing_media_type": "unload",
 		"plugin_syncing_unload_delay": 0.2,
@@ -686,7 +686,7 @@
 	{
 		"scheduler": {"day_of_week": "mon-sat", "hour": "*/3", "jitter": 1200},
 		"num_recordings_per_scheduled_batch": 1,
-		
+
 		"enable_twitter": true,
 		"enable_mastodon": true,
 		"enable_tumblr": true,
@@ -700,7 +700,7 @@
 		"twitter_access_token": "<Access Token>",
 		"twitter_access_token_secret": "<Access Token Secret>",
 
-		"twitter_api_wait": 10,		
+		"twitter_api_wait": 10,
 		"twitter_max_retries": 10,
 		"twitter_retry_wait": 30,
 

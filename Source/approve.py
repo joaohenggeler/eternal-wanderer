@@ -24,7 +24,7 @@ if __name__ == '__main__':
 		parser.error('This script can only be used if the "require_approval" option is enabled.')
 
 	with Database() as db:
-		
+
 		try:
 			cursor = db.execute('''
 								SELECT 	S.*,
@@ -67,12 +67,12 @@ if __name__ == '__main__':
 				priority = max(snapshot.Priority, Snapshot.RECORD_PRIORITY)
 				is_sensitive_override = snapshot.IsSensitiveOverride
 				is_processed = True
-				
+
 				snapshot_updates.append({'state': state, 'priority': priority, 'is_sensitive_override': is_sensitive_override, 'id': snapshot.Id})
 				recording_updates.append({'is_processed': is_processed, 'id': recording.Id})
 
 			row_iter = alternate(row_list) if args.alternate else row_list
-			
+
 			for i, row in enumerate(row_iter, start=1):
 
 				del row['Id']
@@ -109,7 +109,7 @@ if __name__ == '__main__':
 					if args.tts and recording.TextToSpeechFilePath is not None:
 						input('Press enter to listen to the text-to-speech audio file.')
 						os.startfile(recording.TextToSpeechFilePath)
-				
+
 				except FileNotFoundError:
 					print('The recording file does not exist.')
 					record_snapshot_again(snapshot, recording)
@@ -175,7 +175,7 @@ if __name__ == '__main__':
 				db.executemany('UPDATE Snapshot SET State = :state, Priority = :priority, IsSensitiveOverride = :is_sensitive_override WHERE Id = :id;', snapshot_updates)
 				db.executemany('UPDATE Recording SET IsProcessed = :is_processed WHERE Id = :id;', recording_updates)
 				db.commit()
-				
+
 				print()
 				print(f'Evaluated {total_recordings} recordings: {num_approved} approved, {num_rejected} rejected, {num_to_record_again} to be recorded again, {num_missing} missing files.')
 			else:

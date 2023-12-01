@@ -38,7 +38,7 @@ class PublishConfig(CommonConfig):
 	# From the config file.
 	scheduler: dict[str, Union[int, str]]
 	num_recordings_per_scheduled_batch: int
-	
+
 	enable_twitter: bool
 	enable_mastodon: bool
 	enable_tumblr: bool
@@ -52,14 +52,14 @@ class PublishConfig(CommonConfig):
 	twitter_access_token: str
 	twitter_access_token_secret: str
 
-	twitter_api_wait: int	
+	twitter_api_wait: int
 	twitter_max_retries: int
 	twitter_retry_wait: int
 
 	twitter_max_status_length: int
 	twitter_text_to_speech_segment_duration: int
 	twitter_max_text_to_speech_segments: Optional[int]
-	
+
 	mastodon_instance_url: str
 	mastodon_access_token: str
 
@@ -83,7 +83,7 @@ class PublishConfig(CommonConfig):
 	tumblr_max_status_length: int
 
 	def __init__(self):
-		
+
 		super().__init__()
 		self.load_subconfig('publish')
 
@@ -136,7 +136,7 @@ if __name__ == '__main__':
 	log.info('Initializing the publisher.')
 
 	if config.enable_twitter:
-		
+
 		try:
 			# At the time of writing, you need to use the standard Twitter API version 1.1 to upload videos.
 			# This requires having elevated access and using OAuth 1.0a. You also need to use version 2 of
@@ -174,7 +174,7 @@ if __name__ == '__main__':
 			""" Publishes a snapshot recording and text-to-speech file on Twitter. The video recording is added to the main post along
 			with a message whose content is generated using the remaining arguments. The text-to-speech file is added as a reply to the
 			main post. If this file is too long for Twitter's video duration limit, then it's split across multiple replies. """
-			
+
 			log.info('Publishing on Twitter.')
 
 			media_id = None
@@ -189,7 +189,7 @@ if __name__ == '__main__':
 				if False:
 					sleep(config.twitter_api_wait)
 					twitter_api_v1.create_media_metadata(media_id, alt_text)
-				
+
 				# We need to take into account the extra newline and the emoji identifiers since these count as two characters on Twitter.
 				emoji_length = len('\N{DVD}\N{No One Under Eighteen Symbol}\N{Speaker With Three Sound Waves}')
 				max_title_length = max(config.twitter_max_status_length - len('\n') - len(body) - emoji_length, 0)
@@ -213,7 +213,7 @@ if __name__ == '__main__':
 					stream = stream.output(segment_path_format, c='copy', f='segment', segment_time=config.twitter_text_to_speech_segment_duration, reset_timestamps=1)
 					stream = stream.global_args(*config.ffmpeg_global_args)
 					stream = stream.overwrite_output()
-					
+
 					log.debug(f'Splitting the text-to-speech file with the FFmpeg arguments: {stream.get_args()}')
 					stream.run()
 
@@ -223,7 +223,7 @@ if __name__ == '__main__':
 
 					try:
 						if config.twitter_max_text_to_speech_segments is None or len(segment_file_paths) <= config.twitter_max_text_to_speech_segments:
-							
+
 							for i, segment_path in enumerate(segment_file_paths, start=1):
 
 								sleep(config.twitter_api_wait)
@@ -236,10 +236,10 @@ if __name__ == '__main__':
 									twitter_api_v1.create_media_metadata(tts_media_id, tts_alt_text)
 
 								segment_body = tts_body
-								
+
 								if len(segment_file_paths) > 1:
 									segment_body += f'\n{i} of {len(segment_file_paths)}'
-								
+
 								max_title_length = max(config.twitter_max_status_length - len('\n') - len(segment_body), 0)
 								tts_text = title[:max_title_length] + '\n' + segment_body
 
@@ -252,7 +252,7 @@ if __name__ == '__main__':
 							log.info(f'Posted {len(segment_file_paths)} text-to-speech segments.')
 						else:
 							log.info(f'Skipping {len(segment_file_paths)} text-to-speech segments since it exceeds the limit of {config.twitter_max_text_to_speech_segments} files.')
-	
+
 					except TweepyException as error:
 						log.error(f'Failed to post the text-to-speech segments with the error: {repr(error)}')
 					finally:
@@ -267,7 +267,7 @@ if __name__ == '__main__':
 			return media_id, status_id
 
 	if config.enable_mastodon:
-		
+
 		try:
 			log.info('Initializing the Mastodon API interface.')
 			mastodon_api = Mastodon(access_token=config.mastodon_access_token, api_base_url=config.mastodon_instance_url)
@@ -285,7 +285,7 @@ if __name__ == '__main__':
 
 			def reduce_video_size(path: str) -> str:
 				""" Reduces a video's file size. """
-				
+
 				# Closing the file right away makes it easier to delete it later.
 				output_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
 				output_file.close()
@@ -294,7 +294,7 @@ if __name__ == '__main__':
 				stream = stream.output(output_file.name, **config.mastodon_reduce_file_size_ffmpeg_output_args)
 				stream = stream.global_args(*config.ffmpeg_global_args)
 				stream = stream.overwrite_output()
-				
+
 				log.debug(f'Reducing the video size with the FFmpeg arguments: {stream.get_args()}')
 				stream.run()
 
@@ -302,7 +302,7 @@ if __name__ == '__main__':
 
 			def extract_audio(path: str) -> str:
 				""" Extracts the audio from a video file. """
-				
+
 				# Closing the file right away makes it easier to delete it later.
 				output_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp3', delete=False)
 				output_file.close()
@@ -311,7 +311,7 @@ if __name__ == '__main__':
 				stream = stream.output(output_file.name)
 				stream = stream.global_args(*config.ffmpeg_global_args)
 				stream = stream.overwrite_output()
-				
+
 				log.debug(f'Extracting the audio with the FFmpeg arguments: {stream.get_args()}')
 				stream.run()
 
@@ -360,7 +360,7 @@ if __name__ == '__main__':
 				# We'll try to reduce the file size while also having a maximum size limit.
 				recording_path = reduce_video_size(recording.UploadFilePath) if config.mastodon_reduce_file_size else recording.UploadFilePath
 				recording_file_size = os.path.getsize(recording_path)
-				
+
 				if config.mastodon_max_file_size is None or recording_file_size <= config.mastodon_max_file_size:
 
 					media_id = try_media_post(recording_path, mime_type='video/mp4', description=alt_text)
@@ -390,7 +390,7 @@ if __name__ == '__main__':
 								log.info(f'Posted the text-to-speech status #{tts_status_id} with the media #{tts_media_id} ({tts_file_size / 10 ** 6:.1f} MB) using {len(tts_text)} characters.')
 							else:
 								log.info(f'Skipping the text-to-speech audio since its size ({tts_file_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_file_size / 10 ** 6} MB.')
-					
+
 					except MastodonError as error:
 						log.error(f'Failed to post the text-to-speech audio with the error: {repr(error)}')
 				else:
@@ -404,10 +404,10 @@ if __name__ == '__main__':
 				log.error(f'Failed to process the video file with the error: {repr(error)}')
 			finally:
 				if config.mastodon_reduce_file_size:
-					
+
 					if recording_path is not None:
 						delete_file(recording_path)
-					
+
 					if tts_path is not None:
 						delete_file(tts_path)
 
@@ -417,7 +417,7 @@ if __name__ == '__main__':
 
 		try:
 			log.info('Initializing the Tumblr API interface.')
-			tumblr_api = TumblrRestClient(config.tumblr_api_key, config.tumblr_api_secret, 
+			tumblr_api = TumblrRestClient(config.tumblr_api_key, config.tumblr_api_secret,
 										  config.tumblr_access_token, config.tumblr_access_token_secret)
 			info = tumblr_api.info()
 			tumblr_blog_name = info['user']['name']
@@ -452,7 +452,7 @@ if __name__ == '__main__':
 						break
 					else:
 						status_code = response['meta']['status']
-						
+
 						if status_code in [408, 502, 503, 504]:
 							log.warning(f'Retrying the status post operation ({i+1} of {config.tumblr_max_retries}) after failing with the error: {repr(response)}')
 							sleep(config.tumblr_retry_wait)
@@ -461,7 +461,7 @@ if __name__ == '__main__':
 							raise Exception(f'Tumblr Response: {response}')
 				else:
 					raise Exception(f'Tumblr Response: {response}')
-			
+
 			except Exception as error:
 				log.error(f'Failed to post the recording status with the error: {repr(error)}')
 
@@ -480,9 +480,9 @@ if __name__ == '__main__':
 				for recording_index in range(num_recordings):
 
 					if was_exit_command_entered():
-						
+
 						log.info('Stopping at the user\'s request.')
-						
+
 						try:
 							scheduler.shutdown(wait=False)
 						except SchedulerNotRunningError:
@@ -514,9 +514,9 @@ if __name__ == '__main__':
 											''',
 											{'approved_state': Snapshot.APPROVED, 'recorded_state': Snapshot.RECORDED,
 											 'require_approval': config.require_approval})
-						
+
 						row = cursor.fetchone()
-						if row is not None:	
+						if row is not None:
 							# Avoid naming conflicts with each table's primary key.
 							del row['Id']
 							snapshot = Snapshot(**row, Id=row['SnapshotId'])
@@ -527,14 +527,14 @@ if __name__ == '__main__':
 						else:
 							log.info('Ran out of recordings to publish.')
 							break
-					
+
 					except sqlite3.Error as error:
 						log.error(f'Failed to select the next snapshot recording with the error: {repr(error)}')
 						sleep(config.database_error_wait)
 						continue
 
 					log.info(f'[{recording_index+1} of {num_recordings}] Publishing recording #{recording.Id} of snapshot #{snapshot.Id} {snapshot} (approved = {snapshot.State == Snapshot.APPROVED}).')
-					
+
 					title = snapshot.DisplayTitle
 					display_metadata = snapshot.DisplayMetadata
 
@@ -550,7 +550,7 @@ if __name__ == '__main__':
 					long_date = snapshot.OldestDatetime.strftime('%B %Y')
 					alt_text = f'The {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine.'
 					sensitive = snapshot.IsSensitive
-					
+
 					tts_language = f'Text-to-Speech ({snapshot.LanguageName})' if snapshot.LanguageName is not None else 'Text-to-Speech'
 					tts_body = '\n'.join(filter(None, [snapshot.ShortDate, tts_language]))
 					tts_alt_text = f'An audio recording of the {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine. Generated using text-to-speech.'
@@ -569,7 +569,7 @@ if __name__ == '__main__':
 
 					if config.delete_files_after_upload:
 						delete_file(recording.UploadFilePath)
-						
+
 						if recording.TextToSpeechFilePath is not None:
 							delete_file(recording.TextToSpeechFilePath)
 
