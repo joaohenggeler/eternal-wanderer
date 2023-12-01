@@ -2352,7 +2352,7 @@ def is_url_available(url: str, allow_redirects: bool = False) -> bool:
 def is_wayback_machine_available() -> bool:
 	""" Checks if the Wayback Machine is available. """
 	global_rate_limiter.wait_for_wayback_machine_rate_limit()
-	return is_url_available('https://web.archive.org/', allow_redirects=True) \
+	return is_url_available('https://web.archive.org', allow_redirects=True)
 
 def is_cdx_api_available() -> bool:
 	""" Checks if the CDX API is available. """
