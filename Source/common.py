@@ -50,8 +50,8 @@ from requests import RequestException
 from requests.adapters import HTTPAdapter, Retry
 from selenium import webdriver # type: ignore
 from selenium.common.exceptions import ( # type: ignore
-	NoSuchElementException, NoSuchWindowException,
-	TimeoutException, WebDriverException,
+	NoSuchWindowException, TimeoutException,
+	WebDriverException,
 )
 from selenium.webdriver.firefox.firefox_binary import FirefoxBinary # type: ignore
 from selenium.webdriver.firefox.firefox_profile import FirefoxProfile # type: ignore

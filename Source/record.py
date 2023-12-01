@@ -24,7 +24,6 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 import ffmpeg # type: ignore
 import pywinauto # type: ignore
-import requests
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
 from pywinauto.application import WindowSpecification # type: ignore
