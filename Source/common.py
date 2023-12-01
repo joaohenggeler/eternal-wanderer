@@ -2350,11 +2350,18 @@ def is_url_available(url: str, allow_redirects: bool = False) -> bool:
 	return result
 
 def is_wayback_machine_available() -> bool:
-	""" Checks if both the Wayback Machine website and the CDX server are available. """
+	""" Checks if the Wayback Machine is available. """
 	global_rate_limiter.wait_for_wayback_machine_rate_limit()
+	return is_url_available('https://web.archive.org/', allow_redirects=True) \
+
+def is_cdx_api_available() -> bool:
+	""" Checks if the CDX API is available. """
 	global_rate_limiter.wait_for_cdx_api_rate_limit()
-	return 	is_url_available('https://web.archive.org/', allow_redirects=True) \
-		and is_url_available('https://web.archive.org/cdx/search/cdx?url=archive.org&limit=1', allow_redirects=True)
+	return is_url_available('https://web.archive.org/cdx/search/cdx?url=archive.org&limit=1', allow_redirects=True)
+
+def are_wayback_machine_services_available() -> bool:
+	""" Checks if both the Wayback Machine and CDX API are available. """
+	return is_wayback_machine_available() and is_cdx_api_available()
 
 def is_url_from_domain(url: Union[str, ParseResult], domain: str) -> bool:
 	""" Checks if a URL is part of a domain or any of its subdomains. """

@@ -6,9 +6,9 @@ from argparse import ArgumentParser
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
 from common import (
-	Database, Snapshot, find_best_wayback_machine_snapshot,
-	find_extra_wayback_machine_snapshot_info,
-	is_wayback_machine_available, parse_wayback_machine_snapshot_url,
+	Database, Snapshot, are_wayback_machine_services_available,
+	find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info,
+	parse_wayback_machine_snapshot_url,
 )
 
 if __name__ == '__main__':
@@ -105,5 +105,5 @@ if __name__ == '__main__':
 			print(f'The snapshot at "{args.url}" near {args.timestamp} has been excluded from the Wayback Machine.')
 		except Exception as error:
 			print(f'Failed to find a snapshot at "{args.url}" near {args.timestamp} with the error: {repr(error)}')
-			if not is_wayback_machine_available():
+			if not are_wayback_machine_services_available():
 				print('The Wayback Machine is not currently available.')
