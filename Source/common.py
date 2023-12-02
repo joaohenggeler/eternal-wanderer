@@ -1547,8 +1547,10 @@ class Browser:
 				else:
 					break
 
-	def go_to_wayback_url(self, wayback_url: str, close_windows: bool = False) -> None:
+	def go_to_wayback_url(self, wayback_url: str, close_windows: bool = False, cdx_must_be_up: bool = False) -> None:
 		""" Navigates to a Wayback Machine URL, taking into account any rate limiting and retrying if the service is unavailable. """
+
+		is_available = are_wayback_machine_services_available if cdx_must_be_up else is_wayback_machine_available
 
 		for i in itertools.count():
 
@@ -1566,20 +1568,20 @@ class Browser:
 
 				# Skip the availability check for auto-generated media pages.
 				# This check works for expected downtime (e.g. maintenance).
-				retry = not wayback_url.startswith('file:') and not is_wayback_machine_available()
+				retry = not wayback_url.startswith('file:') and not is_available()
 
 			except TimeoutException:
 				log.warning(f'Timed out after waiting {config.page_load_timeout} seconds for the page to load: "{wayback_url}".')
 				# This covers the same case as the next exception without passing the error
 				# along to the caller if a regular page took too long to load.
-				retry = not is_wayback_machine_available()
+				retry = not is_available()
 
 			except WebDriverException:
 				# For cases where the Wayback Machine is unreachable (unexpected downtime)
 				# and an error is raised because we were redirected to "about:neterror".
 				# If this was some other error and the service is available, then it should
 				# be handled by the caller.
-				if is_wayback_machine_available():
+				if is_available():
 					raise
 				else:
 					retry = True

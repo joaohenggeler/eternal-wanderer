@@ -1035,7 +1035,8 @@ if __name__ == '__main__':
 							except Exception as error:
 								log.error(f'Failed to focus on the browser window and move the mouse with the error: {repr(error)}')
 
-							browser.go_to_wayback_url(content_url, close_windows=True)
+							cdx_must_be_up = config.enable_proxy and config.proxy_find_missing_snapshots_using_cdx
+							browser.go_to_wayback_url(content_url, close_windows=True, cdx_must_be_up=cdx_must_be_up)
 
 							if snapshot.Script is not None:
 								log.info(f'Running custom script: "{snapshot.Script}"')
