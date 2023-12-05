@@ -1,5 +1,5 @@
 # How To Set Up And Run The Eternal Wanderer
- 
+
 This page documents every relevant component of the Eternal Wanderer including how to configure and run the bot. Note that this bot is only compatible with Firefox and Windows, largely due to relying on plugins to display old web media. Although the bot can be run in Windows 8.1 and Windows Server, using an updated version of Windows 10 or later is strongly recommended.
 
 **Due to relying on obsolete plugins, some scripts are inherently unsafe. Use this bot at your own risk.**
@@ -307,7 +307,7 @@ Used by `scout.py`.
 
 * `excluded_url_tags`: which HTML tags to skip when collecting URLs from their attributes.
 
-* `store_all_words_and_tags`: enable to store every word and tag from a snapshot's page in the database. Note that this will substantially increase the database's size. If disabled, only the words and tags in `word_points` and `tag_points` are stored. 
+* `store_all_words_and_tags`: enable to store every word and tag from a snapshot's page in the database. Note that this will substantially increase the database's size. If disabled, only the words and tags in `word_points` and `tag_points` are stored.
 
 * `word_points`: how many points each word is worth. Each word is only counted once per page when computing the total amount of points.
 
@@ -370,6 +370,8 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 * `proxy_max_total_save_tries`: the maximum amount of total tries when saving a live URL with a numbered filename. The process described above stops if the script exceeds this many tries, even if we keep finding consecutive live URLs. This is done to prevent infinite loops when dealing with parked domains, i.e., when there's a valid response for every possible consecutive number. Only used if `proxy_save_missing_snapshots_that_still_exist_online` is enabled.
 
 * `proxy_cache_missing_responses`: enable to try to cache 404 and 410 responses from the Wayback Machine. Used to potentially speed up the loading times when recording a snapshot. Only used if `enable_proxy` is enabled.
+
+* `check_availability`: enable to check if the Wayback Machine and CDX API are available before recording. If this is enabled and these services are down, the script will keep retrying indefinitely. While it's recommended that you leave this option enabled, there have been cases where this check says the services are down when snapshots can be loaded successfully. In those situations, this option should be temporarily disabled so the script doesn't hang forever.
 
 * `page_cache_wait`: how long to wait for a page snapshot to finish requesting and caching assets before recording (in seconds).
 
@@ -445,7 +447,7 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `enable_text_to_speech`: enable to generate a text-to-speech recording of a page snapshot's content.
 
-* `text_to_speech_audio_format_type`: the text-to-speech audio format. Must be an enum name from [this page](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ee125189(v=vs.85)) (e.g. `SAFT22kHz16BitMono`). Set to null to use the default format. Only used if `enable_text_to_speech` is enabled. 
+* `text_to_speech_audio_format_type`: the text-to-speech audio format. Must be an enum name from [this page](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ee125189(v=vs.85)) (e.g. `SAFT22kHz16BitMono`). Set to null to use the default format. Only used if `enable_text_to_speech` is enabled.
 
 * `text_to_speech_rate`: the text-to-speech voice's speaking rate. Must be a number between -10 and 10 as mentioned on [this page](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ms723606(v=vs.85)). Set to null to use the default rate. Only used if `enable_text_to_speech` is enabled.
 

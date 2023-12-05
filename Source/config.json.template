@@ -479,6 +479,8 @@
 		"proxy_max_total_save_tries": 100,
 		"proxy_cache_missing_responses": true,
 
+		"check_availability": true,
+
 		"page_cache_wait": 20,
 		"media_cache_wait": 40,
 

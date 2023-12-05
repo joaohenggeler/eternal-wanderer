@@ -1547,7 +1547,7 @@ class Browser:
 				else:
 					break
 
-	def go_to_wayback_url(self, wayback_url: str, close_windows: bool = False, cdx_must_be_up: bool = False) -> None:
+	def go_to_wayback_url(self, wayback_url: str, close_windows: bool = False, check_availability: bool = True, cdx_must_be_up: bool = False) -> None:
 		""" Navigates to a Wayback Machine URL, taking into account any rate limiting and retrying if the service is unavailable. """
 
 		is_available = are_wayback_machine_services_available if cdx_must_be_up else is_wayback_machine_available
@@ -1587,7 +1587,7 @@ class Browser:
 					retry = True
 
 			finally:
-				if retry:
+				if check_availability and retry:
 					log.warning(f'Waiting {retry_wait} seconds for the Wayback Machine to become available again.')
 					sleep(retry_wait)
 					continue

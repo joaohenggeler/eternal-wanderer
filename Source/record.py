@@ -73,6 +73,8 @@ class RecordConfig(CommonConfig):
 	proxy_max_total_save_tries: int
 	proxy_cache_missing_responses: bool
 
+	check_availability: bool
+
 	page_cache_wait: int
 	media_cache_wait: int
 
@@ -1036,7 +1038,7 @@ if __name__ == '__main__':
 								log.error(f'Failed to focus on the browser window and move the mouse with the error: {repr(error)}')
 
 							cdx_must_be_up = config.enable_proxy and config.proxy_find_missing_snapshots_using_cdx
-							browser.go_to_wayback_url(content_url, close_windows=True, cdx_must_be_up=cdx_must_be_up)
+							browser.go_to_wayback_url(content_url, close_windows=True, check_availability=config.check_availability, cdx_must_be_up=cdx_must_be_up)
 
 							if snapshot.Script is not None:
 								log.info(f'Running custom script: "{snapshot.Script}"')
@@ -1318,7 +1320,7 @@ if __name__ == '__main__':
 									log.error(f'Failed to focus on the browser window and move the mouse with the error: {repr(error)}')
 
 								log.info(f'Waiting {wait_after_load:.1f} seconds after loading and then {wait_per_scroll:.1f} for each of the {num_scrolls} scrolls of {scroll_step:.1f} pixels to cover {scroll_height} pixels.')
-								browser.go_to_wayback_url(content_url, close_windows=True)
+								browser.go_to_wayback_url(content_url, close_windows=True, check_availability=config.check_availability)
 
 								if snapshot.Script is not None:
 									log.info(f'Running custom script: "{snapshot.Script}"')
