@@ -257,7 +257,7 @@
 
 		"rate_limit_poll_frequency": 0.5,
 
-		"wayback_machine_retry_backoff": 60.0,
+		"wayback_machine_retry_backoff": 30.0,
 		"wayback_machine_retry_max_wait": 900,
 
 		"allowed_domains": null,
