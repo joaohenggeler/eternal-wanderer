@@ -125,7 +125,7 @@ if __name__ == '__main__':
 					elif verdict[0] == 'y':
 						print('[APPROVED]')
 						state = Snapshot.APPROVED
-						priority = Snapshot.randomize_priority(snapshot.Priority) if args.randomize else snapshot.Priority
+						priority = Snapshot.randomize_priority(Snapshot.PUBLISH_PRIORITY) if args.randomize else snapshot.Priority
 						is_processed = recording.IsProcessed
 						num_approved += 1
 
