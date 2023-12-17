@@ -15,6 +15,7 @@ if __name__ == '__main__':
 	parser.add_argument('max_recordings', nargs='?', type=int, default=-1, help='How many recordings to approve. Omit or set to %(default)s to approve all recordings.')
 	parser.add_argument('-tts', action='store_true', help='Play the text-to-speech audio files after each recording.')
 	parser.add_argument('-alternate', action='store_true', help='Alternate recordings between the beginning and the end.')
+	parser.add_argument('-randomize', action='store_true', help='Randomize the order in which approved recordings are published.')
 	parser.add_argument('-redo', action='store_true', help='Record every snapshot again.')
 	args = parser.parse_args()
 
@@ -124,7 +125,7 @@ if __name__ == '__main__':
 					elif verdict[0] == 'y':
 						print('[APPROVED]')
 						state = Snapshot.APPROVED
-						priority = snapshot.Priority
+						priority = Snapshot.randomize_priority(snapshot.Priority) if args.randomize else snapshot.Priority
 						is_processed = recording.IsProcessed
 						num_approved += 1
 

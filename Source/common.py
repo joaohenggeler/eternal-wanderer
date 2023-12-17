@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from glob import iglob
 from math import ceil
-from random import random
+from random import randint, random
 from subprocess import Popen
 from time import sleep
 from typing import Any, Optional, Union
@@ -753,7 +753,7 @@ class Snapshot:
 	STATE_NAMES: dict[int, str]
 
 	PRIORITY_SIZE = 1000
-	NO_PRIORITY = 0 * PRIORITY_SIZE
+	NO_PRIORITY = 0
 	SCOUT_PRIORITY = 1 * PRIORITY_SIZE
 	RECORD_PRIORITY = 2 * PRIORITY_SIZE
 	PUBLISH_PRIORITY = 3 * PRIORITY_SIZE
@@ -869,6 +869,13 @@ class Snapshot:
 			name = 'Unknown'
 
 		return name
+
+	@staticmethod
+	def randomize_priority(priority: int) -> int:
+		""" Randomizes a priority without changing its type. """
+		min_priority = priority // Snapshot.PRIORITY_SIZE * Snapshot.PRIORITY_SIZE
+		max_priority = min_priority + Snapshot.PRIORITY_SIZE - 1
+		return randint(min_priority, max_priority)
 
 Snapshot.STATE_NAMES = {
 	Snapshot.QUEUED: 'Queued',
