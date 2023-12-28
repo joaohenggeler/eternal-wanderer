@@ -85,6 +85,21 @@ if __name__ == '__main__':
 					num_to_record_again += 1
 					continue
 
+				if snapshot.IsSensitiveOverride is not None:
+					sensitive_reason = '(overridden)'
+				elif snapshot.IsSensitive:
+					cursor = db.execute('''
+										SELECT W.Word
+						 				FROM Snapshot S
+						 				INNER JOIN SnapshotWord SW ON S.Id = SW.SnapshotId
+						 				INNER JOIN Word W ON SW.WordId = W.Id
+						 				WHERE S.Id = :snapshot_id AND W.IsSensitive
+						 				ORDER BY W.Word;
+						 				''', {'snapshot_id': snapshot.Id})
+					sensitive_reason = '(' + ', '.join(row['Word'] for row in cursor) + ')'
+				else:
+					sensitive_reason = ''
+
 				try:
 					print()
 					print(f'[{i} of {total_recordings}] Approve the following recording:')
@@ -95,7 +110,7 @@ if __name__ == '__main__':
 					print(f'- Uses Plugins: {snapshot.PageUsesPlugins}')
 					print(f'- Metadata: {snapshot.DisplayMetadata}')
 					print(f'- Points: {snapshot.Points}')
-					print(f'- Sensitive: {snapshot.IsSensitive} {"(overridden)" if snapshot.IsSensitiveOverride is not None else ""}')
+					print(f'- Sensitive: {snapshot.IsSensitive} {sensitive_reason}')
 					print(f'- Options: {snapshot.Options}')
 					print(f'- Saved URLs (Recording): {row["SavedRecordingUrls"]} of {row["TotalRecordingUrls"]}')
 					print(f'- Saved URLs (Snapshot): {row["SavedSnapshotUrls"]} of {row["TotalSnapshotUrls"]}')
