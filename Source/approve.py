@@ -106,17 +106,39 @@ if __name__ == '__main__':
 					print(f'- Snapshot: #{snapshot.Id} {snapshot}')
 					print(f'- Type: {"Media" if snapshot.IsMedia else "Page"}')
 					print(f'- Title: {snapshot.DisplayTitle}')
-					print(f'- Language: {snapshot.LanguageName}')
-					print(f'- Uses Plugins: {snapshot.PageUsesPlugins}')
-					print(f'- Metadata: {snapshot.DisplayMetadata}')
+					
+					if snapshot.LanguageName is not None:
+						print(f'- Language: {snapshot.LanguageName}')
+					
+					if snapshot.PageUsesPlugins is not None:
+						print(f'- Uses Plugins: {snapshot.PageUsesPlugins}')
+					
+					if snapshot.DisplayMetadata is not None:
+						print(f'- Metadata: {snapshot.DisplayMetadata}')
+					
 					print(f'- Points: {snapshot.Points}')
-					print(f'- Sensitive: {snapshot.IsSensitive} {sensitive_reason}')
-					print(f'- Options: {snapshot.Options}')
-					print(f'- Saved URLs (Recording): {row["SavedRecordingUrls"]} of {row["TotalRecordingUrls"]}')
-					print(f'- Saved URLs (Snapshot): {row["SavedSnapshotUrls"]} of {row["TotalSnapshotUrls"]}')
+					
+					if snapshot.IsSensitive:
+						print(f'- Sensitive: {snapshot.IsSensitive} {sensitive_reason}')
+					
+					if snapshot.Options:
+						print(f'- Options: {snapshot.Options}')
+					
+					if row['TotalRecordingUrls'] > 0:
+						print(f'- Saved URLs (Recording): {row["SavedRecordingUrls"]} of {row["TotalRecordingUrls"]}')
+					
+					if row['TotalSnapshotUrls'] > 0:
+						print(f'- Saved URLs (Snapshot): {row["SavedSnapshotUrls"]} of {row["TotalSnapshotUrls"]}')
+					
 					print(f'- Filename: {recording.UploadFilename}')
-					print(f'- Has Audio: {recording.HasAudio}')
-					print(f'- Text-to-Speech: {recording.TextToSpeechFilename is not None}')
+					
+					if recording.HasAudio:
+						print(f'- Has Audio: {recording.HasAudio}')
+					
+					has_tts = recording.TextToSpeechFilename is not None
+					if has_tts:
+						print(f'- Text-to-Speech: {has_tts}')
+					
 					print()
 
 					input('Press enter to watch the recording.')
