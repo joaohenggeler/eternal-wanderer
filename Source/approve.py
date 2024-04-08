@@ -106,39 +106,39 @@ if __name__ == '__main__':
 					print(f'- Snapshot: #{snapshot.Id} {snapshot}')
 					print(f'- Type: {"Media" if snapshot.IsMedia else "Page"}')
 					print(f'- Title: {snapshot.DisplayTitle}')
-					
+
 					if snapshot.LanguageName is not None:
 						print(f'- Language: {snapshot.LanguageName}')
-					
+
 					if snapshot.PageUsesPlugins is not None:
 						print(f'- Uses Plugins: {snapshot.PageUsesPlugins}')
-					
+
 					if snapshot.DisplayMetadata is not None:
 						print(f'- Metadata: {snapshot.DisplayMetadata}')
-					
+
 					print(f'- Points: {snapshot.Points}')
-					
+
 					if snapshot.IsSensitive:
 						print(f'- Sensitive: {snapshot.IsSensitive} {sensitive_reason}')
-					
+
 					if snapshot.Options:
 						print(f'- Options: {snapshot.Options}')
-					
+
 					if row['TotalRecordingUrls'] > 0:
 						print(f'- Saved URLs (Recording): {row["SavedRecordingUrls"]} of {row["TotalRecordingUrls"]}')
-					
+
 					if row['TotalSnapshotUrls'] > 0:
 						print(f'- Saved URLs (Snapshot): {row["SavedSnapshotUrls"]} of {row["TotalSnapshotUrls"]}')
-					
+
 					print(f'- Filename: {recording.UploadFilename}')
-					
+
 					if recording.HasAudio:
 						print(f'- Has Audio: {recording.HasAudio}')
-					
+
 					has_tts = recording.TextToSpeechFilename is not None
 					if has_tts:
 						print(f'- Text-to-Speech: {has_tts}')
-					
+
 					print()
 
 					input('Press enter to watch the recording.')
