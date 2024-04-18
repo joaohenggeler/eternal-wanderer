@@ -7,6 +7,7 @@ import logging
 import os
 from dataclasses import dataclass
 from math import ceil
+from pathlib import Path
 from typing import Optional, TYPE_CHECKING, Union
 
 from .logger import log
@@ -25,25 +26,25 @@ class CommonConfig:
 	debug: bool
 	locale: str
 
-	database_path: str
+	database_path: Path
 	database_error_wait: int
 
-	gui_webdriver_path: str
-	headless_webdriver_path: str
+	gui_webdriver_path: Path
+	headless_webdriver_path: Path
 	page_load_timeout: int
 
-	gui_firefox_path: str
-	headless_firefox_path: str
+	gui_firefox_path: Path
+	headless_firefox_path: Path
 
-	profile_path: str
+	profile_path: Path
 	preferences: dict[str, Union[bool, int, str]]
 
-	extensions_path: str
+	extensions_path: Path
 	extensions_before_running: dict[str, bool]
 	extensions_after_running: dict[str, bool]
 	user_scripts: dict[str, bool]
 
-	plugins_path: str
+	plugins_path: Path
 	use_master_plugin_registry: bool
 	plugins: dict[str, bool]
 
@@ -59,15 +60,15 @@ class CommonConfig:
 
 	_3dvia_renderer: str
 
-	autoit_path: str
+	autoit_path: Path
 	autoit_poll_frequency: int
 	autoit_scripts: dict[str, bool]
 
-	fonts_path: str
+	fonts_path: Path
 
-	recordings_path: str
+	recordings_path: Path
 	max_recordings_per_directory: int
-	compilations_path: str
+	compilations_path: Path
 
 	wayback_machine_rate_limit_amount: int
 	wayback_machine_rate_limit_window: int
@@ -89,7 +90,7 @@ class CommonConfig:
 	enable_fallback_encoding: bool
 	use_guessed_encoding_as_fallback: bool
 
-	ffmpeg_path: Optional[str]
+	ffmpeg_path: Optional[Path]
 	ffmpeg_global_args: list[str]
 
 	language_names: dict[str, str]
@@ -148,20 +149,22 @@ class CommonConfig:
 
 		self.load_subconfig('common')
 
-		self.database_path = os.path.abspath(self.database_path)
-		self.gui_webdriver_path = os.path.abspath(self.gui_webdriver_path)
-		self.headless_webdriver_path = os.path.abspath(self.headless_webdriver_path)
-		self.gui_firefox_path = os.path.abspath(self.gui_firefox_path)
-		self.headless_firefox_path = os.path.abspath(self.headless_firefox_path)
+		self.database_path = Path(self.database_path).absolute()
+		self.gui_webdriver_path = Path(self.gui_webdriver_path).absolute()
+		self.headless_webdriver_path = Path(self.headless_webdriver_path).absolute()
+		self.gui_firefox_path = Path(self.gui_firefox_path).absolute()
+		self.headless_firefox_path = Path(self.headless_firefox_path).absolute()
 
-		self.profile_path = os.path.abspath(self.profile_path)
-		self.extensions_path = os.path.abspath(self.extensions_path)
-		self.plugins_path = os.path.abspath(self.plugins_path)
-		self.autoit_path = os.path.abspath(self.autoit_path)
-		self.fonts_path = os.path.abspath(self.fonts_path)
-		self.recordings_path = os.path.abspath(self.recordings_path)
-		self.compilations_path = os.path.abspath(self.compilations_path)
-		self.ffmpeg_path = os.path.abspath(self.ffmpeg_path)
+		self.profile_path = Path(self.profile_path).absolute()
+		self.extensions_path = Path(self.extensions_path).absolute()
+		self.plugins_path = Path(self.plugins_path).absolute()
+		self.autoit_path = Path(self.autoit_path).absolute()
+		self.fonts_path = Path(self.fonts_path).absolute()
+		self.recordings_path = Path(self.recordings_path).absolute()
+		self.compilations_path = Path(self.compilations_path).absolute()
+
+		if self.ffmpeg_path is not None:
+			self.ffmpeg_path = Path(self.ffmpeg_path).absolute()
 
 		self.extensions_before_running = container_to_lowercase(self.extensions_before_running)
 		self.extensions_after_running = container_to_lowercase(self.extensions_after_running)
@@ -232,10 +235,10 @@ class CommonConfig:
 				else:
 					setattr(self, option, self.default_options[option])
 
-	def get_recording_subdirectory_path(self, id_: int) -> str:
+	def get_recording_subdirectory_path(self, id_: int) -> Path:
 		""" Retrieves the absolute path of a snapshot recording from its ID. """
 		bucket = ceil(id_ / self.max_recordings_per_directory) * self.max_recordings_per_directory
-		return os.path.join(self.recordings_path, str(bucket))
+		return self.recordings_path / str(bucket)
 
 for option in ['encoding', 'media_extension_override', 'notes', 'script', 'tags']:
 	assert option not in CommonConfig.MUTABLE_OPTIONS, f'The mutable option name "{option}" is reserved.'
@@ -250,4 +253,4 @@ log.debug('Running in debug mode.')
 locale.setlocale(locale.LC_ALL, config.locale)
 
 if config.ffmpeg_path is not None:
-	os.environ['PATH'] = config.ffmpeg_path + ';' + os.environ.get('PATH', '')
+	os.environ['PATH'] = str(config.ffmpeg_path) + ';' + os.environ.get('PATH', '')

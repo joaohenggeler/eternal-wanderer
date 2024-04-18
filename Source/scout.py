@@ -2,18 +2,17 @@
 
 import binascii
 import itertools
-import os
 import re
 import sqlite3
-import string
 import sys
 import unicodedata
 from argparse import ArgumentParser
 from base64 import b64decode
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 from time import sleep
-from typing import Optional, Union, cast
+from typing import Optional, Union
 from urllib.parse import parse_qsl, unquote, urlparse, urlunparse
 
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
@@ -69,7 +68,7 @@ class ScoutConfig(CommonConfig):
 	sensitive_words: frozenset[str] # Different from the config data type.
 
 	detect_page_language: bool
-	language_model_path: str
+	language_model_path: Path
 	tokenize_japanese_text: bool
 
 	def __init__(self):
@@ -95,7 +94,7 @@ class ScoutConfig(CommonConfig):
 
 		self.sensitive_words = frozenset(decoded_sensitive_words)
 
-		self.language_model_path = os.path.abspath(self.language_model_path)
+		self.language_model_path = Path(self.language_model_path).absolute()
 
 if __name__ == '__main__':
 
@@ -112,7 +111,7 @@ if __name__ == '__main__':
 	if config.detect_page_language:
 		import fasttext # type: ignore
 		log.info(f'Loading the FastText model "{config.language_model_path}".')
-		language_model = fasttext.load_model(config.language_model_path)
+		language_model = fasttext.load_model(str(config.language_model_path))
 
 	if config.tokenize_japanese_text:
 		import fugashi # type: ignore

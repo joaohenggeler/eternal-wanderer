@@ -2,9 +2,9 @@
 
 import dataclasses
 import json
-import os
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from random import randint
 from typing import Optional
 from urllib.parse import unquote, urlparse, urlunparse
@@ -157,7 +157,7 @@ class Snapshot:
 		if not self.DisplayTitle:
 
 			parts = urlparse(unquote(self.Url))
-			self.DisplayTitle = os.path.basename(parts.path)
+			self.DisplayTitle = Path(parts.path).name
 
 			if not self.DisplayTitle:
 				new_parts = parts._replace(netloc=parts.hostname, params='', query='', fragment='')

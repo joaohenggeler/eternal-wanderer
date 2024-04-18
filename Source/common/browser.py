@@ -8,7 +8,7 @@ import shutil
 import tempfile
 from base64 import b64encode
 from collections.abc import Iterator
-from glob import iglob
+from pathlib import Path
 from subprocess import Popen
 from time import sleep
 from typing import Optional, Union
@@ -40,7 +40,7 @@ from .rate_limiter import global_rate_limiter
 from .snapshot import Snapshot
 from .temporary_registry import TemporaryRegistry
 from .util import (
-	delete_directory, delete_file,
+	container_to_lowercase, delete_directory, delete_file,
 	kill_processes_by_path, kill_process_by_pid,
 )
 from .wayback import (
@@ -54,18 +54,17 @@ class Browser:
 	use_plugins: bool
 	use_autoit: bool
 
-	firefox_path: str
-	firefox_directory_path: str
-	webdriver_path: str
+	firefox_path: Path
+	webdriver_path: Path
 
 	registry: TemporaryRegistry
-	java_deployment_path: str
-	java_bin_path: Optional[str]
+	java_deployment_path: Path
+	java_bin_path: Optional[Path]
 	autoit_processes: list[Popen]
 
 	driver: WebDriver
 	version: str
-	profile_path: str
+	profile_path: Path
 	pid: int
 
 	application: Optional[WindowsApplication]
@@ -89,24 +88,23 @@ class Browser:
 		self.use_autoit = use_autoit
 
 		self.firefox_path = config.headless_firefox_path if headless else config.gui_firefox_path
-		self.firefox_directory_path = os.path.dirname(self.firefox_path)
 		self.webdriver_path = config.headless_webdriver_path if headless else config.gui_webdriver_path
 
 		self.registry = TemporaryRegistry()
-		self.java_deployment_path = os.path.join(os.environ['USERPROFILE'], 'AppData', 'LocalLow', 'Sun', 'Java', 'Deployment')
+		self.java_deployment_path = Path(os.environ['USERPROFILE'], 'AppData', 'LocalLow', 'Sun', 'Java', 'Deployment')
 		self.java_bin_path = None
 		self.autoit_processes = []
 
-		profile = FirefoxProfile(config.profile_path)
+		profile = FirefoxProfile(str(config.profile_path))
 		log.info(f'Created the temporary Firefox profile at "{profile.profile_dir}".')
 
 		if not config.use_master_plugin_registry:
-			plugin_reg_path = os.path.join(profile.profile_dir, 'pluginreg.dat')
+			plugin_reg_path = Path(profile.profile_dir, 'pluginreg.dat')
 			delete_file(plugin_reg_path)
 
 		try:
-			scripts_path = os.path.join(profile.profile_dir, 'gm_scripts')
-			scripts_config_path = os.path.join(scripts_path, 'config.xml')
+			scripts_path = Path(profile.profile_dir, 'gm_scripts')
+			scripts_config_path = scripts_path / 'config.xml'
 
 			tree = ElementTree.parse(scripts_config_path)
 			for script in tree.getroot():
@@ -145,16 +143,15 @@ class Browser:
 			plugin_paths = [''] * len(config.plugins)
 			plugin_precedence = {key: i for i, key in enumerate(config.plugins)}
 
-			plugin_search_path = os.path.join(config.plugins_path, '**', 'np*.dll')
-			for path in iglob(plugin_search_path, recursive=True):
+			for path in config.plugins_path.rglob('np*.dll'):
 
-				filename = os.path.basename(path).lower()
+				filename = path.name.lower()
 				if filename in config.plugins:
 
 					if config.plugins[filename]:
 						log.info(f'Using the plugin "{filename}".')
 						index = plugin_precedence[filename]
-						plugin_paths[index] = os.path.dirname(path)
+						plugin_paths[index] = str(path.parent)
 					else:
 						log.info(f'Skipping the plugin "{filename}" at the user\'s request.')
 
@@ -163,8 +160,8 @@ class Browser:
 
 			os.environ['MOZ_PLUGIN_PATH'] = ';'.join(plugin_paths)
 
-			plugin_extender_source_path = os.path.join(config.plugins_path, 'BrowserPluginExtender', 'BrowserPluginExtender.dll')
-			shutil.copy(plugin_extender_source_path, self.firefox_directory_path)
+			plugin_extender_source_path = config.plugins_path / 'BrowserPluginExtender' / 'BrowserPluginExtender.dll'
+			shutil.copy(plugin_extender_source_path, self.firefox_path.parent)
 
 			self.configure_shockwave_player()
 			self.configure_java_plugin()
@@ -181,13 +178,13 @@ class Browser:
 
 				if enabled and not filtered:
 					log.info(f'Installing the extension "{filename}".')
-					extension_path = os.path.join(config.extensions_path, filename)
-					profile.add_extension(extension_path)
+					extension_path = config.extensions_path / filename
+					profile.add_extension(str(extension_path))
 				else:
 					log.info(f'Skipping the extension "{filename}" at the user\'s request.')
 
 		options = webdriver.FirefoxOptions()
-		options.binary = FirefoxBinary(self.firefox_path)
+		options.binary = FirefoxBinary(str(self.firefox_path))
 		options.profile = profile
 		options.headless = headless
 
@@ -200,11 +197,9 @@ class Browser:
 		if not headless:
 			# E.g. https://web.archive.org/web/19990221053308if_/http://www.geocities.com:80/Eureka/Park/5977/hallow/index.html
 			# Which uses the Halloween font.
-			font_search_path = os.path.join(config.fonts_path, '*.ttf')
-			firefox_fonts_path = os.path.join(self.firefox_directory_path, 'fonts')
-			for path in iglob(font_search_path):
-				filename = os.path.basename(path)
-				log.info(f'Adding the font "{filename}".')
+			firefox_fonts_path = self.firefox_path.parent / 'fonts'
+			for path in config.fonts_path.glob('*.ttf'):
+				log.info(f'Adding the font "{path.name}".')
 				shutil.copy(path, firefox_fonts_path)
 
 		# Disable DPI scaling to fix potential display issues in Firefox.
@@ -231,7 +226,7 @@ class Browser:
 		assert self.driver.capabilities['pageLoadStrategy'] == 'normal', 'The page load strategy must be "normal".'
 
 		self.version =  self.driver.capabilities['browserVersion']
-		self.profile_path = self.driver.capabilities['moz:profile']
+		self.profile_path = Path(self.driver.capabilities['moz:profile'])
 		self.pid = self.driver.capabilities['moz:processID']
 
 		log.info(f'Running Firefox version {self.version}.')
@@ -256,7 +251,7 @@ class Browser:
 
 				if enabled and not filtered:
 					log.info(f'Installing the extension "{filename}".')
-					extension_path = os.path.join(config.extensions_path, filename)
+					extension_path = config.extensions_path / filename
 					self.driver.install_addon(extension_path)
 				else:
 					log.info(f'Skipping the extension "{filename}" at the user\'s request.')
@@ -274,7 +269,7 @@ class Browser:
 						# since we only want one of each running at the same time anyways.
 
 						log.info(f'Running the AutoIt script "{filename}".')
-						script_path = os.path.join(config.autoit_path, filename)
+						script_path = config.autoit_path / filename
 
 						kill_processes_by_path(script_path)
 						process = Popen([script_path, str(config.autoit_poll_frequency)])
@@ -323,33 +318,31 @@ class Browser:
 	def configure_java_plugin(self) -> None:
 		""" Configures the Java Plugin by generating the appropriate deployment files and passing any useful parameters to the JRE. """
 
-		java_plugin_search_path = os.path.join(config.plugins_path, '**', 'jre*', 'bin', 'plugin2')
-		java_plugin_path = next(iglob(java_plugin_search_path, recursive=True), None)
+		java_plugin_path = next(config.plugins_path.rglob('jre*/bin/plugin2'), None)
 		if java_plugin_path is None:
 			log.error('Could not find the path to the Java Runtime Environment. The Java Plugin was not set up correctly.')
 			return
 
-		java_jre_path = os.path.dirname(os.path.dirname(java_plugin_path))
+		java_jre_path = java_plugin_path.parent.parent
 		log.info(f'Configuring the Java Plugin using the runtime environment located at "{java_jre_path}".')
 
-		java_lib_path = os.path.join(java_jre_path, 'lib')
-		self.java_bin_path = os.path.join(java_jre_path, 'bin')
+		java_lib_path = java_jre_path / 'lib'
+		self.java_bin_path = java_jre_path / 'bin'
 
 		if config.java_add_to_path:
-			path = os.environ.get('PATH', '')
-			os.environ['PATH'] = self.java_bin_path + ';' + path
+			os.environ['PATH'] = str(self.java_bin_path) + ';' + os.environ.get('PATH', '')
 
-		java_config_path = os.path.join(java_lib_path, 'deployment.config')
-		java_properties_path = os.path.join(java_lib_path, 'deployment.properties')
+		java_config_path = java_lib_path / 'deployment.config'
+		java_properties_path = java_lib_path / 'deployment.properties'
 
-		java_config_template_path = os.path.join(config.plugins_path, 'Java', 'deployment.config.template')
-		java_properties_template_path = os.path.join(config.plugins_path, 'Java', 'deployment.properties.template')
+		java_config_template_path = config.plugins_path / 'Java' / 'deployment.config.template'
+		java_properties_template_path = config.plugins_path / 'Java' / 'deployment.properties.template'
 
 		with open(java_config_template_path, encoding='utf-8') as file:
 			content = file.read()
 
 		content = content.replace('{comment}', f'Generated by "{__file__}" on {Database.get_current_timestamp()}.')
-		content = content.replace('{system_config_path}', java_properties_path.replace('\\', '/').replace(' ', '\\u0020'))
+		content = content.replace('{system_config_path}', str(java_properties_path).replace('\\', '/').replace(' ', '\\u0020'))
 
 		with open(java_config_path, 'w', encoding='utf-8') as file:
 			file.write(content)
@@ -358,18 +351,18 @@ class Browser:
 			content = file.read()
 
 		# E.g. "1.8.0" or "1.8.0_11"
-		java_product = re.findall(r'(?:jdk|jre)((?:\d+\.\d+\.\d+)(?:_\d+)?)', java_jre_path, re.IGNORECASE)[-1]
+		java_product = re.findall(r'(?:jdk|jre)((?:\d+\.\d+\.\d+)(?:_\d+)?)', str(java_jre_path), re.IGNORECASE)[-1]
 		java_platform, *_ = java_product.rpartition('.') # E.g. "1.8"
 		*_, java_version = java_platform.partition('.') # E.g. "8"
 
-		java_web_start_path = os.path.join(self.java_bin_path, 'javaws.exe')
+		java_web_start_path = self.java_bin_path / 'javaws.exe'
 
-		java_exception_sites_path = os.path.join(java_lib_path, 'exception.sites')
-		java_exception_sites_template_path = os.path.join(config.plugins_path, 'Java', 'exception.sites.template')
+		java_exception_sites_template_path = config.plugins_path / 'Java' / 'exception.sites.template'
+		java_exception_sites_path = java_lib_path / 'exception.sites'
 		shutil.copy(java_exception_sites_template_path, java_exception_sites_path)
 
-		def escape_java_deployment_properties_path(path: str) -> str:
-			return path.replace('\\', '\\\\').replace(':', '\\:').replace(' ', '\\u0020')
+		def escape_java_deployment_properties_path(path: Path) -> str:
+			return str(path).replace('\\', '\\\\').replace(':', '\\:').replace(' ', '\\u0020')
 
 		content = content.replace('{comment}', f'Generated by "{__file__}" on {Database.get_current_timestamp()}.')
 		content = content.replace('{jre_platform}', java_platform)
@@ -383,13 +376,13 @@ class Browser:
 		with open(java_properties_path, 'w', encoding='utf-8') as file:
 			file.write(content)
 
-		java_policy_path = os.path.join(java_lib_path, 'security', 'java.policy')
-		java_policy_template_path = os.path.join(config.plugins_path, 'Java', 'java.policy.template')
+		java_policy_template_path = config.plugins_path / 'Java' / 'java.policy.template'
+		java_policy_path = java_lib_path / 'security' / 'java.policy'
 		shutil.copy(java_policy_template_path, java_policy_path)
 
 		# Override any security properties from other locally installed Java versions in order to allow applets
 		# to run even if they use a disabled cryptographic algorithm.
-		java_security_path = os.path.join(java_lib_path, 'security', 'java.security')
+		java_security_path = java_lib_path / 'security' / 'java.security'
 
 		with open(java_security_path, encoding='utf-8') as file:
 			content = file.read()
@@ -410,7 +403,7 @@ class Browser:
 		# Japanese text (see the java_arguments option in the configuration file). Note that changing this to a
 		# different language may require you to add the localized security prompt's title to the "close_java_popups"
 		# AutoIt script.
-		escaped_java_security_path = java_security_path.replace('\\', '/')
+		escaped_java_security_path = str(java_security_path).replace('\\', '/')
 		required_java_arguments = [f'-Djava.security.properties=="file:///{escaped_java_security_path}"', '-Xverify:none']
 		os.environ['JAVA_TOOL_OPTIONS'] = ' '.join(required_java_arguments + config.java_arguments)
 		os.environ['_JAVA_OPTIONS'] = ''
@@ -422,18 +415,16 @@ class Browser:
 	def configure_cosmo_player(self) -> None:
 		""" Configures the Cosmo Player by setting the appropriate registry keys. """
 
-		cosmo_player_search_path = os.path.join(config.plugins_path, '**', 'npcosmop211.dll')
-		cosmo_player_path = next(iglob(cosmo_player_search_path, recursive=True), None)
+		cosmo_player_path = next(config.plugins_path.rglob('npcosmop211.dll'), None)
 		if cosmo_player_path is None:
 			log.error('Could not find the path to the Cosmo Player plugin files. The Cosmo Player was not be set up correctly.')
 			return
 
-		cosmo_player_path = os.path.dirname(cosmo_player_path)
+		cosmo_player_path = cosmo_player_path.parent
 		log.info(f'Configuring the Cosmo Player using the plugin files located at "{cosmo_player_path}".')
 
-		cosmo_player_system32_path = os.path.join(cosmo_player_path, 'System32')
-		path = os.environ.get('PATH', '')
-		os.environ['PATH'] = cosmo_player_system32_path + ';' + path
+		cosmo_player_system32_path = cosmo_player_path / 'System32'
+		os.environ['PATH'] = str(cosmo_player_system32_path) + ';' + os.environ.get('PATH', '')
 
 		# Keep in mind that the temporary registry always operates on the 32-bit view of the registry.
 		# In other words, the following values will be redirected to the following registry keys:
@@ -450,9 +441,9 @@ class Browser:
 		#
 		# HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\COSMOSOFTWARE
 
-		required_registry_keys: dict[str, Union[int, str]] = {
+		required_registry_keys: dict[str, Union[int, str, Path]] = {
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia AudioRenderer3',
-			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\': os.path.join(cosmo_player_system32_path, 'cm12_dshow.dll'),
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\': cosmo_player_system32_path / 'cm12_dshow.dll',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\THREADINGMODEL': 'Both',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\MERIT': 2097152,
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\IN\\DIRECTION': 0,
@@ -465,7 +456,7 @@ class Browser:
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646731-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia AudioRenderer3',
 
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia VideoRenderer3',
-			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\': os.path.join(cosmo_player_system32_path, 'cm12_dshow.dll'),
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\': cosmo_player_system32_path / 'cm12_dshow.dll',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\INPROCSERVER32\\THREADINGMODEL': 'Both',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\MERIT': 2097152,
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\CLSID\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\PINS\\INPUT\\DIRECTION': 0,
@@ -477,11 +468,11 @@ class Browser:
 
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\CLASSES\\FILTER\\{06646732-BCF3-11D0-9518-00C04FC2DD79}\\': 'CosmoMedia VideoRenderer3',
 
-			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\D3D\\PATH': os.path.join(cosmo_player_system32_path, 'rob10_d3d.dll'),
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\D3D\\PATH': cosmo_player_system32_path / 'rob10_d3d.dll',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\D3D\\UINAME': 'Direct3D Renderer',
-			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\NORENDER\\PATH': os.path.join(cosmo_player_system32_path, 'rob10_none.dll'),
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\NORENDER\\PATH': cosmo_player_system32_path / 'rob10_none.dll',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\NORENDER\\UINAME': 'NonRendering Renderer',
-			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\OPENGL\\PATH': os.path.join(cosmo_player_system32_path, 'rob10_gl.dll'),
+			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\OPENGL\\PATH': cosmo_player_system32_path / 'rob10_gl.dll',
 			'HKEY_LOCAL_MACHINE\\SOFTWARE\\COSMOSOFTWARE\\ROBRENDERER\\1.0\\OPENGL\\UINAME': 'OpenGL Renderer',
 		}
 
@@ -495,7 +486,7 @@ class Browser:
 		renderer = {'auto': 'AUTO', 'directx': 'D3D', 'opengl': 'OPENGL'}.get(config.cosmo_player_renderer)
 		assert renderer is not None, f'Unknown Cosmo Player renderer "{config.cosmo_player_renderer}".'
 
-		settings_registry_keys: dict[str, Union[int, str]] = {
+		settings_registry_keys: dict[str, Union[int, str, Path]] = {
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\PANEL_MAXIMIZED': 0, # Minimize dashboard.
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\textureQuality': 1, # Texture quality (auto = 0, best = 1, fastest = 2).
 			'HKEY_CURRENT_USER\\SOFTWARE\\CosmoSoftware\\CosmoPlayer\\2.1.1\\transparency': 1, # Nice transparency (off = 0, on = 1).
@@ -546,12 +537,12 @@ class Browser:
 
 	def delete_user_level_java_properties(self) -> None:
 		""" Deletes the current user-level Java deployment properties file. """
-		user_level_java_properties_path = os.path.join(self.java_deployment_path, 'deployment.properties')
+		user_level_java_properties_path = self.java_deployment_path / 'deployment.properties'
 		delete_file(user_level_java_properties_path)
 
 	def delete_java_plugin_cache(self) -> None:
 		""" Deletes the Java Plugin cache directory. """
-		java_cache_path = os.path.join(self.java_deployment_path, 'cache')
+		java_cache_path = self.java_deployment_path / 'cache'
 		delete_directory(java_cache_path)
 
 	def shutdown(self):
@@ -562,31 +553,27 @@ class Browser:
 		except WebDriverException as error:
 			log.error(f'Failed to quit the WebDriver with the error: {repr(error)}')
 
-		temporary_path = tempfile.gettempdir()
+		temporary_path = Path(tempfile.gettempdir())
 
 		# Delete the temporary files directories from previous executions. Remeber that there's a bug
 		# when running the Firefox WebDriver on Windows that prevents it from shutting down properly
 		# if Ctrl-C is used.
 
-		temporary_search_path = os.path.join(temporary_path, 'rust_mozprofile*')
-		for path in iglob(temporary_search_path):
+		for path in temporary_path.glob('rust_mozprofile*'):
 			try:
 				log.info(f'Deleting the temporary directory "{path}".')
 				delete_directory(path)
 			except PermissionError as error:
 				log.error(f'Failed to delete the temporary directory with the error: "{repr(error)}".')
 
-		temporary_search_path = os.path.join(temporary_path, '*', 'webdriver-py-profilecopy')
-		for path in iglob(temporary_search_path):
+		for path in temporary_path.glob('*/webdriver-py-profilecopy'):
 			try:
-				path = os.path.dirname(path)
-				log.info(f'Deleting the temporary directory "{path}".')
-				delete_directory(path)
+				log.info(f'Deleting the temporary directory "{path.parent}".')
+				delete_directory(path.parent)
 			except PermissionError as error:
 				log.error(f'Failed to delete the temporary directory with the error: "{repr(error)}".')
 
-		temporary_search_path = os.path.join(temporary_path, 'tmpaddon-*')
-		for path in iglob(temporary_search_path):
+		for path in temporary_path.glob('tmpaddon-*'):
 			log.info(f'Deleting the temporary file "{path}".')
 			delete_file(path)
 

@@ -2,6 +2,7 @@
 
 import winreg
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any, Optional, Union
 from winreg import (
 	CreateKeyEx, DeleteKey, DeleteValue, EnumKey, EnumValue,
@@ -74,7 +75,7 @@ class TemporaryRegistry:
 
 		return value
 
-	def set(self, key: str, value: Union[int, str], type_: Optional[int] = None) -> Any:
+	def set(self, key: str, value: Union[int, str, Path], type_: Optional[int] = None) -> Any:
 		""" Sets the value of a registry key. Any missing intermediate keys are automatically created. """
 
 		hkey, key_path, sub_key = TemporaryRegistry.partition_key(key)
@@ -84,6 +85,9 @@ class TemporaryRegistry:
 				type_ = winreg.REG_DWORD
 			elif isinstance(value, str):
 				type_ = winreg.REG_SZ
+			elif isinstance(value, Path):
+				type_ = winreg.REG_SZ
+				value = str(value)
 			else:
 				raise ValueError(f'The type of the value "{value}" could not be autodetected for the registry key "{key}".')
 

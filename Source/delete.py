@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
-import os
 import sqlite3
 import tempfile
 from argparse import ArgumentParser
-from glob import iglob
+from pathlib import Path
 from typing import Optional
 
 from common.config import CommonConfig
@@ -79,15 +78,15 @@ if __name__ == '__main__':
 				total_temporary = 0
 				num_temporary_deleted = 0
 
-				temporary_search_path = os.path.join(tempfile.gettempdir(), CommonConfig.TEMPORARY_PATH_PREFIX + '*')
-				for path in iglob(temporary_search_path):
+				temporary_path = Path(tempfile.gettempdir())
+				for path in temporary_path.glob(CommonConfig.TEMPORARY_PATH_PREFIX + '*'):
 
 					total_temporary += 1
 					print(f'- Temporary: {path}')
 
-					if os.path.isfile(path) and delete_file(path):
+					if path.is_file() and delete_file(path):
 						num_temporary_deleted += 1
-					elif os.path.isdir(path) and delete_directory(path):
+					elif path.is_dir() and delete_directory(path):
 						num_temporary_deleted += 1
 
 			if args.registry:

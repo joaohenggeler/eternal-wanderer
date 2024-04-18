@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import os
 import shutil
 from argparse import ArgumentParser
 from subprocess import Popen
@@ -51,8 +50,8 @@ if __name__ == '__main__':
 			if args.pluginreg:
 
 				try:
-					plugin_reg_source_path = os.path.join(browser.profile_path, 'pluginreg.dat')
-					plugin_reg_destination_path = os.path.join(config.profile_path, 'pluginreg.dat')
+					plugin_reg_source_path = browser.profile_path / 'pluginreg.dat'
+					plugin_reg_destination_path = config.profile_path / 'pluginreg.dat'
 					shutil.copy(plugin_reg_source_path, plugin_reg_destination_path)
 
 					with open(plugin_reg_destination_path, encoding='utf-8', newline='') as file:

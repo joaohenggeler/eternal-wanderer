@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-import os
 import sqlite3
 from argparse import ArgumentParser
 from hashlib import sha256
+from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 import ffmpeg # type: ignore
@@ -23,7 +23,7 @@ if __name__ == '__main__':
 	parser.add_argument('-tts', action='store_true', help='Use the text-to-speech video files instead of the snapshot recordings.')
 	parser.add_argument('-color', default='white', help='The background color for the transition. If omitted, this defaults to %(default)s. This may be a hexadecimal color code or a color name defined here: https://ffmpeg.org/ffmpeg-utils.html#Color')
 	parser.add_argument('-duration', type=int, default=2, help='How long the transition lasts for in seconds. If omitted, this defaults to %(default)s.')
-	parser.add_argument('-sfx', help='The path to the transition sound effect file. If omitted, no sound is added to the transition.')
+	parser.add_argument('-sfx', type=Path, help='The path to the transition sound effect file. If omitted, no sound is added to the transition.')
 	args = parser.parse_args()
 
 	if args.published and args.any:
@@ -32,11 +32,8 @@ if __name__ == '__main__':
 	if args.any and args.any[0] not in ['snapshot', 'recording']:
 		parser.error(f'Unknown ID type "{args.any[0]}". Only "snapshot" and "recording" are allowed.')
 
-	if args.sfx:
-		if os.path.isfile(args.sfx):
-			args.sfx = os.path.abspath(args.sfx)
-		else:
-			parser.error(f'Could not find the sound effect file "{args.sfx}".')
+	if args.sfx and not args.sfx.is_file():
+		parser.error(f'Could not find the sound effect file "{args.sfx}".')
 
 	if args.published:
 		begin_date = args.published[0]
@@ -147,7 +144,7 @@ if __name__ == '__main__':
 				total_recordings += 1
 				recording.CompilationSegmentFilePath = recording.TextToSpeechFilePath if args.tts else recording.UploadFilePath
 
-				if recording.CompilationSegmentFilePath is not None and os.path.isfile(recording.CompilationSegmentFilePath):
+				if recording.CompilationSegmentFilePath is not None and recording.CompilationSegmentFilePath.is_file():
 					snapshots_and_recordings.append((snapshot, recording))
 					num_found += 1
 				else:
@@ -199,7 +196,7 @@ if __name__ == '__main__':
 						print(f'Failed to create the transition video with the error: {repr(error)}')
 						raise
 
-					os.makedirs(config.compilations_path, exist_ok=True)
+					config.compilations_path.mkdir(parents=True, exist_ok=True)
 
 					id_identifier = str(compilation_id) if args.published else None
 					type_identifier = 'published' if args.published else f'any_{id_type}'
@@ -217,10 +214,10 @@ if __name__ == '__main__':
 					text_to_speech_identifier = 'tts' if args.tts else None
 
 					compilation_identifiers = [id_identifier, type_identifier, range_identifier, total_identifier, text_to_speech_identifier]
-					compilation_path_prefix = os.path.join(config.compilations_path, '_'.join(filter(None, compilation_identifiers)))
+					compilation_path_prefix = config.compilations_path / '_'.join(filter(None, compilation_identifiers))
 
-					compilation_path = compilation_path_prefix + '.mp4'
-					timestamps_path = compilation_path_prefix + '.txt'
+					compilation_path = compilation_path_prefix.with_suffix('.mp4')
+					timestamps_path = compilation_path_prefix.with_suffix('.txt')
 
 					concat_file.write('ffconcat version 1.0\n')
 					current_duration: float = 0
@@ -314,9 +311,6 @@ if __name__ == '__main__':
 						print(f'Failed to create the compilation video with the error: {repr(error)}')
 						raise
 
-					compilation_filename = os.path.basename(compilation_path)
-					timestamps_filename = os.path.basename(timestamps_path)
-
 					if args.published:
 
 						recording_compilation = []
@@ -327,7 +321,7 @@ if __name__ == '__main__':
 									INSERT INTO Compilation (UploadFilename, TimestampsFilename)
 									VALUES (:upload_filename, :timestamps_filename);
 									''',
-									{'upload_filename': compilation_filename, 'timestamps_filename': timestamps_filename})
+									{'upload_filename': compilation_path.name, 'timestamps_filename': timestamps_path.name})
 
 						db.executemany(	'''
 										INSERT INTO RecordingCompilation (RecordingId, CompilationId, SnapshotId, Position)
@@ -336,7 +330,7 @@ if __name__ == '__main__':
 
 						db.commit()
 
-					print(f'Created the compilation "{compilation_filename}".')
+					print(f'Created the compilation "{compilation_path.name}".')
 
 				except (ffmpeg.Error, StopIteration, KeyError, ValueError):
 					pass

@@ -6,7 +6,7 @@ import sys
 import tempfile
 from argparse import ArgumentParser
 from dataclasses import dataclass
-from glob import glob
+from pathlib import Path
 from tempfile import NamedTemporaryFile
 from time import sleep
 from typing import Optional, Union
@@ -207,8 +207,8 @@ if __name__ == '__main__':
 				# get around this, we'll split the video into segments and chain them together in the replies.
 				if config.reply_with_text_to_speech and recording.TextToSpeechFilename is not None:
 
-					temporary_path = tempfile.gettempdir()
-					segment_path_format = os.path.join(temporary_path, CommonConfig.TEMPORARY_PATH_PREFIX + '%04d.' + recording.TextToSpeechFilename)
+					temporary_path = Path(tempfile.gettempdir())
+					segment_path_format = temporary_path / (CommonConfig.TEMPORARY_PATH_PREFIX + '%04d.' + recording.TextToSpeechFilename)
 
 					stream = ffmpeg.input(recording.TextToSpeechFilePath)
 					stream = stream.output(segment_path_format, c='copy', f='segment', segment_time=config.twitter_text_to_speech_segment_duration, reset_timestamps=1)
@@ -218,8 +218,7 @@ if __name__ == '__main__':
 					log.debug(f'Splitting the text-to-speech file with the FFmpeg arguments: {stream.get_args()}')
 					stream.run()
 
-					segment_search_path = os.path.join(temporary_path, '*.' + recording.TextToSpeechFilename)
-					segment_file_paths = sorted(glob(segment_search_path))
+					segment_file_paths = sorted(temporary_path.glob('*.' + recording.TextToSpeechFilename))
 					last_status_id = status_id
 
 					try:
@@ -284,7 +283,7 @@ if __name__ == '__main__':
 
 			log.info('Publishing on Mastodon.')
 
-			def reduce_video_size(path: str) -> str:
+			def reduce_video_size(path: Path) -> Path:
 				""" Reduces a video's file size. """
 
 				# Closing the file right away makes it easier to delete it later.
@@ -299,9 +298,9 @@ if __name__ == '__main__':
 				log.debug(f'Reducing the video size with the FFmpeg arguments: {stream.get_args()}')
 				stream.run()
 
-				return output_file.name
+				return Path(output_file.name)
 
-			def extract_audio(path: str) -> str:
+			def extract_audio(path: Path) -> Path:
 				""" Extracts the audio from a video file. """
 
 				# Closing the file right away makes it easier to delete it later.
@@ -316,9 +315,9 @@ if __name__ == '__main__':
 				log.debug(f'Extracting the audio with the FFmpeg arguments: {stream.get_args()}')
 				stream.run()
 
-				return output_file.name
+				return Path(output_file.name)
 
-			def try_media_post(path: str, **kwargs) -> int:
+			def try_media_post(path: Path, **kwargs) -> int:
 				""" Posts a media file to the Mastodon instance, retrying if it fails with a 502, 503, or 504 HTTP error. """
 
 				for i in range(config.mastodon_max_retries):

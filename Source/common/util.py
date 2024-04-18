@@ -2,6 +2,7 @@
 
 import msvcrt
 import os
+from pathlib import Path
 import shutil
 import warnings
 from typing import Union
@@ -28,7 +29,7 @@ def container_to_lowercase(container: Union[list, dict]) -> Union[list, dict]:
 	else:
 		assert False, f'Unhandled container type "{type(container)}".'
 
-def delete_directory(path: str) -> bool:
+def delete_directory(path: Path) -> bool:
 	""" Deletes a directory and all of its subdirectories. Does nothing if it doesn't exist. """
 	try:
 		shutil.rmtree(path)
@@ -37,7 +38,7 @@ def delete_directory(path: str) -> bool:
 		success = False
 	return success
 
-def delete_file(path: str) -> bool:
+def delete_file(path: Path) -> bool:
 	""" Deletes a file. Does nothing if it doesn't exist. """
 	try:
 		os.remove(path)
@@ -49,15 +50,13 @@ def delete_file(path: str) -> bool:
 # Ignore the PyWinAuto warning about connecting to a 32-bit executable while using a 64-bit Python environment.
 warnings.simplefilter('ignore', category=UserWarning)
 
-def kill_processes_by_path(path: str) -> None:
+def kill_processes_by_path(path: Path) -> None:
 	""" Kills all processes running an executable at a given path. """
-
-	path = os.path.abspath(path)
 
 	try:
 		application = WindowsApplication(backend='win32')
 		while True:
-			application.connect(path=path, timeout=5)
+			application.connect(path=path.absolute(), timeout=5)
 			application.kill(soft=False)
 	except (WindowProcessNotFoundError, WindowTimeoutError):
 		pass

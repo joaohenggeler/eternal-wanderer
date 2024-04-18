@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import os
+from pathlib import Path
 from typing import Union
 from urllib.parse import ParseResult, urlparse
 
@@ -22,8 +22,7 @@ def extract_media_extension_from_url(url: str) -> str:
 	if path.endswith('.wrl.gz'):
 		extension = 'wrz'
 	else:
-		_, extension = os.path.splitext(path)
-		extension = extension.removeprefix('.')
+		extension = Path(path).suffix.removeprefix('.')
 
 	return extension
 

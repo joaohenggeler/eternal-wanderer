@@ -4,7 +4,6 @@ import os
 import shutil
 import sqlite3
 from argparse import ArgumentParser
-from glob import iglob
 
 from common.config import config
 from common.database import Database
@@ -166,8 +165,8 @@ if __name__ == '__main__':
 				print()
 
 			total_recordings_size: float = 0
-			for path in iglob(os.path.join(config.recordings_path, '**'), recursive=True):
-				if os.path.isfile(path):
+			for path in config.recordings_path.rglob('*'):
+				if path.is_file():
 					total_recordings_size += os.path.getsize(path)
 
 			total_recordings_size = total_recordings_size / 10 ** 9

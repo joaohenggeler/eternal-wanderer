@@ -12,8 +12,8 @@ from collections import Counter, defaultdict
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime
-from glob import iglob
 from math import ceil
+from pathlib import Path
 from queue import Queue
 from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, STDOUT, TimeoutExpired
 from tempfile import NamedTemporaryFile, TemporaryDirectory
@@ -191,8 +191,8 @@ class RecordConfig(CommonConfig):
 
 		self.media_conversion_ffmpeg_input_args = container_to_lowercase(self.media_conversion_ffmpeg_input_args)
 
-		media_template_path = os.path.join(self.plugins_path, 'media.html.template')
-		with open(media_template_path, 'r', encoding='utf-8') as file:
+		media_template_path = self.plugins_path / 'media.html.template'
+		with open(media_template_path, encoding='utf-8') as file:
 			self.media_template = file.read()
 
 		S_OK = 0
@@ -350,8 +350,8 @@ if __name__ == '__main__':
 
 		timeout: float
 
-		plugin_container_path: str
-		java_plugin_launcher_path: Optional[str]
+		plugin_container_path: Path
+		java_plugin_launcher_path: Optional[Path]
 		timer: Timer
 		crashed: bool
 
@@ -359,8 +359,8 @@ if __name__ == '__main__':
 
 			self.timeout = timeout
 
-			self.plugin_container_path = os.path.join(browser.firefox_directory_path, 'plugin-container.exe')
-			self.java_plugin_launcher_path = os.path.join(browser.java_bin_path, 'jp2launcher.exe') if browser.java_bin_path is not None else None
+			self.plugin_container_path = browser.firefox_path.parent / 'plugin-container.exe'
+			self.java_plugin_launcher_path = browser.java_bin_path / 'jp2launcher.exe' if browser.java_bin_path is not None else None
 
 			self.timer = Timer(self.timeout, self.kill_plugin_containers)
 
@@ -394,19 +394,19 @@ if __name__ == '__main__':
 	class ScreenCapture:
 		""" A process that captures the screen and stores the recording on disk using FFmpeg. """
 
-		raw_path: str
-		upload_path: str
-		archive_path: Optional[str]
+		raw_path: Path
+		upload_path: Path
+		archive_path: Optional[Path]
 
 		stream: ffmpeg.Stream
 		process: Popen
 		failed: bool
 
-		def __init__(self, output_path_prefix: str):
+		def __init__(self, output_path_prefix: Path):
 
-			self.raw_path = output_path_prefix + '.raw.mkv'
-			self.upload_path = output_path_prefix + '.mp4'
-			self.archive_path = output_path_prefix + '.mkv' if config.save_archive_copy else None
+			self.raw_path = output_path_prefix.with_suffix('.raw.mkv')
+			self.upload_path = output_path_prefix.with_suffix('.mp4')
+			self.archive_path = output_path_prefix.with_suffix('.mkv') if config.save_archive_copy else None
 
 			stream = ffmpeg.input(config.raw_ffmpeg_input_name, t=config.max_duration, **config.raw_ffmpeg_input_args)
 			stream = stream.output(self.raw_path, **config.raw_ffmpeg_output_args)
@@ -539,7 +539,7 @@ if __name__ == '__main__':
 					if voice is not None:
 						self.language_to_voice[language] = voice
 
-			def generate_text_to_speech_file(self, title: str, date: datetime, text: str, language: Optional[str], output_path_prefix: str) -> Optional[str]:
+			def generate_text_to_speech_file(self, title: str, date: datetime, text: str, language: Optional[str], output_path_prefix: Path) -> Optional[str]:
 				""" Generates a video file that contains the text-to-speech in the audio track and a blank screen on the video one.
 				The voice used by the Speech API is specified in the configuration file and depends on the page's language.
 				The correct voice packages have been installed on Windows, otherwise a default voice is used instead. """
@@ -548,7 +548,7 @@ if __name__ == '__main__':
 				# See: https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125665(v=vs.85)
 				date_xml = f'<context id="date_ymd">{date.year}/{date.month}/{date.day}</context>'
 
-				output_path: Optional[str] = output_path_prefix + (f'.tts.{language}.mp4' if language is not None else '.tts.mp4')
+				output_path: Optional[str] = output_path_prefix.with_suffix(f'.tts.{language}.mp4' if language is not None else '.tts.mp4')
 
 				try:
 					# See:
@@ -717,8 +717,8 @@ if __name__ == '__main__':
 		log.debug(f'Created the temporary media page "{media_page_file.name}".')
 
 		media_download_directory = TemporaryDirectory(prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.media')
-		media_download_search_path = os.path.join(media_download_directory.name, '*')
-		log.debug(f'Created the temporary media download directory "{media_download_directory.name}".')
+		media_download_path = Path(media_download_directory.name)
+		log.debug(f'Created the temporary media download directory "{media_download_path}".')
 
 		# The subtitles path needs to be escaped before being passed to the subtitles filter.
 		# See: https://superuser.com/a/1251305
@@ -772,11 +772,10 @@ if __name__ == '__main__':
 
 					wayback_parts = parse_wayback_machine_snapshot_url(wayback_url)
 					parts = urlparse(wayback_parts.url if wayback_parts is not None else wayback_url)
-					filename = os.path.basename(parts.path)
+					url_path = Path(parts.path)
 
 					if media_extension is None:
-						_, media_extension = os.path.splitext(filename)
-						media_extension = media_extension.lower().removeprefix('.')
+						media_extension = url_path.suffix.lower().removeprefix('.')
 
 					embed_url = wayback_url
 					loop = 'true'
@@ -795,7 +794,7 @@ if __name__ == '__main__':
 							response.raise_for_status()
 
 							# We need to keep the file extension so Firefox can choose the right plugin to play it.
-							download_path = os.path.join(media_download_directory.name, filename)
+							download_path = media_download_path / url_path.name
 							with open(download_path, 'wb') as file:
 								file.write(response.content)
 
@@ -1003,7 +1002,7 @@ if __name__ == '__main__':
 					try:
 						log.info(f'[{snapshot_index+1} of {num_snapshots}] Recording snapshot #{snapshot.Id} {snapshot} with {snapshot.Points} points (same host = {recordings_since_same_host} recordings, last published = {days_since_last_published} days).')
 
-						for path in iglob(media_download_search_path):
+						for path in media_download_path.glob('*'):
 							delete_file(path)
 
 						if snapshot.IsMedia:
@@ -1235,16 +1234,16 @@ if __name__ == '__main__':
 						cosmo_player_viewpoint_cycler: Union[CosmoPlayerViewpointCycler, AbstractContextManager[None]] = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
 
 						subdirectory_path = config.get_recording_subdirectory_path(recording_id)
-						os.makedirs(subdirectory_path, exist_ok=True)
+						subdirectory_path.mkdir(parents=True, exist_ok=True)
 
 						parts = urlparse(snapshot.Url)
 						media_identifier = snapshot.MediaExtension if snapshot.IsMedia else ('p' if snapshot.PageUsesPlugins else None)
 						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, str(snapshot.OldestDatetime.year), str(snapshot.OldestDatetime.month).zfill(2), str(snapshot.OldestDatetime.day).zfill(2), media_identifier]
-						recording_path_prefix = os.path.join(subdirectory_path, '_'.join(filter(None, recording_identifiers)))
+						recording_path_prefix = subdirectory_path / '_'.join(filter(None, recording_identifiers))
 
-						upload_path: str
-						archive_path: Optional[str]
-						text_to_speech_path: Optional[str]
+						upload_path: Path
+						archive_path: Optional[Path]
+						text_to_speech_path: Optional[Path]
 
 						# This media extension differs from the snapshot's extension when recording a RealMedia file
 						# whose URL was extracted from a metadata file. We should only be converting binary media,
@@ -1253,12 +1252,12 @@ if __name__ == '__main__':
 
 							# Convert a media snapshot directly and skip capturing the screen.
 
-							log.info(f'Converting the media file "{os.path.basename(media_path)}".')
+							log.info(f'Converting the media file "{media_path.name}".')
 
 							browser.close_all_windows()
 							browser.go_to_blank_page_with_text('\N{DNA Double Helix} Converting Media \N{DNA Double Helix}', str(snapshot))
 
-							upload_path = recording_path_prefix + '.mp4'
+							upload_path = recording_path_prefix.with_suffix('.mp4')
 							archive_path = None
 							text_to_speech_path = None
 
@@ -1479,9 +1478,9 @@ if __name__ == '__main__':
 								browser.go_to_blank_page_with_text('\N{Left-Pointing Magnifying Glass} Locating Missing URLs \N{Left-Pointing Magnifying Glass}', f'{i} of {len(missing_urls)}')
 
 								parts = urlparse(url)
-								directory_path, filename = os.path.split(parts.path)
+								path = Path(parts.path)
 
-								match = Proxy.FILENAME_REGEX.fullmatch(filename)
+								match = Proxy.FILENAME_REGEX.fullmatch(path.name)
 								if match is None:
 									continue
 
@@ -1500,7 +1499,7 @@ if __name__ == '__main__':
 									# Increment the value between the filename and extension.
 									new_num = str(num).zfill(padding)
 									new_filename = name + new_num + extension
-									new_path = urljoin(directory_path + '/', new_filename)
+									new_path = urljoin(str(path.parent) + '/', new_filename)
 									new_parts = parts._replace(path=new_path)
 									new_url = urlunparse(new_parts)
 
@@ -1583,15 +1582,14 @@ if __name__ == '__main__':
 
 						if state == Snapshot.RECORDED:
 
-							upload_filename = os.path.basename(upload_path)
-							archive_filename = os.path.basename(archive_path) if archive_path is not None else None
-							text_to_speech_filename = os.path.basename(text_to_speech_path) if text_to_speech_path is not None else None
+							archive_filename = archive_path.name if archive_path is not None else None
+							text_to_speech_filename = text_to_speech_path.name if text_to_speech_path is not None else None
 
 							db.execute(	'''
 										INSERT INTO Recording (SnapshotId, HasAudio, UploadFilename, ArchiveFilename, TextToSpeechFilename)
 										VALUES (:snapshot_id, :has_audio, :upload_filename, :archive_filename, :text_to_speech_filename);
 										''',
-										{'snapshot_id': snapshot.Id, 'has_audio': has_audio, 'upload_filename': upload_filename,
+										{'snapshot_id': snapshot.Id, 'has_audio': has_audio, 'upload_filename': upload_path.name,
 										 'archive_filename': archive_filename, 'text_to_speech_filename': text_to_speech_filename})
 
 							if snapshot.PriorityName == 'Record':
@@ -1637,8 +1635,7 @@ if __name__ == '__main__':
 		except KeyboardInterrupt:
 			log.warning('Detected a keyboard interrupt when these should not be used to terminate the recorder due to a bug when using both Windows and the Firefox WebDriver.')
 		finally:
-			raw_search_path = os.path.join(config.recordings_path, '**', '*.raw.mkv')
-			for path in iglob(raw_search_path, recursive=True):
+			for path in config.recordings_path.rglob('*.raw.mkv'):
 				log.warning(f'Deleting the raw recording file "{path}".')
 				delete_file(path)
 

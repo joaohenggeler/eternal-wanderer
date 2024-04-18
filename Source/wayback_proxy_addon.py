@@ -6,7 +6,7 @@
 	run directly and is instead started automatically by the recorder if enable_proxy is enabled.
 """
 
-import os
+from pathlib import Path
 from threading import Lock, Thread
 from urllib.parse import unquote, urlparse, urlunparse
 
@@ -86,9 +86,9 @@ def request(flow: http.HTTPFlow) -> None:
 	if config.proxy_convert_realmedia_metadata_snapshots:
 
 		parts = urlparse(wayback_parts.url)
-		_, file_extension = os.path.splitext(parts.path)
+		extension = Path(parts.path).suffix
 
-		if file_extension.lower() == '.ram':
+		if extension.lower() == '.ram':
 			try:
 				# The RealMedia metadata files only contain the audio stream's URL, not the content itself.
 				# In order to play the audio correctly, we'll extract this URL, convert it to a Wayback
@@ -263,9 +263,9 @@ def request(flow: http.HTTPFlow) -> None:
 
 		parts = urlparse(referer)
 		path = parts.path.lower()
-		_, file_extension = os.path.splitext(path)
+		extension = Path(path).suffix
 
-		if file_extension in ['.wrl', '.wrz'] or path.endswith('.wrl.gz'):
+		if extension in ['.wrl', '.wrz'] or path.endswith('.wrl.gz'):
 
 			request_came_from_vrml = True
 

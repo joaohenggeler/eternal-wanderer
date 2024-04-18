@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import os
 import sqlite3
 from datetime import datetime, timezone
 from random import random
@@ -20,8 +19,7 @@ class Database:
 
 		log.info(f'Connecting to the database in "{config.database_path}".')
 
-		os.makedirs(os.path.dirname(config.database_path), exist_ok=True)
-
+		config.database_path.parent.mkdir(parents=True, exist_ok=True)
 		self.connection = sqlite3.connect(config.database_path)
 
 		def dict_factory(cursor: sqlite3.Cursor, row: tuple) -> dict:
