@@ -2,7 +2,8 @@
 
 from argparse import ArgumentParser
 
-from common import Database, Snapshot
+from common.database import Database
+from common.snapshot import Snapshot
 
 if __name__ == '__main__':
 

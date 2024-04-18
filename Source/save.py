@@ -5,7 +5,7 @@ from argparse import ArgumentParser
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
-from common import global_rate_limiter
+from common.rate_limiter import global_rate_limiter
 
 if __name__ == '__main__':
 

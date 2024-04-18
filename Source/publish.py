@@ -24,12 +24,13 @@ from mastodon import ( # type: ignore
 from pytumblr import TumblrRestClient # type: ignore
 from tweepy.errors import TweepyException # type: ignore
 
-from common import (
-	CommonConfig, Database, Recording, Snapshot,
-	container_to_lowercase, delete_file,
-	setup_logger, tld_extract,
-	was_exit_command_entered,
-)
+from common.config import CommonConfig
+from common.database import Database
+from common.logger import setup_logger
+from common.net import tld_extract
+from common.recording import Recording
+from common.snapshot import Snapshot
+from common.util import container_to_lowercase, delete_file, was_exit_command_entered
 
 @dataclass
 class PublishConfig(CommonConfig):

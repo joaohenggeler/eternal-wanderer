@@ -24,11 +24,17 @@ from selenium.common.exceptions import ( # type: ignore
 )
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
-from common import (
-	Browser, CommonConfig, Database, Snapshot, are_wayback_machine_services_available,
-	compose_wayback_machine_snapshot_url, container_to_lowercase, extract_media_extension_from_url,
-	find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info, is_url_from_domain,
-	parse_wayback_machine_snapshot_url, setup_logger, was_exit_command_entered,
+from common.browser import Browser
+from common.config import CommonConfig
+from common.database import Database
+from common.logger import setup_logger
+from common.net import extract_media_extension_from_url, is_url_from_domain
+from common.snapshot import Snapshot
+from common.util import container_to_lowercase, was_exit_command_entered
+from common.wayback import (
+	are_wayback_machine_services_available, compose_wayback_machine_snapshot_url,
+	find_best_wayback_machine_snapshot, find_extra_wayback_machine_snapshot_info,
+	parse_wayback_machine_snapshot_url,
 )
 
 @dataclass

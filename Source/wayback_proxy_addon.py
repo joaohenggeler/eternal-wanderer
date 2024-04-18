@@ -16,11 +16,10 @@ from mitmproxy.script import concurrent # type: ignore
 from requests import RequestException
 from waybackpy import WaybackMachineCDXServerAPI as Cdx
 
-from common import (
-	Snapshot, compose_wayback_machine_snapshot_url,
-	global_rate_limiter, is_url_available, is_url_from_domain,
-	parse_wayback_machine_snapshot_url, tld_extract,
-)
+from common.net import is_url_available, is_url_from_domain, tld_extract
+from common.rate_limiter import global_rate_limiter
+from common.snapshot import Snapshot
+from common.wayback import compose_wayback_machine_snapshot_url, parse_wayback_machine_snapshot_url
 from record import RecordConfig
 
 # This script must be executed with unbuffered output to work properly (e.g. "python -u" or PYTHONUNBUFFERED = '1').

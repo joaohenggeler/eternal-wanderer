@@ -6,14 +6,15 @@ import sqlite3
 from argparse import ArgumentParser
 from glob import iglob
 
-from common import CommonConfig, Database, Recording, Snapshot
+from common.config import config
+from common.database import Database
+from common.recording import Recording
+from common.snapshot import Snapshot
 
 if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Shows snapshot and recording statistics from the database.')
 	args = parser.parse_args()
-
-	config = CommonConfig()
 
 	with Database() as db:
 

@@ -8,10 +8,11 @@ from tempfile import NamedTemporaryFile
 
 import ffmpeg # type: ignore
 
-from common import (
-	CommonConfig, Database, Recording, Snapshot,
-	delete_file,
-)
+from common.config import CommonConfig
+from common.database import Database
+from common.recording import Recording
+from common.snapshot import Snapshot
+from common.util import delete_file
 from record import RecordConfig
 
 if __name__ == '__main__':

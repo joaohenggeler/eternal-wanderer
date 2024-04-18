@@ -8,7 +8,8 @@ from subprocess import Popen
 from selenium.common.exceptions import WebDriverException # type: ignore
 from selenium.webdriver.common.utils import free_port # type: ignore
 
-from common import CommonConfig, Browser
+from common.browser import Browser
+from common.config import config
 
 if __name__ == '__main__':
 
@@ -18,8 +19,6 @@ if __name__ == '__main__':
 	parser.add_argument('-disable_multiprocess', action='store_false', dest='multiprocess', help='Disable multiprocess Firefox. This should only be used when running the Classic Add-ons Archive extension since disabling this mode may crash some plugins.')
 	parser.add_argument('-dump', action='store_true', help='Generate a dump file containing all HTTP/HTTPS responses received by the browser.')
 	args = parser.parse_args()
-
-	config = CommonConfig()
 
 	if args.pluginreg and config.use_master_plugin_registry:
 		parser.error('The "use_master_plugin_registry" option must be disabled in order to generate the pluginreg.dat file.')

@@ -34,13 +34,19 @@ from selenium.webdriver.common.utils import free_port # type: ignore
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
-from common import (
-	Browser, CommonConfig, Database, Snapshot, TemporaryRegistry,
-	clamp, container_to_lowercase, delete_file, global_rate_limiter,
-	global_session, is_url_available, kill_processes_by_path,
-	parse_wayback_machine_snapshot_url, setup_logger,
-	was_exit_command_entered,
+from common.browser import Browser
+from common.config import CommonConfig
+from common.database import Database
+from common.logger import setup_logger
+from common.net import global_session, is_url_available
+from common.rate_limiter import global_rate_limiter
+from common.snapshot import Snapshot
+from common.temporary_registry import TemporaryRegistry
+from common.util import (
+	clamp, container_to_lowercase, delete_file,
+	kill_processes_by_path, was_exit_command_entered,
 )
+from common.wayback import parse_wayback_machine_snapshot_url
 
 @dataclass
 class RecordConfig(CommonConfig):

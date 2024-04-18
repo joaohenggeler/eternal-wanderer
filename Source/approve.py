@@ -4,9 +4,10 @@ import os
 import sqlite3
 from argparse import ArgumentParser
 from collections.abc import Iterator
-from typing import Optional
 
-from common import Database, Recording, Snapshot
+from common.database import Database
+from common.recording import Recording
+from common.snapshot import Snapshot
 from publish import PublishConfig
 
 if __name__ == '__main__':
