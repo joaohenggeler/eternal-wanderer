@@ -64,6 +64,7 @@ class CommonConfig:
 	autoit_scripts: dict[str, bool]
 
 	fonts_path: Path
+	sound_fonts_path: Path
 
 	recordings_path: Path
 	max_recordings_per_directory: int
@@ -90,6 +91,7 @@ class CommonConfig:
 	use_guessed_encoding_as_fallback: bool
 
 	ffmpeg_path: Optional[Path]
+	fluidsynth_path: Optional[Path]
 
 	language_names: dict[str, str]
 
@@ -158,11 +160,15 @@ class CommonConfig:
 		self.plugins_path = Path(self.plugins_path).absolute()
 		self.autoit_path = Path(self.autoit_path).absolute()
 		self.fonts_path = Path(self.fonts_path).absolute()
+		self.sound_fonts_path = Path(self.sound_fonts_path).absolute()
 		self.recordings_path = Path(self.recordings_path).absolute()
 		self.compilations_path = Path(self.compilations_path).absolute()
 
 		if self.ffmpeg_path is not None:
 			self.ffmpeg_path = Path(self.ffmpeg_path).absolute()
+
+		if self.fluidsynth_path is not None:
+			self.fluidsynth_path = Path(self.fluidsynth_path).absolute()
 
 		self.extensions_before_running = container_to_lowercase(self.extensions_before_running)
 		self.extensions_after_running = container_to_lowercase(self.extensions_after_running)

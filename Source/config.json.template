@@ -241,6 +241,7 @@
 		},
 
 		"fonts_path": "Data/Fonts",
+		"sound_fonts_path": "Data/SoundFonts",
 
 		"recordings_path": "Data/Recordings",
 		"max_recordings_per_directory": 5000,
@@ -267,6 +268,7 @@
 		"use_guessed_encoding_as_fallback": true,
 
 		"ffmpeg_path": "Data/FFmpeg/bin",
+		"fluidsynth_path": "Data/FluidSynth/bin",
 
 		"language_names":
 		{
@@ -659,6 +661,7 @@
 		"enable_media_conversion": true,
 		"convertible_media_extensions":
 		[
+			"mid", "midi",
 			"3g2", "3gp", "3gpp", "3gpp2",
 			"aac", "aif", "aifc", "aiff", "amr", "asf", "au", "avi", "awb",
 			"dif", "divx", "dv",
@@ -680,7 +683,15 @@
 		],
 
 		"media_conversion_add_subtitles": true,
-		"media_conversion_ffmpeg_subtitles_style": "Fontname=Segoe Print,Fontsize=60,PrimaryColour=&HFFFFFF,Outline=0,Shadow=1,BackColour=&H80000000,Alignment=10"
+		"media_conversion_ffmpeg_subtitles_style": "Fontname=Segoe Print,Fontsize=60,PrimaryColour=&HFFFFFF,Outline=0,Shadow=1,BackColour=&H80000000,Alignment=10",
+
+		"midi_fluidsynth_args":
+		[
+			"--audio-file-format", "s16",
+			"--sample-rate", 48000,
+			"--audio-channels", 1,
+			"--gain", 0.4
+		]
 	},
 
 	"publish":

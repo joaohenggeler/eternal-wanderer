@@ -2,6 +2,7 @@
 
 import ctypes
 import queue
+import random
 import sqlite3
 from argparse import ArgumentParser
 from collections import Counter
@@ -32,6 +33,7 @@ from common.ffmpeg import (
 	FfmpegException, ffprobe_duration,
 	ffprobe_has_video_stream, ffprobe_info,
 )
+from common.fluidsynth import fluidsynth, FluidSynthException
 from common.logger import setup_logger
 from common.net import global_session, is_url_available
 from common.plugin_crash_timer import PluginCrashTimer
@@ -42,8 +44,8 @@ from common.screen_capture import ScreenCapture
 from common.snapshot import Snapshot
 from common.temporary_registry import TemporaryRegistry
 from common.util import (
-	clamp, container_to_lowercase, delete_file,
-	kill_processes_by_path, was_exit_command_entered,
+	clamp, container_to_lowercase,
+	delete_file, was_exit_command_entered,
 )
 from common.wayback import parse_wayback_machine_snapshot_url
 
@@ -143,6 +145,8 @@ class RecordConfig(CommonConfig):
 	media_conversion_add_subtitles: bool
 	media_conversion_ffmpeg_subtitles_style: str
 
+	midi_fluidsynth_args: list[Union[float, str]]
+
 	# Determined at runtime.
 	media_template: str
 	physical_screen_width: int
@@ -236,6 +240,12 @@ if __name__ == '__main__':
 		log.error('Could not find the FFmpeg executable in the PATH.')
 		exit(1)
 
+	try:
+		fluidsynth('--version')
+	except FluidSynthException:
+		log.error('Could not find the FluidSynth executable in the PATH.')
+		exit(1)
+
 	scheduler = BlockingScheduler()
 
 	def record_snapshots(num_snapshots: int) -> None:
@@ -306,7 +316,7 @@ if __name__ == '__main__':
 				browser.go_to_blank_page_with_text('\N{Broom} Initializing \N{Broom}')
 				browser.toggle_fullscreen()
 
-				def generate_media_page(wayback_url: str, media_extension: Optional[str] = None) -> tuple[bool, Optional[str], str, float, Optional[str], Optional[str]]:
+				def generate_media_page(wayback_url: str, media_extension: Optional[str] = None) -> tuple[bool, Optional[Path], str, float, Optional[str], Optional[str]]:
 					""" Generates the page where a media file is embedded using both the information from the configuration as well as the file's metadata. """
 
 					success = True
@@ -805,6 +815,15 @@ if __name__ == '__main__':
 							text_to_speech_path = None
 
 							try:
+								if media_extension in ['mid', 'midi']:
+									# This intermediate file is deleted later like the others in the media download directory.
+									converted_path = media_path.with_suffix('.wav')
+									sound_font_path = random.choice(list(config.sound_fonts_path.glob('*.sf2')))
+									args = config.midi_fluidsynth_args + ['--fast-render', converted_path, sound_font_path, media_path]
+									log.debug(f'Converting the MIDI file with the FluidSynth arguments: {args}')
+									fluidsynth(*args)
+									media_path = converted_path
+
 								input_args = [
 									'-guess_layout_max', 0, '-i', media_path,
 									*config.media_conversion_ffmpeg_input_args, '-i', config.media_conversion_ffmpeg_input_name,
@@ -852,7 +871,7 @@ if __name__ == '__main__':
 								for line in warnings.splitlines():
 									log.warning(f'FFmpeg warning: {line}')
 
-							except FfmpegException as error:
+							except (FluidSynthException, FfmpegException) as error:
 								log.error(f'Aborted the media conversion with the error: {repr(error)}.')
 								state = Snapshot.ABORTED
 						else:
