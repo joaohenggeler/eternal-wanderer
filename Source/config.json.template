@@ -267,7 +267,6 @@
 		"use_guessed_encoding_as_fallback": true,
 
 		"ffmpeg_path": "Data/FFmpeg/bin",
-		"ffmpeg_global_args": ["-loglevel", "warning", "-hide_banner", "-nostats"],
 
 		"language_names":
 		{
@@ -529,56 +528,56 @@
 
 		"raw_ffmpeg_input_name": "video=screen-capture-recorder:audio=virtual-audio-capturer",
 		"raw_ffmpeg_input_args":
-		{
-			"f": "dshow",
-			"framerate": 60,
-			"rtbufsize": "500M",
-			"thread_queue_size": 1000
-		},
+		[
+			"-f", "dshow",
+			"-framerate", 60,
+			"-rtbufsize", "500M",
+			"-thread_queue_size", 1000
+		],
 
 		"raw_ffmpeg_output_args":
-		{
-			"c:v": "libx264rgb",
-			"qp": 0,
-			"preset": "ultrafast",
-			"tune": "zerolatency",
-			"color_range": 2,
-			"c:a": "flac",
-			"ar": "48K",
-			"ac": 2
-		},
+		[
+			"-c:v", "libx264rgb",
+			"-qp", 0,
+			"-preset", "ultrafast",
+			"-tune", "zerolatency",
+			"-color_range", 2,
+			"-c:a", "flac",
+			"-ar", "48K",
+			"-ac", 2
+		],
 
 		"archive_ffmpeg_output_args":
-		{
-			"c:v": "libx264rgb",
-			"qp": 0,
-			"preset": "veryslow",
-			"color_range": 2,
-			"c:a": "copy"
-		},
+		[
+			"-c:v", "libx264rgb",
+			"-qp", 0,
+			"-preset", "veryslow",
+			"-color_range", 2,
+			"-c:a", "copy"
+		],
 
 		"upload_ffmpeg_output_args":
-		{
-			"c:v": "libx264",
-			"profile:v": "high",
-			"bf": 2,
-			"g": 30,
-			"r": 60,
-			"video_track_timescale": "90K",
-			"crf": 18,
-			"preset": "veryslow",
-			"pix_fmt": "yuv420p",
-			"fps_mode": "vfr",
-			"vf": "scale=1920x1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1:color=black",
-			"sws_flags": "lanczos",
-			"c:a": "aac",
-			"profile:a": "aac_low",
-			"b:a": "384K",
-			"ar": "48K",
-			"ac": 2,
-			"movflags": "faststart",
-			"fs": "512M"
-		},
+		[
+			"-c:v", "libx264",
+			"-profile:v", "high",
+			"-bf", 2,
+			"-g", 30,
+			"-r", 60,
+			"-video_track_timescale", "90K",
+			"-crf", 18,
+			"-preset", "veryslow",
+			"-pix_fmt", "yuv420p",
+			"-fps_mode", "vfr",
+			"-vf", "scale=1920x1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1:color=black",
+			"-sws_flags", "lanczos",
+			"-c:a", "aac",
+			"-profile:a", "aac_low",
+			"-b:a", "384K",
+			"-ar", "48K",
+			"-ac", 2,
+			"-movflags", "faststart",
+			"-fs", "512M"
+		],
 
 		"enable_text_to_speech": true,
 		"text_to_speech_audio_format_type": "SAFT22kHz16BitMono",
@@ -624,38 +623,38 @@
 
 		"text_to_speech_ffmpeg_video_input_name": "color=black:size=50x50:rate=30/1",
 		"text_to_speech_ffmpeg_video_input_args":
-		{
-			"f": "lavfi"
-		},
+		[
+			"-f", "lavfi"
+		],
 
 		"text_to_speech_ffmpeg_audio_input_args":
-		{
-			"guess_layout_max": 0
-		},
+		[
+			"-guess_layout_max", 0
+		],
 
 		"text_to_speech_ffmpeg_output_args":
-		{
-			"shortest": null,
-			"fflags": "shortest",
-			"max_interleave_delta": "100M",
-			"c:v": "libx264",
-			"profile:v": "high",
-			"bf": 2,
-			"g": 15,
-			"r": 30,
-			"video_track_timescale": "90K",
-			"crf": 18,
-			"preset": "veryslow",
-			"tune": "stillimage",
-			"pix_fmt": "yuv420p",
-			"c:a": "aac",
-			"profile:a": "aac_low",
-			"b:a": "128K",
-			"ar": "22050",
-			"ac": 1,
-			"movflags": "faststart",
-			"fs": "512M"
-		},
+		[
+			"-shortest",
+			"-fflags", "shortest",
+			"-max_interleave_delta", "100M",
+			"-c:v", "libx264",
+			"-profile:v", "high",
+			"-bf", 2,
+			"-g", 15,
+			"-r", 30,
+			"-video_track_timescale", "90K",
+			"-crf", 18,
+			"-preset", "veryslow",
+			"-tune", "stillimage",
+			"-pix_fmt", "yuv420p",
+			"-c:a", "aac",
+			"-profile:a", "aac_low",
+			"-b:a", "128K",
+			"-ar", "22050",
+			"-ac", 1,
+			"-movflags", "faststart",
+			"-fs", "512M"
+		],
 
 		"enable_media_conversion": true,
 		"convertible_media_extensions":
@@ -676,9 +675,9 @@
 
 		"media_conversion_ffmpeg_input_name": "color=#416FA6:size=1920x1080:rate=60/1",
 		"media_conversion_ffmpeg_input_args":
-		{
-			"f": "lavfi"
-		},
+		[
+			"-f", "lavfi"
+		],
 
 		"media_conversion_add_subtitles": true,
 		"media_conversion_ffmpeg_subtitles_style": "Fontname=Segoe Print,Fontsize=60,PrimaryColour=&HFFFFFF,Outline=0,Shadow=1,BackColour=&H80000000,Alignment=10"
@@ -721,9 +720,9 @@
 
 		"mastodon_reduce_file_size": true,
 		"mastodon_reduce_file_size_ffmpeg_output_args":
-		{
-			"vf": "fps=30"
-		},
+		[
+			"-vf", "fps=30"
+		],
 
 		"tumblr_api_key": "<API Key>",
 		"tumblr_api_secret": "<API Secret>",

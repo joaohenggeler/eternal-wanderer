@@ -12,7 +12,6 @@ from time import sleep
 from typing import Optional, Union
 from uuid import uuid4
 
-import ffmpeg # type: ignore
 import tweepy # type: ignore
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
@@ -26,6 +25,7 @@ from tweepy.errors import TweepyException # type: ignore
 
 from common.config import CommonConfig
 from common.database import Database
+from common.ffmpeg import ffmpeg, FfmpegException
 from common.logger import setup_logger
 from common.net import tld_extract
 from common.recording import Recording
@@ -71,7 +71,7 @@ class PublishConfig(CommonConfig):
 	mastodon_max_file_size: Optional[int]
 
 	mastodon_reduce_file_size: bool
-	mastodon_reduce_file_size_ffmpeg_output_args: dict[str, Union[None, int, str]]
+	mastodon_reduce_file_size_ffmpeg_output_args: list[Union[int, str]]
 
 	tumblr_api_key: str
 	tumblr_api_secret: str
@@ -107,8 +107,6 @@ class PublishConfig(CommonConfig):
 
 		if self.mastodon_max_file_size is not None:
 			self.mastodon_max_file_size = self.mastodon_max_file_size * 10 ** 6
-
-		self.mastodon_reduce_file_size_ffmpeg_output_args = container_to_lowercase(self.mastodon_reduce_file_size_ffmpeg_output_args)
 
 		if self.tumblr_api_key is None:
 			self.tumblr_api_key = os.environ['WANDERER_TUMBLR_API_KEY']
@@ -210,13 +208,17 @@ if __name__ == '__main__':
 					temporary_path = Path(tempfile.gettempdir())
 					segment_path_format = temporary_path / (CommonConfig.TEMPORARY_PATH_PREFIX + '%04d.' + recording.TextToSpeechFilename)
 
-					stream = ffmpeg.input(recording.TextToSpeechFilePath)
-					stream = stream.output(segment_path_format, c='copy', f='segment', segment_time=config.twitter_text_to_speech_segment_duration, reset_timestamps=1)
-					stream = stream.global_args(*config.ffmpeg_global_args)
-					stream = stream.overwrite_output()
+					input_args = ['-i', recording.TextToSpeechFilePath]
+					output_args = [
+						'-c', 'copy',
+						'-f', 'segment',
+						'-segment_time', config.twitter_text_to_speech_segment_duration,
+						'-reset_timestamps', 1,
+						segment_path_format,
+					]
 
-					log.debug(f'Splitting the text-to-speech file with the FFmpeg arguments: {stream.get_args()}')
-					stream.run()
+					log.debug(f'Splitting the text-to-speech file with the FFmpeg arguments: {input_args + output_args}')
+					ffmpeg(*input_args, *output_args)
 
 					segment_file_paths = sorted(temporary_path.glob('*.' + recording.TextToSpeechFilename))
 					last_status_id = status_id
@@ -261,7 +263,7 @@ if __name__ == '__main__':
 
 			except TweepyException as error:
 				log.error(f'Failed to post the recording status with the error: {repr(error)}')
-			except ffmpeg.Error as error:
+			except FfmpegException as error:
 				log.error(f'Failed to split the text-to-speech file with the error: {repr(error)}')
 
 			return media_id, status_id
@@ -290,13 +292,11 @@ if __name__ == '__main__':
 				output_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
 				output_file.close()
 
-				stream = ffmpeg.input(path)
-				stream = stream.output(output_file.name, **config.mastodon_reduce_file_size_ffmpeg_output_args)
-				stream = stream.global_args(*config.ffmpeg_global_args)
-				stream = stream.overwrite_output()
+				input_args = ['-i', path]
+				output_args = config.mastodon_reduce_file_size_ffmpeg_output_args + [output_file.name]
 
-				log.debug(f'Reducing the video size with the FFmpeg arguments: {stream.get_args()}')
-				stream.run()
+				log.debug(f'Reducing the video size with the FFmpeg arguments: {input_args + output_args}')
+				ffmpeg(*input_args, *output_args)
 
 				return Path(output_file.name)
 
@@ -307,13 +307,11 @@ if __name__ == '__main__':
 				output_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp3', delete=False)
 				output_file.close()
 
-				stream = ffmpeg.input(path)
-				stream = stream.output(output_file.name)
-				stream = stream.global_args(*config.ffmpeg_global_args)
-				stream = stream.overwrite_output()
+				input_args = ['-i', path]
+				output_args = [output_file.name]
 
-				log.debug(f'Extracting the audio with the FFmpeg arguments: {stream.get_args()}')
-				stream.run()
+				log.debug(f'Extracting the audio with the FFmpeg arguments: {input_args + output_args}')
+				ffmpeg(*input_args, *output_args)
 
 				return Path(output_file.name)
 
@@ -400,7 +398,7 @@ if __name__ == '__main__':
 				log.error(f'Failed to post the recording status with the error: {repr(error)}')
 			except OSError as error:
 				log.error(f'Failed to determine the video file size with the error: {repr(error)}')
-			except ffmpeg.Error as error:
+			except FfmpegException as error:
 				log.error(f'Failed to process the video file with the error: {repr(error)}')
 			finally:
 				if config.mastodon_reduce_file_size:

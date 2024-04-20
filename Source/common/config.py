@@ -4,7 +4,6 @@ import dataclasses
 import json
 import locale
 import logging
-import os
 from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
@@ -91,7 +90,6 @@ class CommonConfig:
 	use_guessed_encoding_as_fallback: bool
 
 	ffmpeg_path: Optional[Path]
-	ffmpeg_global_args: list[str]
 
 	language_names: dict[str, str]
 
@@ -202,7 +200,6 @@ class CommonConfig:
 		self.allowed_domains = parse_domain_list(self.allowed_domains)
 		self.disallowed_domains = parse_domain_list(self.disallowed_domains)
 
-		self.ffmpeg_global_args = container_to_lowercase(self.ffmpeg_global_args)
 		self.language_names = container_to_lowercase(self.language_names)
 
 		self.default_options = {}
@@ -251,6 +248,3 @@ log.setLevel(logging.DEBUG if config.debug else logging.INFO)
 log.debug('Running in debug mode.')
 
 locale.setlocale(locale.LC_ALL, config.locale)
-
-if config.ffmpeg_path is not None:
-	os.environ['PATH'] = str(config.ffmpeg_path) + ';' + os.environ.get('PATH', '')

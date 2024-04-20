@@ -6,10 +6,12 @@ from hashlib import sha256
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-import ffmpeg # type: ignore
-
 from common.config import CommonConfig
 from common.database import Database
+from common.ffmpeg import (
+	ffmpeg, FfmpegException,
+	ffprobe_duration, ffprobe_info,
+)
 from common.recording import Recording
 from common.snapshot import Snapshot
 from common.util import delete_file
@@ -26,19 +28,19 @@ if __name__ == '__main__':
 	parser.add_argument('-sfx', type=Path, help='The path to the transition sound effect file. If omitted, no sound is added to the transition.')
 	args = parser.parse_args()
 
-	if args.published and args.any:
+	if args.published is not None and args.any is not None:
 		parser.error('The -published and -any options cannot be used at the same time.')
 
-	if args.any and args.any[0] not in ['snapshot', 'recording']:
+	if args.any is not None and args.any[0] not in ['snapshot', 'recording']:
 		parser.error(f'Unknown ID type "{args.any[0]}". Only "snapshot" and "recording" are allowed.')
 
-	if args.sfx and not args.sfx.is_file():
+	if args.sfx is not None and not args.sfx.is_file():
 		parser.error(f'Could not find the sound effect file "{args.sfx}".')
 
-	if args.published:
+	if args.published is not None:
 		begin_date = args.published[0]
 		end_date = args.published[1]
-	elif args.any:
+	elif args.any is not None:
 		try:
 			id_type = args.any[0]
 			id_list = args.any[1]
@@ -84,7 +86,7 @@ if __name__ == '__main__':
 			row = cursor.fetchone()
 			compilation_id = row['NextCompilationId'] if row is not None else 1
 
-			if args.published:
+			if args.published is not None:
 				cursor = db.execute('''
 									SELECT S.*, SI.IsSensitive, R.*, R.Id AS RecordingId
 									FROM Snapshot S
@@ -150,7 +152,7 @@ if __name__ == '__main__':
 				else:
 					print(f'- Skipping recording #{recording.Id} of snapshot #{snapshot.Id} {snapshot} since the file "{recording.CompilationSegmentFilePath}" is missing.')
 
-			if args.any:
+			if args.any is not None:
 				tuple_index = 0 if id_type == 'snapshot' else 1
 				snapshots_and_recordings.sort(key=lambda x: id_list.index(x[tuple_index].Id))
 
@@ -163,45 +165,60 @@ if __name__ == '__main__':
 				try:
 					try:
 						template_recording = snapshots_and_recordings[0][1]
-						probe = ffmpeg.probe(template_recording.CompilationSegmentFilePath)
-						template_stream = next(stream for stream in probe['streams'] if stream['codec_type'] == 'video')
+						info = ffprobe_info(template_recording.CompilationSegmentFilePath)
+						template_stream = next(stream for stream in info['streams'] if stream['codec_type'] == 'video')
+
 						width = template_stream['width']
 						height = template_stream['height']
 						framerate = template_stream['r_frame_rate']
 
 						# See: https://trac.ffmpeg.org/wiki/FilteringGuide#SyntheticInput
-						video_stream = ffmpeg.input(f'color={args.color}:size={width}x{height}:duration={args.duration}:rate={framerate}', f='lavfi')
-						audio_stream = ffmpeg.input(args.sfx, guess_layout_max=0) if args.sfx else None
-						input_streams: list[ffmpeg.Stream] = list(filter(None, [video_stream, audio_stream]))
+						input_args = [
+							'-f', 'lavfi',
+							'-i', f'color={args.color}:size={width}x{height}:duration={args.duration}:rate={framerate}',
+						]
 
-						ffmpeg_output_args = config.text_to_speech_ffmpeg_output_args if args.tts else config.upload_ffmpeg_output_args
-						ffmpeg_output_args['tune'] = 'stillimage'
+						if args.sfx is not None:
+							input_args.extend(['-guess_layout_max', 0, '-i', args.sfx])
+
+						output_args = config.text_to_speech_ffmpeg_output_args.copy() if args.tts else config.upload_ffmpeg_output_args.copy()
+
+						try:
+							idx = output_args.index('-tune')
+							output_args[idx + 1] = 'stillimage'
+						except (ValueError, IndexError):
+							output_args.extend(['-tune', 'stillimage'])
 
 						# Remove the -shortest flags used when generating the text-to-speech file so they don't shorten the transition.
-						if 'shortest' in ffmpeg_output_args:
-							del ffmpeg_output_args['shortest']
 
-						if ffmpeg_output_args.get('fflags') == 'shortest':
-							del ffmpeg_output_args['fflags']
+						try:
+							output_args.remove('-shortest')
+						except ValueError:
+							pass
 
-						stream = ffmpeg.output(*input_streams, transition_file.name, **ffmpeg_output_args)
-						stream = stream.global_args(*config.ffmpeg_global_args)
-						stream = stream.overwrite_output()
-						stream.run()
+						try:
+							idx = output_args.index('-fflags')
+							if output_args[idx + 1] == 'shortest':
+								del output_args[idx + 1]
+								del output_args[idx]
+						except (ValueError, IndexError):
+							pass
 
-						probe = ffmpeg.probe(transition_file.name)
-						transition_duration = float(probe['format']['duration'])
+						output_args.append(transition_file.name)
 
-					except (ffmpeg.Error, StopIteration, KeyError, ValueError) as error:
+						ffmpeg(*input_args, *output_args)
+						transition_duration = ffprobe_duration(transition_file.name)
+
+					except (FfmpegException, StopIteration) as error:
 						print(f'Failed to create the transition video with the error: {repr(error)}')
 						raise
 
 					config.compilations_path.mkdir(parents=True, exist_ok=True)
 
-					id_identifier = str(compilation_id) if args.published else None
-					type_identifier = 'published' if args.published else f'any_{id_type}'
+					id_identifier = str(compilation_id) if args.published is not None else None
+					type_identifier = 'published' if args.published is not None else f'any_{id_type}'
 
-					if args.any:
+					if args.any is not None:
 						id_list_bytes = str(id_list).encode()
 						id_list_hash = sha256(id_list_bytes).hexdigest()
 						range_identifier = id_list_hash[:6]
@@ -216,8 +233,8 @@ if __name__ == '__main__':
 					compilation_identifiers = [id_identifier, type_identifier, range_identifier, total_identifier, text_to_speech_identifier]
 					compilation_path_prefix = config.compilations_path / '_'.join(filter(None, compilation_identifiers))
 
-					compilation_path = compilation_path_prefix.with_suffix('.mp4')
-					timestamps_path = compilation_path_prefix.with_suffix('.txt')
+					compilation_path = Path(str(compilation_path_prefix) + '.mp4')
+					timestamps_path = Path(str(compilation_path_prefix) + '.txt')
 
 					concat_file.write('ffconcat version 1.0\n')
 					current_duration: float = 0
@@ -239,11 +256,9 @@ if __name__ == '__main__':
 								# See:
 								# - https://stackoverflow.com/a/47725134/18442724
 								# - https://ffmpeg.org/ffmpeg-bitstream-filters.html#h264_005fmp4toannexb
-								stream = ffmpeg.input(recording.CompilationSegmentFilePath)
-								stream = stream.output(intermediate_file.name, c='copy')
-								stream = stream.global_args(*config.ffmpeg_global_args)
-								stream = stream.overwrite_output()
-								stream.run()
+								input_args = ['-i', recording.CompilationSegmentFilePath]
+								output_args = ['-c', 'copy', intermediate_file.name]
+								ffmpeg(*input_args, *output_args)
 
 								# See: https://superuser.com/questions/718027/ffmpeg-concat-doesnt-work-with-absolute-path/1551017#1551017
 								recording_concat_path = intermediate_file.name.replace('\\', '/')
@@ -263,9 +278,7 @@ if __name__ == '__main__':
 								timestamp_line = ' '.join(filter(None, recording_identifiers)) + '\n'
 								timestamps_file.write(timestamp_line)
 
-								probe = ffmpeg.probe(intermediate_file.name)
-								recording_duration = float(probe['format']['duration'])
-								current_duration += recording_duration + transition_duration
+								current_duration += ffprobe_duration(intermediate_file.name) + transition_duration
 
 							timestamps_file.write('\n')
 
@@ -282,7 +295,7 @@ if __name__ == '__main__':
 
 							timestamps_file.write('\n')
 
-							if args.published:
+							if args.published is not None:
 								timestamps_file.write(f'Type: Published ({begin_date} to {end_date})\n')
 							else:
 								timestamps_file.write(f'Type: Any {id_type.title()} ({range_identifier})\n')
@@ -292,7 +305,7 @@ if __name__ == '__main__':
 							timestamps_file.write(f'Transition Duration: {args.duration}\n')
 							timestamps_file.write(f'Transition Sfx: {args.sfx}')
 
-					except (ffmpeg.Error, KeyError, ValueError) as error:
+					except FfmpegException as error:
 						print(f'Failed to create the timestamps file with the error: {repr(error)}')
 						raise
 
@@ -302,16 +315,14 @@ if __name__ == '__main__':
 						# See:
 						# - https://trac.ffmpeg.org/wiki/Concatenate#samecodec
 						# - https://ffmpeg.org/ffmpeg-formats.html#concat
-						stream = ffmpeg.input(concat_file.name, f='concat', safe=0)
-						stream = stream.output(compilation_path, c='copy', movflags='faststart')
-						stream = stream.global_args(*config.ffmpeg_global_args)
-						stream = stream.overwrite_output()
-						stream.run()
-					except ffmpeg.Error as error:
+						input_args = ['-f', 'concat', '-safe', 0, '-i', concat_file.name]
+						output_args = ['-c', 'copy', '-movflags', 'faststart', compilation_path]
+						ffmpeg(*input_args, *output_args)
+					except FfmpegException as error:
 						print(f'Failed to create the compilation video with the error: {repr(error)}')
 						raise
 
-					if args.published:
+					if args.published is not None:
 
 						recording_compilation = []
 						for i, (snapshot, recording) in enumerate(snapshots_and_recordings, start=1):
@@ -332,7 +343,7 @@ if __name__ == '__main__':
 
 					print(f'Created the compilation "{compilation_path.name}".')
 
-				except (ffmpeg.Error, StopIteration, KeyError, ValueError):
+				except (FfmpegException, StopIteration):
 					pass
 				finally:
 					transition_file.close()

@@ -1,45 +1,44 @@
 #!/usr/bin/env python3
 
 import ctypes
-import os
 import queue
-import re
 import sqlite3
-import subprocess
-import sys
 from argparse import ArgumentParser
-from collections import Counter, defaultdict
+from collections import Counter
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
-from datetime import datetime
 from math import ceil
 from pathlib import Path
-from queue import Queue
-from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, STDOUT, TimeoutExpired
+from sys import exit
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from threading import Thread, Timer
+from threading import Thread
 from time import monotonic, sleep
-from typing import BinaryIO, Optional, Union, cast
+from typing import Optional, Union
 from urllib.parse import urljoin, urlparse, urlunparse
 
-import ffmpeg # type: ignore
 import pywinauto # type: ignore
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
-from pywinauto.application import WindowSpecification # type: ignore
-from pywinauto.base_wrapper import ElementNotEnabled, ElementNotVisible # type: ignore
 from requests import RequestException
 from selenium.common.exceptions import SessionNotCreatedException, WebDriverException # type: ignore
-from selenium.webdriver.common.utils import free_port # type: ignore
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
 from common.browser import Browser
 from common.config import CommonConfig
 from common.database import Database
+from common.ffmpeg import (
+	ffmpeg, ffmpeg_detect_audio,
+	FfmpegException, ffprobe_duration,
+	ffprobe_has_video_stream, ffprobe_info,
+)
 from common.logger import setup_logger
 from common.net import global_session, is_url_available
+from common.plugin_crash_timer import PluginCrashTimer
+from common.plugin_input_repeater import CosmoPlayerViewpointCycler, PluginInputRepeater
+from common.proxy import Proxy
 from common.rate_limiter import global_rate_limiter
+from common.screen_capture import ScreenCapture
 from common.snapshot import Snapshot
 from common.temporary_registry import TemporaryRegistry
 from common.util import (
@@ -121,10 +120,10 @@ class RecordConfig(CommonConfig):
 	screen_capture_recorder_settings: dict[str, Optional[int]]
 
 	raw_ffmpeg_input_name: str
-	raw_ffmpeg_input_args: dict[str, Union[None, int, str]]
-	raw_ffmpeg_output_args: dict[str, Union[None, int, str]]
-	archive_ffmpeg_output_args: dict[str, Union[None, int, str]]
-	upload_ffmpeg_output_args: dict[str, Union[None, int, str]]
+	raw_ffmpeg_input_args: list[Union[int, str]]
+	raw_ffmpeg_output_args: list[Union[int, str]]
+	archive_ffmpeg_output_args: list[Union[int, str]]
+	upload_ffmpeg_output_args: list[Union[int, str]]
 
 	enable_text_to_speech: bool
 	text_to_speech_audio_format_type: Optional[str]
@@ -133,14 +132,14 @@ class RecordConfig(CommonConfig):
 	text_to_speech_language_voices: dict[str, str]
 
 	text_to_speech_ffmpeg_video_input_name: str
-	text_to_speech_ffmpeg_video_input_args: dict[str, Union[None, int, str]]
-	text_to_speech_ffmpeg_audio_input_args: dict[str, Union[None, int, str]]
-	text_to_speech_ffmpeg_output_args: dict[str, Union[None, int, str]]
+	text_to_speech_ffmpeg_video_input_args: list[Union[int, str]]
+	text_to_speech_ffmpeg_audio_input_args: list[Union[int, str]]
+	text_to_speech_ffmpeg_output_args: list[Union[int, str]]
 
 	enable_media_conversion: bool
 	convertible_media_extensions: frozenset[str] # Different from the config data type.
 	media_conversion_ffmpeg_input_name: str
-	media_conversion_ffmpeg_input_args: dict[str, Union[None, int, str]]
+	media_conversion_ffmpeg_input_args: list[Union[int, str]]
 	media_conversion_add_subtitles: bool
 	media_conversion_ffmpeg_subtitles_style: str
 
@@ -172,24 +171,12 @@ class RecordConfig(CommonConfig):
 		assert self.plugin_syncing_media_type in ['none', 'reload_before', 'reload_twice', 'unload'], f'Unknown plugin syncing media type "{self.plugin_syncing_media_type}".'
 
 		self.screen_capture_recorder_settings = container_to_lowercase(self.screen_capture_recorder_settings)
-
-		self.raw_ffmpeg_input_args = container_to_lowercase(self.raw_ffmpeg_input_args)
-		self.raw_ffmpeg_output_args = container_to_lowercase(self.raw_ffmpeg_output_args)
-		self.archive_ffmpeg_output_args = container_to_lowercase(self.archive_ffmpeg_output_args)
-		self.upload_ffmpeg_output_args = container_to_lowercase(self.upload_ffmpeg_output_args)
-
 		self.text_to_speech_language_voices = container_to_lowercase(self.text_to_speech_language_voices)
-
-		self.text_to_speech_ffmpeg_video_input_args = container_to_lowercase(self.text_to_speech_ffmpeg_video_input_args)
-		self.text_to_speech_ffmpeg_audio_input_args = container_to_lowercase(self.text_to_speech_ffmpeg_audio_input_args)
-		self.text_to_speech_ffmpeg_output_args = container_to_lowercase(self.text_to_speech_ffmpeg_output_args)
 
 		self.convertible_media_extensions = frozenset(extension for extension in container_to_lowercase(self.convertible_media_extensions))
 		assert self.convertible_media_extensions.issubset(self.allowed_media_extensions), 'The convertible media extensions must be a subset of the allowed media extensions.'
 
 		assert self.multi_asset_media_extensions.isdisjoint(self.convertible_media_extensions), 'The multi-asset and convertible media extensions must be mutually exclusive.'
-
-		self.media_conversion_ffmpeg_input_args = container_to_lowercase(self.media_conversion_ffmpeg_input_args)
 
 		media_template_path = self.plugins_path / 'media.html.template'
 		with open(media_template_path, encoding='utf-8') as file:
@@ -244,456 +231,10 @@ if __name__ == '__main__':
 	log.info(f'Detected the physical screen resolution {config.physical_screen_width}x{config.physical_screen_height} with the DPI scaling ({config.width_dpi_scaling:.2f}, {config.height_dpi_scaling:.2f}).')
 
 	try:
-		subprocess.run(['ffmpeg', '-version'], check=True, stdout=DEVNULL)
-	except CalledProcessError:
+		ffmpeg('-version')
+	except FfmpegException:
 		log.error('Could not find the FFmpeg executable in the PATH.')
-		sys.exit(1)
-
-	class Proxy(Thread):
-		""" A proxy thread that intercepts all HTTP/HTTPS requests made by Firefox and its plugins. Used to locate missing resources
-		in other subdomains via the CDX API while also allowing plugin media that loads slowly to finish requesting assets. """
-
-		port: int
-
-		process: Popen
-		queue: Queue
-		timestamp: Optional[str]
-
-		RESPONSE_REGEX = re.compile(r'\[RESPONSE\] \[(?P<status_code>.+)\] \[(?P<mark>.+)\] \[(?P<content_type>.+)\] \[(?P<url>.+)\] \[(?P<id>.+)\]')
-		SAVE_REGEX  = re.compile(r'\[SAVE\] \[(?P<url>.+)\]')
-		REALMEDIA_REGEX  = re.compile(r'\[RAM\] \[(?P<url>.+)\]')
-		FILENAME_REGEX  = re.compile(r'(?P<name>.*?)(?P<num>\d+)(?P<extension>\..*)')
-
-		def __init__(self, port: int):
-
-			super().__init__(name='proxy', daemon=True)
-
-			self.port = port
-
-			os.environ['PYTHONUNBUFFERED'] = '1'
-			self.process = Popen(['mitmdump', '--quiet', '--listen-port', str(self.port), '--script', 'wayback_proxy_addon.py'], stdin=PIPE, stdout=PIPE, stderr=STDOUT, bufsize=1, encoding='utf-8')
-			self.queue = Queue()
-			self.timestamp = None
-
-			self.start()
-
-		@staticmethod
-		def create() -> 'Proxy':
-			""" Creates the proxy while handling any errors at startup (e.g. Python errors or already used ports). """
-
-			port = free_port() if config.proxy_port is None else config.proxy_port
-
-			while True:
-				try:
-					log.info(f'Creating the proxy on port {port}.')
-					proxy = Proxy(port)
-
-					error = proxy.get(timeout=10)
-					log.error(f'Failed to create the proxy with the error: {error}')
-					proxy.task_done()
-
-					proxy.process.kill()
-					sleep(5)
-					port = free_port()
-
-				except queue.Empty:
-					break
-
-			return proxy
-
-		def run(self):
-			""" Runs the proxy thread on a loop, enqueuing any messages received from the mitmproxy script. """
-			for line in iter(self.process.stdout.readline, ''):
-				self.queue.put(line.rstrip('\n'))
-			self.process.stdout.close()
-
-		def get(self, **kwargs) -> str:
-			""" Retrieves a message from the queue. """
-			return self.queue.get(**kwargs)
-
-		def task_done(self) -> None:
-			""" Signals that a retrieved message was handled. """
-			self.queue.task_done()
-
-		def clear(self) -> None:
-			""" Clears the message queue. """
-			while not self.queue.empty():
-				try:
-					self.get(block=False)
-					self.task_done()
-				except queue.Empty:
-					pass
-
-		def exec(self, command: str) -> None:
-			""" Passes a command that is then executed in the mitmproxy script. """
-			self.process.stdin.write(command + '\n') # type: ignore
-			self.get()
-			self.task_done()
-
-		def shutdown(self) -> None:
-			""" Stops the mitmproxy script and proxy thread. """
-			try:
-				self.process.terminate()
-				self.join()
-			except OSError as error:
-				log.error(f'Failed to terminate the proxy process with the error: {repr(error)}')
-
-		def __enter__(self):
-			self.clear()
-			self.exec(f'current_timestamp = "{self.timestamp}"')
-
-		def __exit__(self, exception_type, exception_value, traceback):
-			self.exec('current_timestamp = None')
-
-	class PluginCrashTimer:
-		""" A special timer that kills Firefox's plugin container child processes after a given time has elapsed (e.g. the recording duration). """
-
-		timeout: float
-
-		plugin_container_path: Path
-		java_plugin_launcher_path: Optional[Path]
-		timer: Timer
-		crashed: bool
-
-		def __init__(self, browser: Browser, timeout: float):
-
-			self.timeout = timeout
-
-			self.plugin_container_path = browser.firefox_path.parent / 'plugin-container.exe'
-			self.java_plugin_launcher_path = browser.java_bin_path / 'jp2launcher.exe' if browser.java_bin_path is not None else None
-
-			self.timer = Timer(self.timeout, self.kill_plugin_containers)
-
-			log.debug(f'Created a plugin crash timer with {self.timeout:.1f} seconds.')
-
-		def start(self) -> None:
-			""" Starts the timer. """
-			self.crashed = False
-			self.timer.start()
-
-		def stop(self) -> None:
-			""" Stops the timer and checks if it had to kill the plugin container processes at any point. """
-			self.crashed = not self.timer.is_alive()
-			self.timer.cancel()
-
-		def __enter__(self):
-			self.start()
-			return self
-
-		def __exit__(self, exception_type, exception_value, traceback):
-			self.stop()
-
-		def kill_plugin_containers(self) -> None:
-			log.warning(f'Killing all plugin containers since {self.timeout:.1f} seconds have passed without the timer being reset.')
-
-			if self.java_plugin_launcher_path is not None:
-				kill_processes_by_path(self.java_plugin_launcher_path)
-
-			kill_processes_by_path(self.plugin_container_path)
-
-	class ScreenCapture:
-		""" A process that captures the screen and stores the recording on disk using FFmpeg. """
-
-		raw_path: Path
-		upload_path: Path
-		archive_path: Optional[Path]
-
-		stream: ffmpeg.Stream
-		process: Popen
-		failed: bool
-
-		def __init__(self, output_path_prefix: Path):
-
-			self.raw_path = output_path_prefix.with_suffix('.raw.mkv')
-			self.upload_path = output_path_prefix.with_suffix('.mp4')
-			self.archive_path = output_path_prefix.with_suffix('.mkv') if config.save_archive_copy else None
-
-			stream = ffmpeg.input(config.raw_ffmpeg_input_name, t=config.max_duration, **config.raw_ffmpeg_input_args)
-			stream = stream.output(self.raw_path, **config.raw_ffmpeg_output_args)
-			stream = stream.global_args(*config.ffmpeg_global_args)
-			stream = stream.overwrite_output()
-			self.stream = stream
-
-		def start(self) -> None:
-			""" Starts the FFmpeg screen capture process asynchronously. """
-
-			log.debug(f'Recording with the FFmpeg arguments: {self.stream.get_args()}')
-			self.failed = False
-
-			# Connecting a pipe to stdin is required to stop the recording by pressing Q.
-			# See: https://github.com/kkroening/ffmpeg-python/issues/162
-			# Connecting a pipe to stdout and stderr is useful to check for any FFmpeg error messages.
-			self.process = self.stream.run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
-
-		def stop(self) -> None:
-			""" Stops the FFmpeg screen capture process gracefully or kills it doesn't respond. """
-
-			try:
-				output, errors = self.process.communicate(b'q', timeout=10)
-
-				for line in output.decode(errors='ignore').splitlines():
-					log.info(f'FFmpeg output: {line}')
-
-				for line in errors.decode(errors='ignore').splitlines():
-					log.warning(f'FFmpeg warning/error: {line}')
-
-			except TimeoutExpired:
-				log.error('Failed to stop the recording gracefully.')
-				self.failed = True
-				self.process.kill()
-
-		def __enter__(self):
-			self.start()
-			return self
-
-		def __exit__(self, exception_type, exception_value, traceback):
-			self.stop()
-
-		def perform_post_processing(self) -> None:
-			""" Converts the lossless MKV recording into a lossy MP4 video, and optionally reduces the size of the lossless copy for archival. """
-
-			if not self.failed:
-
-				output_types = [(self.upload_path, config.upload_ffmpeg_output_args)]
-
-				if self.archive_path is not None:
-					output_types.append((self.archive_path, config.archive_ffmpeg_output_args))
-
-				for output_path, output_args in output_types:
-
-					stream = ffmpeg.input(self.raw_path)
-					stream = stream.output(output_path, **output_args)
-					stream = stream.global_args(*config.ffmpeg_global_args)
-					stream = stream.overwrite_output()
-
-					try:
-						log.debug(f'Processing the recording with the FFmpeg arguments: {stream.get_args()}')
-						stream.run()
-					except ffmpeg.Error as error:
-						log.error(f'Failed to process "{self.raw_path}" into "{output_path}" with the error: {repr(error)}')
-						self.failed = True
-						break
-
-			delete_file(self.raw_path)
-
-	if config.enable_text_to_speech:
-
-		from comtypes import COMError # type: ignore
-		from comtypes.client import CreateObject # type: ignore
-
-		# We need to create a speech engine at least once before importing SpeechLib. Otherwise, we'd get an ImportError.
-		CreateObject('SAPI.SpVoice')
-		from comtypes.gen import SpeechLib # type: ignore
-
-		class TextToSpeech:
-			""" A wrapper for the Microsoft Speech API and FFmpeg that generates a text-to-speech recording. """
-
-			engine: SpeechLib.ISpeechVoice
-			stream: SpeechLib.ISpeechFileStream
-			temporary_file: BinaryIO
-
-			language_to_voice: dict[Optional[str], SpeechLib.ISpeechObjectToken]
-
-			def __init__(self):
-
-				# See:
-				# - https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ms723602(v=vs.85)
-				# - https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ms722561(v=vs.85)
-				self.engine = CreateObject('SAPI.SpVoice')
-				self.stream = CreateObject('SAPI.SpFileStream')
-
-				# We have to close the temporary file so SpFileStream.Open() doesn't fail.
-				self.temporary_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.wav', delete=False)
-				self.temporary_file.close()
-
-				try:
-					if config.text_to_speech_audio_format_type is not None:
-						self.engine.AllowOutputFormatChangesOnNextSet = False
-						self.stream.Format.Type = getattr(SpeechLib, config.text_to_speech_audio_format_type)
-				except AttributeError:
-					log.error(f'Could not find the audio format type "{config.text_to_speech_audio_format_type}".')
-
-				if config.text_to_speech_rate is not None:
-					self.engine.Rate = config.text_to_speech_rate
-
-				voices = {}
-				for voice in self.engine.GetVoices():
-					name = voice.GetAttribute('Name')
-					voices[name] = voice
-
-					language = voice.GetAttribute('Language')
-					gender = voice.GetAttribute('Gender')
-					age = voice.GetAttribute('Age')
-					vendor = voice.GetAttribute('Vendor')
-					description = voice.GetDescription()
-					log.info(f'Found the text-to-speech voice ({name}, {language}, {gender}, {age}, {vendor}): "{description}".')
-
-				default_voice = self.engine.Voice
-				if config.text_to_speech_default_voice is not None:
-					default_voice = next((voice for name, voice in voices.items() if config.text_to_speech_default_voice.lower() in name.lower()), default_voice)
-
-				self.language_to_voice = defaultdict(lambda: default_voice)
-
-				for language, voice_name in config.text_to_speech_language_voices.items():
-					voice = next((voice for name, voice in voices.items() if voice_name.lower() in name.lower()), None)
-					if voice is not None:
-						self.language_to_voice[language] = voice
-
-			def generate_text_to_speech_file(self, title: str, date: datetime, text: str, language: Optional[str], output_path_prefix: Path) -> Optional[str]:
-				""" Generates a video file that contains the text-to-speech in the audio track and a blank screen on the video one.
-				The voice used by the Speech API is specified in the configuration file and depends on the page's language.
-				The correct voice packages have been installed on Windows, otherwise a default voice is used instead. """
-
-				# Add some context XML so the date is spoken correctly no matter the language.
-				# See: https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee125665(v=vs.85)
-				date_xml = f'<context id="date_ymd">{date.year}/{date.month}/{date.day}</context>'
-
-				output_path: Optional[str] = output_path_prefix.with_suffix(f'.tts.{language}.mp4' if language is not None else '.tts.mp4')
-
-				try:
-					# See:
-					# - https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ms720858(v=vs.85)
-					# - https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ms720892(v=vs.85)
-					self.stream.Open(self.temporary_file.name, SpeechLib.SSFMCreateForWrite)
-					self.engine.AudioOutputStream = self.stream
-					self.engine.Voice = self.language_to_voice[language]
-					self.engine.Speak(title, SpeechLib.SVSFPurgeBeforeSpeak | SpeechLib.SVSFIsNotXML)
-					self.engine.Speak(date_xml, SpeechLib.SVSFPurgeBeforeSpeak | SpeechLib.SVSFIsXML)
-					self.engine.Speak(text, SpeechLib.SVSFPurgeBeforeSpeak | SpeechLib.SVSFIsNotXML)
-					self.stream.Close()
-
-					video_stream = ffmpeg.input(config.text_to_speech_ffmpeg_video_input_name, **config.text_to_speech_ffmpeg_video_input_args)
-					audio_stream = ffmpeg.input(self.temporary_file.name, **config.text_to_speech_ffmpeg_audio_input_args)
-
-					target_stream = ffmpeg.output(video_stream, audio_stream, output_path, **config.text_to_speech_ffmpeg_output_args)
-					target_stream = target_stream.global_args(*config.ffmpeg_global_args)
-					target_stream = target_stream.overwrite_output()
-
-					log.debug(f'Generating the text-to-speech file with the FFmpeg arguments: {target_stream.get_args()}')
-					target_stream.run()
-
-				except (COMError, ffmpeg.Error) as error:
-					log.error(f'Failed to generate the text-to-speech file "{output_path}" with the error: {repr(error)}')
-					output_path = None
-
-				return output_path
-
-			def cleanup(self) -> None:
-				""" Deletes the temporary WAV file created by the Speech API. """
-				delete_file(self.temporary_file.name)
-
-	class PluginInputRepeater(Thread):
-		""" A thread that periodically interacts with any plugin instance running in Firefox. """
-
-		firefox_window: Optional[WindowSpecification]
-		running: bool
-
-		def __init__(self, firefox_window: Optional[WindowSpecification], thread_name='plugin_input_repeater'):
-
-			super().__init__(name=thread_name, daemon=True)
-
-			self.firefox_window = firefox_window
-			self.running = False
-
-		def run(self):
-			""" Runs the input repeater on a loop, sending a series of keystrokes periodically to any Firefox plugin windows. """
-
-			if self.firefox_window is None:
-				return
-
-			first = True
-
-			while self.running:
-
-				if first:
-					sleep(config.plugin_input_repeater_initial_wait)
-				else:
-					sleep(config.plugin_input_repeater_wait_per_cycle)
-
-				first = False
-
-				try:
-					# For the Flash Player and any other plugins that use the generic window.
-					# Note that this feature might not work when running in a remote machine that was connected via VNC.
-					# Interacting with Java applets and VRML worlds should still work though.
-					# E.g. https://web.archive.org/web/20010306033409if_/http://www.big.or.jp/~frog/others/button1.html
-					# E.g. https://web.archive.org/web/20030117223552if_/http://www.miniclip.com:80/dancingbush.htm
-					plugin_windows = self.firefox_window.children(class_name='GeckoPluginWindow')
-
-					# For the Shockwave Player.
-					# No known examples at the time of writing.
-					plugin_windows += self.firefox_window.children(class_name='ImlWinCls')
-					plugin_windows += self.firefox_window.children(class_name='ImlWinClsSw10')
-
-					# For the Java Plugin.
-					# E.g. https://web.archive.org/web/20050901064800if_/http://www.javaonthebrain.com/java/iceblox/
-					# E.g. https://web.archive.org/web/19970606032004if_/http://www.brown.edu:80/Students/Japanese_Cultural_Association/java/
-					plugin_windows += self.firefox_window.children(class_name='SunAwtCanvas')
-					plugin_windows += self.firefox_window.children(class_name='SunAwtFrame')
-
-					for window in plugin_windows:
-						try:
-							rect = window.rectangle()
-							width = round(rect.width() / config.width_dpi_scaling)
-							height = round(rect.height() / config.height_dpi_scaling)
-							interactable = width >= config.plugin_input_repeater_min_window_size and height >= config.plugin_input_repeater_min_window_size
-
-							if interactable:
-								window.click()
-								window.send_keystrokes(config.plugin_input_repeater_keystrokes)
-
-							if config.debug and config.plugin_input_repeater_debug:
-								color = 'green' if interactable else 'red'
-								window.draw_outline(color)
-								window.debug_message(f'{width}x{height}')
-
-						except (ElementNotEnabled, ElementNotVisible):
-							log.debug('Skipping a disabled or hidden window.')
-
-				except Exception as error:
-					log.error(f'Failed to send the input to the plugin windows with the error: {repr(error)}')
-
-		def startup(self) -> None:
-			""" Starts the input repeater thread. """
-			self.running = True
-			self.start()
-
-		def shutdown(self) -> None:
-			""" Stops the input repeater thread. """
-			self.running = False
-			self.join()
-
-		def __enter__(self):
-			self.startup()
-			return self
-
-		def __exit__(self, exception_type, exception_value, traceback):
-			self.shutdown()
-
-	class CosmoPlayerViewpointCycler(PluginInputRepeater):
-		""" A thread that periodically tells any VRML world running in the Cosmo Player to move to the next viewpoint. """
-
-		def __init__(self, firefox_window: Optional[WindowSpecification]):
-			super().__init__(firefox_window, thread_name='cosmo_player_viewpoint_cycler')
-
-		def run(self):
-			""" Runs the viewpoint cycler on a loop, sending the "Next Viewpoint" hotkey periodically to any Cosmo Player windows. """
-
-			if self.firefox_window is None:
-				return
-
-			while self.running:
-
-				sleep(config.cosmo_player_viewpoint_wait_per_cycle)
-
-				try:
-					# E.g. https://web.archive.org/web/19970713113545if_/http://www.hedges.org:80/thehedges/Ver21.wrl
-					# E.g. https://web.archive.org/web/20220616010004if_/http://disciplinas.ist.utl.pt/leic-cg/materiais/VRML/cenas_vrml/golf/golf.wrl
-					cosmo_player_windows = self.firefox_window.children(class_name='CpWin32RenderWindow')
-					for window in cosmo_player_windows:
-						window.send_keystrokes('{PGDN}')
-				except Exception as error:
-					log.error(f'Failed to send the input to the Cosmo Player windows with the error: {repr(error)}')
+		exit(1)
 
 	scheduler = BlockingScheduler()
 
@@ -704,13 +245,14 @@ if __name__ == '__main__':
 
 		if config.enable_proxy:
 			log.info('Initializing the proxy.')
-			proxy = Proxy.create()
+			proxy = Proxy.create(port=config.proxy_port)
 		else:
 			proxy = nullcontext() # type: ignore
 
 		if config.enable_text_to_speech:
+			from common.text_to_speech import TextToSpeech
 			log.info('Initializing the text-to-speech engine.')
-			text_to_speech = TextToSpeech()
+			text_to_speech = TextToSpeech(config)
 
 		media_page_file = NamedTemporaryFile(mode='w', encoding='utf-8', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.html', delete=False)
 		media_page_url = f'file:///{media_page_file.name}'
@@ -803,21 +345,21 @@ if __name__ == '__main__':
 							embed_url = f'file:///{download_path}'
 							loop = 'false'
 
-							probe = ffmpeg.probe(download_path)
+							info = ffprobe_info(download_path)
 
 							# See: https://wiki.multimedia.cx/index.php/FFmpeg_Metadata
-							tags = probe['format'].get('tags', {})
+							tags = info['format'].get('tags', {})
 							title = tags.get('title')
 							author = tags.get('author') or tags.get('artist') or tags.get('album_artist') or tags.get('composer') or tags.get('copyright')
 							log.debug(f'The media file "{title}" by "{author}" has the following tags: {tags}')
 
-							duration = float(probe['format']['duration'])
+							duration = float(info['format']['duration'])
 							log.debug(f'The media file has a duration of {duration:.2f} seconds.')
 
 						except RequestException as error:
 							log.error(f'Failed to download the media file "{wayback_url}" with the error: {repr(error)}')
 							success = False
-						except (ffmpeg.Error, KeyError, ValueError) as error:
+						except (FfmpegException, KeyError, ValueError) as error:
 							log.warning(f'Could not parse the media file\'s metadata with the error: {repr(error)}')
 
 					content = config.media_template
@@ -873,8 +415,13 @@ if __name__ == '__main__':
 							registry_value = config.physical_screen_height
 							log.info(f'Using the physical height ({config.physical_screen_height}) to capture the screen.')
 						elif key == 'default_max_fps':
-							framerate = config.raw_ffmpeg_input_args.get('framerate', 60)
-							registry_value = cast(int, framerate)
+							try:
+								idx = config.raw_ffmpeg_input_args.index('-framerate')
+								framerate = int(config.raw_ffmpeg_input_args[idx + 1])
+							except (ValueError, IndexError):
+								framerate = 60
+							finally:
+								registry_value = framerate
 						else:
 							registry.delete(registry_key)
 							continue
@@ -882,9 +429,6 @@ if __name__ == '__main__':
 						registry_value = value
 
 					registry.set(registry_key, registry_value)
-
-				# E.g. "[silencedetect @ 0000022c2f32bf40] silence_end: 4.54283 | silence_duration: 0.377167"
-				SILENCE_DURATION_REGEX = re.compile(r'^\[silencedetect.*silence_duration: (?P<duration>\d+\.\d+)', re.MULTILINE)
 
 				for snapshot_index in range(num_snapshots):
 
@@ -1134,13 +678,12 @@ if __name__ == '__main__':
 
 									for url in browser.get_playback_plugin_sources():
 										try:
-											probe = ffmpeg.probe(url)
-											duration = float(probe['format']['duration'])
+											duration = ffprobe_duration(url)
 											if max_plugin_duration is not None:
 												max_plugin_duration = max(max_plugin_duration, duration)
 											else:
 												max_plugin_duration = duration
-										except (ffmpeg.Error, KeyError, ValueError) as error:
+										except FfmpegException as error:
 											log.warning(f'Could not determine the duration of "{url}" with the error: {repr(error)}')
 
 									if max_plugin_duration is not None:
@@ -1230,16 +773,16 @@ if __name__ == '__main__':
 						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.max_duration
 						plugin_syncing_type = config.plugin_syncing_media_type if snapshot.IsMedia else config.plugin_syncing_page_type
 
-						plugin_input_repeater: Union[PluginInputRepeater, AbstractContextManager[None]] = PluginInputRepeater(browser.window) if config.enable_plugin_input_repeater else nullcontext()
-						cosmo_player_viewpoint_cycler: Union[CosmoPlayerViewpointCycler, AbstractContextManager[None]] = CosmoPlayerViewpointCycler(browser.window) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
+						plugin_input_repeater: Union[PluginInputRepeater, AbstractContextManager[None]] = PluginInputRepeater(browser.window, config) if config.enable_plugin_input_repeater else nullcontext()
+						cosmo_player_viewpoint_cycler: Union[CosmoPlayerViewpointCycler, AbstractContextManager[None]] = CosmoPlayerViewpointCycler(browser.window, config) if config.enable_cosmo_player_viewpoint_cycler else nullcontext()
 
 						subdirectory_path = config.get_recording_subdirectory_path(recording_id)
 						subdirectory_path.mkdir(parents=True, exist_ok=True)
 
 						parts = urlparse(snapshot.Url)
 						media_identifier = snapshot.MediaExtension if snapshot.IsMedia else ('p' if snapshot.PageUsesPlugins else None)
-						recording_identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, str(snapshot.OldestDatetime.year), str(snapshot.OldestDatetime.month).zfill(2), str(snapshot.OldestDatetime.day).zfill(2), media_identifier]
-						recording_path_prefix = subdirectory_path / '_'.join(filter(None, recording_identifiers))
+						identifiers = [str(recording_id), str(snapshot.Id), parts.hostname, str(snapshot.OldestDatetime.year), str(snapshot.OldestDatetime.month).zfill(2), str(snapshot.OldestDatetime.day).zfill(2), media_identifier]
+						path_prefix = subdirectory_path / '_'.join(filter(None, identifiers))
 
 						upload_path: Path
 						archive_path: Optional[Path]
@@ -1257,20 +800,19 @@ if __name__ == '__main__':
 							browser.close_all_windows()
 							browser.go_to_blank_page_with_text('\N{DNA Double Helix} Converting Media \N{DNA Double Helix}', str(snapshot))
 
-							upload_path = recording_path_prefix.with_suffix('.mp4')
+							upload_path = Path(str(path_prefix) + '.mp4')
 							archive_path = None
 							text_to_speech_path = None
 
 							try:
-								probe = ffmpeg.probe(media_path)
-								has_video_stream = any(stream for stream in probe['streams'] if stream['codec_type'] == 'video')
+								input_args = [
+									'-guess_layout_max', 0, '-i', media_path,
+									*config.media_conversion_ffmpeg_input_args, '-i', config.media_conversion_ffmpeg_input_name,
+								]
 
-								# Add a video stream to the recording if the media file doesn't have one.
-								media_stream = ffmpeg.input(media_path, guess_layout_max=0)
-								video_stream = None if has_video_stream else ffmpeg.input(config.media_conversion_ffmpeg_input_name, **config.media_conversion_ffmpeg_input_args)
-								input_streams: list[ffmpeg.Stream] = list(filter(None, [media_stream, video_stream]))
+								output_args = config.upload_ffmpeg_output_args.copy()
 
-								if config.media_conversion_add_subtitles and not has_video_stream:
+								if config.media_conversion_add_subtitles and not ffprobe_has_video_stream(media_path):
 
 									log.debug('Adding subtitles to the converted media file.')
 
@@ -1284,33 +826,33 @@ if __name__ == '__main__':
 									subtitles_file.flush()
 
 									# Take into account any previous filters from the configuration file.
-									output_args = config.upload_ffmpeg_output_args.copy()
 									subtitles_filter = f"subtitles='{escaped_subtitles_path}':force_style='{config.media_conversion_ffmpeg_subtitles_style}'"
 
-									if 'vf' in output_args:
-										output_args['vf'] += ',' + subtitles_filter # type: ignore
-									else:
-										output_args['vf'] = subtitles_filter
+									try:
+										idx = output_args.index('-vf')
+										output_args[idx + 1] += ',' + subtitles_filter
+									except (ValueError, IndexError):
+										output_args.extend(['-vf', subtitles_filter])
+
+									output_args.extend(['-map', '1:v', '-map', '0:a'])
 								else:
-									output_args = config.upload_ffmpeg_output_args
+									output_args.extend(['-map', 0])
 
-								stream = ffmpeg.output(*input_streams, upload_path, t=config.max_duration, shortest=None, **output_args)
-								stream = stream.global_args(*config.ffmpeg_global_args)
-								stream = stream.overwrite_output()
+								output_args.extend(['-t', config.max_duration, '-shortest', upload_path])
 
-								log.debug(f'Converting the media file with the FFmpeg arguments: {stream.get_args()}')
-								output, errors = stream.run(capture_stdout=True, capture_stderr=True)
+								log.debug(f'Converting the media file with the FFmpeg arguments: {input_args + output_args}')
+								output, warnings = ffmpeg(*input_args, *output_args)
 
 								log.info(f'Saved the media conversion to "{upload_path}".')
 								state = Snapshot.RECORDED
 
-								for line in output.decode(errors='ignore').splitlines():
+								for line in output.splitlines():
 									log.info(f'FFmpeg output: {line}')
 
-								for line in errors.decode(errors='ignore').splitlines():
-									log.warning(f'FFmpeg warning/error: {line}')
+								for line in warnings.splitlines():
+									log.warning(f'FFmpeg warning: {line}')
 
-							except ffmpeg.Error as error:
+							except FfmpegException as error:
 								log.error(f'Aborted the media conversion with the error: {repr(error)}.')
 								state = Snapshot.ABORTED
 						else:
@@ -1360,23 +902,19 @@ if __name__ == '__main__':
 
 									delayed_sync_plugins_thread = Thread(target=delayed_sync_plugins, name='sync_plugins', daemon=True)
 
-								with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(recording_path_prefix) as capture:
+								with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(path_prefix, config) as capture:
 
 									if plugin_syncing_type == 'reload_twice':
-
 										log.debug('Reloading plugin content.')
 										browser.reload_plugin_content(skip_applets=True)
-
 									elif plugin_syncing_type == 'unload':
 										delayed_sync_plugins_thread.start()
 
 									sleep(wait_after_load)
 
 									for _ in range(num_scrolls):
-
 										for _ in browser.traverse_frames():
 											driver.execute_script('window.scrollBy({top: arguments[0], left: 0, behavior: "smooth"});', scroll_step)
-
 										sleep(wait_per_scroll)
 
 							if plugin_syncing_type == 'unload':
@@ -1410,51 +948,18 @@ if __name__ == '__main__':
 								browser.go_to_blank_page_with_text('\N{Speech Balloon} Generating Text-to-Speech \N{Speech Balloon}', str(snapshot))
 
 								page_text = '.\n'.join(frame_text_list)
-								text_to_speech_path = text_to_speech.generate_text_to_speech_file(snapshot.DisplayTitle, snapshot.OldestDatetime, page_text, snapshot.PageLanguage, recording_path_prefix)
+								text_to_speech_path = text_to_speech.generate_text_to_speech_file(snapshot.DisplayTitle, snapshot.OldestDatetime, page_text, snapshot.PageLanguage, path_prefix)
 
 								if text_to_speech_path is not None:
 									log.info(f'Saved the text-to-speech file to "{text_to_speech_path}".')
 
 						has_audio = False
-
 						if state == Snapshot.RECORDED:
-
 							browser.go_to_blank_page_with_text('\N{Speaker With Cancellation Stroke} Detecting Silence \N{Speaker With Cancellation Stroke}', str(snapshot))
-
 							try:
-								probe = ffmpeg.probe(upload_path)
-								recording_duration = float(probe['format']['duration'])
-								has_audio_stream = any(stream for stream in probe['streams'] if stream['codec_type'] == 'audio')
-
-								# We'll use our own global arguments since we need the log level set to
-								# info in order to get the filter's output. The minimum silence duration
-								# should be under one second so we can detect audio in short media files.
-								# E.g. https://web.archive.org/web/19961106150353if_/http://www.dnai.com:80/~sharrow/wav/frog.wav
-								stream = ffmpeg.input(upload_path)
-								stream = stream.output('-', f='null', af='silencedetect=duration=0.1')
-								stream = stream.global_args('-hide_banner', '-nostats')
-
-								# The filter's output goes to stderr.
-								log.debug(f'Detecting silence with the FFmpeg arguments: {stream.get_args()}')
-								_, errors = stream.run(capture_stderr=True)
-
-								output = errors.decode(errors='ignore')
-								match = SILENCE_DURATION_REGEX.search(output)
-
-								# From testing, the difference between the durations in silent recordings is
-								# usually under 0.1 seconds, so we'll increase this threshold for good measure.
-								# If FFmpeg couldn't detect any silence, we still have to check if the recording
-								# has an audio stream because we might have converted a video-only media file.
-								# E.g. https://web.archive.org/web/19970119195540if_/http://www.gwha.com:80/dynimg/lapse.mpeg
-								if match is not None:
-									silence_duration = float(match['duration'])
-									has_audio = abs(recording_duration - silence_duration) > 0.2
-									log.debug(f'Detected {silence_duration:.2f} seconds of silence out of {recording_duration:.2f}.')
-								else:
-									has_audio = has_audio_stream
-									log.debug(f'No silence detected (audio stream = {has_audio_stream}).')
-
-							except (ffmpeg.Error, KeyError, ValueError) as error:
+								log.debug(f'Detecting silence.')
+								has_audio = ffmpeg_detect_audio(upload_path)
+							except FfmpegException as error:
 								log.error(f'Could not detect silence with the error: {repr(error)}')
 
 						# If enabled, this step should be done even when converting media files directly

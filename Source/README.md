@@ -41,8 +41,6 @@ The following Python packages are used:
 
 * [tldextract](https://github.com/john-kurkowski/tldextract) to determine the correct registered domain from a URL.
 
-* [ffmpeg-python](https://github.com/kkroening/ffmpeg-python): to record the screen and manipulate audio/video files.
-
 * [Tweepy](https://github.com/tweepy/tweepy): to upload the recorded videos to Twitter and create posts.
 
 * [Mastodon.py](https://github.com/halcy/Mastodon.py): to upload the recorded videos to Mastodon and create posts.
@@ -113,9 +111,9 @@ If you're hosting the bot in a remote Windows machine, there are some additional
 
 * If your machine doesn't have any audio output devices, then some components will crash or show error messages during recording. These include the FFmpeg audio capture device and the MIDI web plugin. You can solve this by installing the [VB-CABLE](https://vb-audio.com/Cable/index.htm) virtual audio device and selecting the speakers as your default output device in the Windows settings by going to `Devices > Sound settings (under Related settings) > Sound Control Panel (under Related settings) > Playback`.
 
-* It's strongly recommended that you increase the `rtbufsize` and `thread_queue_size` parameters in `raw_ffmpeg_input_args` to the maximum supported values for the remote machine. Check how much RAM is free while displaying a page with plugins in the browser (e.g. [this snapshot](https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html)) and set `rtbufsize` somewhere close to that value. If you see the errors `real-time buffer [screen-capture-recorder] [video input] too full or near too full` or `Thread message queue blocking; consider raising the thread_queue_size option` in the recorder log file, increase `rtbufsize` and `thread_queue_size`, respectively. If these values are too low, the recordings will stutter. A good rule of thumb is setting `thread_queue_size` to 5000 and `rtbufsize` as close as possible to 2 GB while leaving around 400 to 500 MB free for Firefox, the web plugins, and the Python scripts.
+* It's strongly recommended that you increase the `-rtbufsize` and `-thread_queue_size` parameters in `raw_ffmpeg_input_args` to the maximum supported values for the remote machine. Check how much RAM is free while displaying a page with plugins in the browser (e.g. [this snapshot](https://web.archive.org/web/19990222174035if_/http://www.geocities.com/Heartland/Plains/1036/arranco.html)) and set `-rtbufsize` somewhere close to that value. If you see the errors `real-time buffer [screen-capture-recorder] [video input] too full or near too full` or `Thread message queue blocking; consider raising the thread_queue_size option` in the recorder log file, increase `-rtbufsize` and `-thread_queue_size`, respectively. If these values are too low, the recordings will stutter. A good rule of thumb is setting `-thread_queue_size` to 5000 and `-rtbufsize` as close as possible to 2 GB while leaving around 400 to 500 MB free for Firefox, the web plugins, and the Python scripts.
 
-* If the recordings stutter in specific situations (e.g. VRML worlds or video media files), consider lowering the frame rate from 60 to 30 FPS. You can do this by setting the `framerate` parameter in `raw_ffmpeg_input_args` to 30, and by changing the `r` and `g` parameters in `upload_ffmpeg_output_args` to 30 and 15, respectively. Remember that `g` should be half the frame rate. If `enable_media_conversion` is enabled, change the `rate` parameter in `media_conversion_ffmpeg_input_name` from `60/1` to `30/1`.
+* If the recordings stutter in specific situations (e.g. VRML worlds or video media files), consider lowering the frame rate from 60 to 30 FPS. You can do this by setting the `-framerate` parameter in `raw_ffmpeg_input_args` to 30, and by changing the `-r` and `-g` parameters in `upload_ffmpeg_output_args` to 30 and 15, respectively. Remember that `-g` should be half the frame rate. If `enable_media_conversion` is enabled, change the `rate` parameter in `media_conversion_ffmpeg_input_name` from `60/1` to `30/1`.
 
 * It's recommended that you adjust the dimensions of the scale and pad filters in `upload_ffmpeg_output_args` depending on your screen capture dimensions (or on your display settings if these are set to null in `screen_capture_recorder_settings`). For example, you could change the width and height to 1920x1080 (16:9) or 1440x1080 (4:3) in order to record 1080p videos. If `enable_media_conversion` is enabled, you should also change the `size` parameter in `media_conversion_ffmpeg_input_name`.
 
@@ -272,8 +270,6 @@ Used by all scripts.
 * `use_guessed_encoding_as_fallback`: enable to use the character encoding guessed by the Wayback Machine as the fallback. Only used if `enable_fallback_encoding` is enabled.
 
 * `ffmpeg_path`: the path to the FFmpeg executables directory. May be null if FFmpeg is already in the PATH.
-
-* `ffmpeg_global_args`: a list of arguments to always pass to FFmpeg. Note that the `-y` argument used to overwrite the output file is always passed.
 
 * `language_names`: maps a language's ISO 639-1 code to its name. This currently only lists the languages supported by the Microsoft Speech API.
 
@@ -433,11 +429,11 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `save_archive_copy`: enable to save a lossless copy of the raw recording for archival purposes. Although this copy is smaller than the raw footage, it's still significantly larger than the lossy recording.
 
-* `screen_capture_recorder_settings`: the Screen Capture Recorder device settings. Any previous settings are temporarily cleared from the registry before applying these changes. As such, you should only change a setting if you don't want its default value. If `capture_width` or `capture_height` are null, these will be set to the screen's physical width and height, respectively, in order to record the entire screen. If `default_max_fps` is null, it will be set to the `framerate` parameter from `raw_ffmpeg_input_args`. If this parameter isn't specified, then the setting is set to 60. Note that this is just the device's maximum frame rate. The recording frame rate is specified in `raw_ffmpeg_input_args`. Refer to the [Screen Capture Recorder documentation](https://github.com/rdp/screen-capture-recorder-to-video-windows-free#configuration) for a list of all possible settings.
+* `screen_capture_recorder_settings`: the Screen Capture Recorder device settings. Any previous settings are temporarily cleared from the registry before applying these changes. As such, you should only change a setting if you don't want its default value. If `capture_width` or `capture_height` are null, these will be set to the screen's physical width and height, respectively, in order to record the entire screen. If `default_max_fps` is null, it will be set to the `-framerate` parameter from `raw_ffmpeg_input_args`. If this parameter isn't specified, then the setting is set to 60. Note that this is just the device's maximum frame rate. The recording frame rate is specified in `raw_ffmpeg_input_args`. Refer to the [Screen Capture Recorder documentation](https://github.com/rdp/screen-capture-recorder-to-video-windows-free#configuration) for a list of all possible settings.
 
 * `raw_ffmpeg_input_name`: the input device used to capture the screen. This should be the Screen Capture Recorder device.
 
-* `raw_ffmpeg_input_args`: the input arguments used to capture the screen. Set a parameter to null if it's meant to be used as a flag (e.g. `-shortest`). Refer to the [FFmpeg documentation](https://ffmpeg.org/ffmpeg-all.html) for a list of all possible parameters. In particular, see [this tutorial](https://trac.ffmpeg.org/wiki/Capture/Desktop) to learn about the best parameters to use when capturing the screen with FFmpeg.
+* `raw_ffmpeg_input_args`: the input arguments used to capture the screen. Refer to the [FFmpeg documentation](https://ffmpeg.org/ffmpeg-all.html) for a list of all possible parameters. In particular, see [this tutorial](https://trac.ffmpeg.org/wiki/Capture/Desktop) to learn about the best parameters to use when capturing the screen with FFmpeg.
 
 * `raw_ffmpeg_output_args`: the output arguments used to generate the raw recording footage.
 
