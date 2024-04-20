@@ -14,7 +14,7 @@ class FfmpegException(Exception):
 	pass
 
 def _run(*args) -> tuple[str, str]:
-	""" @TODO """
+	""" Runs FFmpeg or FFprobe. """
 
 	args = [str(arg) for arg in args]
 	process = subprocess.run(args, capture_output=True, text=True)
@@ -25,18 +25,17 @@ def _run(*args) -> tuple[str, str]:
 	return process.stdout.rstrip('\n'), process.stderr.rstrip('\n')
 
 def ffmpeg(*args, log_level='warning') -> tuple[str, str]:
-	""" @TODO """
+	""" Runs FFmpeg. """
 	return _run('ffmpeg', *args, '-y', '-loglevel', log_level, '-hide_banner', '-nostats')
 
 def ffprobe(*args) -> str:
-	""" @TODO """
+	""" Runs FFprobe. """
 	output, _ = _run('ffprobe', *args, '-loglevel', 'error')
 	return output
 
 def ffmpeg_process(*args, **kwargs) -> Popen:
-	""" @TODO """
+	""" Runs FFmpeg asynchronously and returns the created process. """
 	args = ['ffmpeg'] + [str(arg) for arg in args] + ['-y', '-loglevel', 'warning', '-hide_banner', '-nostats']
-
 	try:
 		return Popen(args, **kwargs)
 	except OSError as error:
@@ -46,7 +45,7 @@ def ffmpeg_process(*args, **kwargs) -> Popen:
 SILENCE_DURATION_REGEX = re.compile(r'^\[silencedetect.*silence_duration: (?P<duration>\d+\.\d+)', re.MULTILINE)
 
 def ffmpeg_detect_audio(path: Path) -> bool:
-	""" @TODO """
+	""" Checks if a media file has an audible audio stream. """
 
 	# We need the log level set to info in order to get the filter's output.
 	# The minimum silence duration should be under one second so we can detect
@@ -73,7 +72,7 @@ def ffmpeg_detect_audio(path: Path) -> bool:
 	return has_audio
 
 def ffprobe_duration(path: Path) -> float:
-	""" @TODO """
+	""" Retrieves a media file's duration. """
 	try:
 		duration = ffprobe('-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', path)
 		return float(duration)
@@ -81,7 +80,7 @@ def ffprobe_duration(path: Path) -> float:
 		raise FfmpegException(error)
 
 def ffprobe_info(path: Path) -> dict:
-	""" @TODO """
+	""" Retrieves a media file's metadata. """
 	try:
 		info = ffprobe('-show_format', '-show_streams', '-of', 'json', path)
 		return json.loads(info)
@@ -89,12 +88,12 @@ def ffprobe_info(path: Path) -> dict:
 		raise FfmpegException(error)
 
 def ffprobe_has_video_stream(path: Path) -> bool:
-	""" @TODO """
+	""" Checks if a media file has a video stream. """
 	info = ffprobe_info(path)
 	return any(stream for stream in info['streams'] if stream['codec_type'] == 'video')
 
 def ffprobe_has_audio_stream(path: Path) -> bool:
-	""" @TODO """
+	""" Checks if a media file has an audio stream. """
 	info = ffprobe_info(path)
 	return any(stream for stream in info['streams'] if stream['codec_type'] == 'audio')
 
