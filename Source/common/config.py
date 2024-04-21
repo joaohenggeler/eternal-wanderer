@@ -140,6 +140,7 @@ class CommonConfig:
 		'max_duration',
 
 		'enable_media_conversion',
+		'enable_audio_mixing',
 	]
 
 	def __init__(self):
@@ -169,6 +170,8 @@ class CommonConfig:
 
 		if self.fluidsynth_path is not None:
 			self.fluidsynth_path = Path(self.fluidsynth_path).absolute()
+
+		assert len(list(self.sound_fonts_path.glob('*.sf2'))) > 0, f'Missing at least one SoundFont in "{self.sound_fonts_path}".'
 
 		self.extensions_before_running = container_to_lowercase(self.extensions_before_running)
 		self.extensions_after_running = container_to_lowercase(self.extensions_after_running)

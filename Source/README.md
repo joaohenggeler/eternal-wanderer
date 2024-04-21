@@ -89,7 +89,7 @@ Below is a step-by-step guide on how to obtain and configure all the necessary c
 
 9. Download the latest [FFmpeg](https://ffmpeg.org/download.html#build-windows) version and place the `ffmpeg.exe`, `ffprobe.exe`, and `ffplay.exe` executables in `Data/FFmpeg/bin` as specified by `ffmpeg_path`. It's recommended that you download the latest full GPL git master branch build. The scripts will automatically add this FFmpeg version to the PATH before running. If you already have FFmpeg in your PATH and don't want to use a different version, you can ignore this step and set `ffmpeg_path` to null.
 
-10. Download the latest [FluidSynth](https://github.com/FluidSynth/fluidsynth/releases) version and place the `fluidsynth.exe` executable in `Data/FluidSynth/bin` as specified by `fluidsynth_path`. The scripts will automatically add this FluidSynth version to the PATH before running. If you already have FluidSynth in your PATH and don't want to use a different version, you can ignore this step and set `fluidsynth_path` to null. Additionally, you must place at least one SoundFont file in `sound_fonts_path` if the `convertible_media_extensions` option includes MIDI files when `enable_media_conversion` is enabled. You can download the [default Windows SoundFont](https://musical-artifacts.com/artifacts/713) or [multiple SoundFonts](https://archive.org/download/free-soundfonts-sf2-2019-04). The scripts choose one at random from `sound_fonts_path`.
+10. Download the latest [FluidSynth](https://github.com/FluidSynth/fluidsynth/releases) version and place the `fluidsynth.exe` executable in `Data/FluidSynth/bin` as specified by `fluidsynth_path`. The scripts will automatically add this FluidSynth version to the PATH before running. If you already have FluidSynth in your PATH and don't want to use a different version, you can ignore this step and set `fluidsynth_path` to null. Additionally, you must place at least one SoundFont file in `sound_fonts_path` if the `media_conversion_extensions` option includes MIDI files when `enable_media_conversion` is enabled. You can download the [default Windows SoundFont](https://musical-artifacts.com/artifacts/713) or [multiple SoundFonts](https://archive.org/download/free-soundfonts-sf2-2019-04). The scripts choose one at random from `sound_fonts_path`.
 
 11. Download and install the [Screen Capture Recorder](https://github.com/rdp/screen-capture-recorder-to-video-windows-free/releases) device in order to capture the screen using FFmpeg. Note that this program requires Java. You can either use a modern Java install or reuse the local Java install from step 7. If you choose the latter, make sure to enable `java_add_to_path` so that the Java directory path (e.g. `Data/Plugins/Java/jdk1.8.0_11/jre/bin` or `Data/Plugins/Java/jre1.8.0_11/bin`) is added to the PATH automatically.
 
@@ -467,7 +467,7 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `enable_media_conversion`: enable to convert media snapshots into the final recording format without capturing the screen. Used to save time and avoid synchronization issues when recording audio and video file formats.
 
-* `convertible_media_extensions`: a list of file extensions whose format can be directly converted into the recording. Must be a subset of `allowed_media_extensions` and mutually exclusive from `multi_asset_media_extensions`. Only used if `enable_media_conversion` is enabled.
+* `media_conversion_extensions`: a list of file extensions whose format can be directly converted into the recording. Must be a subset of `allowed_media_extensions` and mutually exclusive from `multi_asset_media_extensions`. Only used if `enable_media_conversion` is enabled.
 
 * `media_conversion_ffmpeg_input_name`: the input video stream shown during audio-only media formats. The same platform restrictions from `text_to_speech_ffmpeg_video_input_name` also apply here. Only used if `enable_media_conversion` is enabled.
 
@@ -476,6 +476,10 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 * `media_conversion_add_subtitles`: enable to add subtitles with the file's metadata to the video stream when converting audio-only media formats. Used to make media snapshots without a video component more interesting.
 
 * `media_conversion_ffmpeg_subtitles_style`: how to style the media snapshot's subtitles. This must be a string containing Advanced Substation Alpha / Substation Alpha (ASS/SSA) style fields separated by commas. Refer to the [libass source code](https://github.com/libass/libass/blob/master/libass/ass_types.h) and the [Sub Station Alpha v4.00+ Script Format](https://web.archive.org/web/20230209193228if_/https://forum.videohelp.com/attachment.php?attachmentid=33290&d=1440307546) for a list of all possible fields. Only used if `media_conversion_add_subtitles` is enabled.
+
+* `enable_audio_mixing`: enable to replace the audio of the final recording with a mix of all the audio-only files embedded on a snapshot's page. This is only done if all the files have exclusively audio streams (i.e. not videos or Flash movies). Media files that weren't archived are ignored.
+
+* `audio_mixing_ffmpeg_output_args`: the output arguments used when mixing the audio. Only used if `enable_audio_mixing` is enabled.
 
 * `midi_fluidsynth_args`: the arguments used to convert MIDI to WAV. Refer to the [FluidSynth documentation](https://man.archlinux.org/man/fluidsynth.1.en) for a list of all possible parameters.
 

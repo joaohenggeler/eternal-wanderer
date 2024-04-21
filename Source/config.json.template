@@ -659,7 +659,7 @@
 		],
 
 		"enable_media_conversion": true,
-		"convertible_media_extensions":
+		"media_conversion_extensions":
 		[
 			"mid", "midi",
 			"3g2", "3gp", "3gpp", "3gpp2",
@@ -684,6 +684,18 @@
 
 		"media_conversion_add_subtitles": true,
 		"media_conversion_ffmpeg_subtitles_style": "Fontname=Segoe Print,Fontsize=60,PrimaryColour=&HFFFFFF,Outline=0,Shadow=1,BackColour=&H80000000,Alignment=10",
+
+		"enable_audio_mixing": true,
+		"audio_mixing_ffmpeg_output_args":
+		[
+			"-c:a", "aac",
+			"-profile:a", "aac_low",
+			"-b:a", "384K",
+			"-ar", "48K",
+			"-ac", 2,
+			"-movflags", "faststart",
+			"-fs", "512M"
+		],
 
 		"midi_fluidsynth_args":
 		[

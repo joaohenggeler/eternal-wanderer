@@ -52,7 +52,7 @@ class ScreenCapture:
 				log.info(f'FFmpeg output: {line}')
 
 			for line in errors.splitlines():
-				log.warning(f'FFmpeg warning/error: {line}')
+				log.warning(f'FFmpeg warning: {line}')
 
 		except TimeoutExpired:
 			log.error('Failed to stop the screen capture gracefully.')

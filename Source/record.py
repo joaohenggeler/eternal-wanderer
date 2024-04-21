@@ -32,10 +32,14 @@ from common.ffmpeg import (
 	ffmpeg, ffmpeg_detect_audio,
 	FfmpegException, ffprobe_duration,
 	ffprobe_has_video_stream, ffprobe_info,
+	ffprobe_is_audio_only,
 )
 from common.fluidsynth import fluidsynth, FluidSynthException
 from common.logger import setup_logger
-from common.net import global_session, is_url_available
+from common.net import (
+	extract_media_extension_from_url,
+	global_session, is_url_available,
+)
 from common.plugin_crash_timer import PluginCrashTimer
 from common.plugin_input_repeater import CosmoPlayerViewpointCycler, PluginInputRepeater
 from common.proxy import Proxy
@@ -139,12 +143,14 @@ class RecordConfig(CommonConfig):
 	text_to_speech_ffmpeg_output_args: list[Union[int, str]]
 
 	enable_media_conversion: bool
-	convertible_media_extensions: frozenset[str] # Different from the config data type.
+	media_conversion_extensions: frozenset[str] # Different from the config data type.
 	media_conversion_ffmpeg_input_name: str
 	media_conversion_ffmpeg_input_args: list[Union[int, str]]
 	media_conversion_add_subtitles: bool
 	media_conversion_ffmpeg_subtitles_style: str
 
+	enable_audio_mixing: bool
+	audio_mixing_ffmpeg_output_args: list[Union[int, str]]
 	midi_fluidsynth_args: list[Union[float, str]]
 
 	# Determined at runtime.
@@ -177,10 +183,10 @@ class RecordConfig(CommonConfig):
 		self.screen_capture_recorder_settings = container_to_lowercase(self.screen_capture_recorder_settings)
 		self.text_to_speech_language_voices = container_to_lowercase(self.text_to_speech_language_voices)
 
-		self.convertible_media_extensions = frozenset(extension for extension in container_to_lowercase(self.convertible_media_extensions))
-		assert self.convertible_media_extensions.issubset(self.allowed_media_extensions), 'The convertible media extensions must be a subset of the allowed media extensions.'
+		self.media_conversion_extensions = frozenset(extension for extension in container_to_lowercase(self.media_conversion_extensions))
+		assert self.media_conversion_extensions.issubset(self.allowed_media_extensions), 'The convertible media extensions must be a subset of the allowed media extensions.'
 
-		assert self.multi_asset_media_extensions.isdisjoint(self.convertible_media_extensions), 'The multi-asset and convertible media extensions must be mutually exclusive.'
+		assert self.multi_asset_media_extensions.isdisjoint(self.media_conversion_extensions), 'The multi-asset and convertible media extensions must be mutually exclusive.'
 
 		media_template_path = self.plugins_path / 'media.html.template'
 		with open(media_template_path, encoding='utf-8') as file:
@@ -585,6 +591,7 @@ if __name__ == '__main__':
 						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.plugin_load_wait + cache_wait + proxy_wait
 
 						frame_text_list = []
+						audio_urls = {}
 						realmedia_url = None
 
 						# Wait for the page and its resources to be cached.
@@ -670,6 +677,26 @@ if __name__ == '__main__':
 										frame_text = driver.execute_script('return document.documentElement.innerText;')
 										frame_text_list.append(frame_text)
 
+									if config.enable_audio_mixing:
+
+										for url, params in browser.get_playback_plugin_elements():
+
+											try:
+												extension = extract_media_extension_from_url(url)
+												loop = params.get('loop') in ['true', 'infinite', '-1'] or int(params.get('loop', 0)) >= 2
+											except ValueError:
+												loop = False
+
+											audio_urls[url] = (extension, loop)
+
+											try:
+												global_rate_limiter.wait_for_wayback_machine_rate_limit()
+												if extension == 'swf' or not ffprobe_is_audio_only(url):
+													audio_urls.clear()
+													break
+											except FfmpegException as error:
+												log.warning(f'Could not probe the audio file "{url}" with the error: {repr(error)}')
+
 								# While this works for most cases, there are pages where the scroll and client
 								# height have the same value even though there's a scrollbar. This happens even
 								# in modern Mozilla and Chromium browsers.
@@ -686,8 +713,9 @@ if __name__ == '__main__':
 
 									max_plugin_duration = None
 
-									for url in browser.get_playback_plugin_sources():
+									for url, _ in browser.get_playback_plugin_elements():
 										try:
+											global_rate_limiter.wait_for_wayback_machine_rate_limit()
 											duration = ffprobe_duration(url)
 											if max_plugin_duration is not None:
 												max_plugin_duration = max(max_plugin_duration, duration)
@@ -801,10 +829,9 @@ if __name__ == '__main__':
 						# This media extension differs from the snapshot's extension when recording a RealMedia file
 						# whose URL was extracted from a metadata file. We should only be converting binary media,
 						# and not text files like playlists or metadata.
-						if config.enable_media_conversion and snapshot.IsMedia and media_extension in config.convertible_media_extensions and media_path is not None:
+						if config.enable_media_conversion and snapshot.IsMedia and media_extension in config.media_conversion_extensions and media_path is not None:
 
 							# Convert a media snapshot directly and skip capturing the screen.
-
 							log.info(f'Converting the media file "{media_path.name}".')
 
 							browser.close_all_windows()
@@ -872,7 +899,7 @@ if __name__ == '__main__':
 									log.warning(f'FFmpeg warning: {line}')
 
 							except (FluidSynthException, FfmpegException) as error:
-								log.error(f'Aborted the media conversion with the error: {repr(error)}.')
+								log.error(f'Aborted the media conversion with the error: {repr(error)}')
 								state = Snapshot.ABORTED
 						else:
 							# Record the snapshot. The page should load faster now that its resources are cached.
@@ -972,14 +999,83 @@ if __name__ == '__main__':
 								if text_to_speech_path is not None:
 									log.info(f'Saved the text-to-speech file to "{text_to_speech_path}".')
 
+							if config.enable_audio_mixing and audio_urls:
+
+								browser.go_to_blank_page_with_text('\N{Cocktail Glass} Mixing Audio \N{Cocktail Glass}', str(snapshot))
+
+								try:
+									mix_urls = {}
+
+									for url, (extension, _) in audio_urls.items():
+
+										if extension in ['mid', 'midi']:
+
+											global_rate_limiter.wait_for_wayback_machine_rate_limit()
+											response = global_session.get(url)
+											response.raise_for_status()
+
+											# These intermediate files are deleted later like the others in the media download directory.
+											parts = urlparse(url)
+											download_path = media_download_path / Path(parts.path).name
+											with open(download_path, 'wb') as file:
+												file.write(response.content)
+
+											converted_path = download_path.with_suffix('.wav')
+											sound_font_path = random.choice(list(config.sound_fonts_path.glob('*.sf2')))
+
+											args = config.midi_fluidsynth_args + ['--fast-render', converted_path, sound_font_path, download_path]
+											log.debug(f'Converting the MIDI file "{url}" with the FluidSynth arguments: {args}')
+
+											fluidsynth(*args)
+											mix_urls[converted_path] = audio_urls[url]
+										else:
+											mix_urls[url] = audio_urls[url]
+
+									input_args = ['-guess_layout_max', 0, '-i', upload_path]
+									for url, (_, loop) in mix_urls.items():
+										# This should be -1 for infinite loops but that freezes FFmpeg after processing the video.
+		  								# For now, let's set this to a high value.
+										# @Future: find a way to make -stream_loop -1 work.
+										stream_loop = 10 if loop else 0
+										input_args.extend(['-guess_layout_max', 0, '-stream_loop', stream_loop, '-i', url])
+
+									mix_input = '[base]' + ''.join(f'[{i}:a]' for i in range(1, len(mix_urls) + 1))
+									mix_path = upload_path.with_suffix('.mix.mp4')
+
+									output_args = config.audio_mixing_ffmpeg_output_args.copy()
+									output_args.extend([
+										'-c:v', 'copy',
+										'-filter_complex', f'[0:a]volume=0[base];{mix_input}amix={len(mix_urls) + 1}:duration=first[mix]',
+										'-map', '0:v',
+										'-map', '[mix]',
+										mix_path,
+									])
+
+									log.debug(f'Mixing audio with the FFmpeg arguments: {input_args + output_args}')
+									ffmpeg(*input_args, *output_args)
+
+									delete_file(upload_path)
+									upload_path = mix_path
+
+									log.info(f'Saved the mixed audio recording to "{upload_path}".')
+
+								except RequestException as error:
+									log.error(f'Failed to download a MIDI file with the error: {repr(error)}')
+								except FluidSynthException as error:
+									log.error(f'Failed to convert a MIDI file with the error: {repr(error)}')
+								except FfmpegException as error:
+									log.error(f'Failed to mix the audio files with the error: {repr(error)}')
+
 						has_audio = False
 						if state == Snapshot.RECORDED:
-							browser.go_to_blank_page_with_text('\N{Speaker With Cancellation Stroke} Detecting Silence \N{Speaker With Cancellation Stroke}', str(snapshot))
+
+							browser.go_to_blank_page_with_text('\N{Speaker With Three Sound Waves} Detecting Audio \N{Speaker With Three Sound Waves}', str(snapshot))
+
 							try:
-								log.debug(f'Detecting silence.')
+								log.debug(f'Detecting audio.')
 								has_audio = ffmpeg_detect_audio(upload_path)
 							except FfmpegException as error:
-								log.error(f'Could not detect silence with the error: {repr(error)}')
+								log.error(f'Failed to detect audio with the error: {repr(error)}')
 
 						# If enabled, this step should be done even when converting media files directly
 						# since we might need to save a RealMedia file whose URL was extracted from a

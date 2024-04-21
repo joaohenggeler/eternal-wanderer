@@ -952,36 +952,60 @@ class Browser:
 		except NoSuchWindowException:
 			pass
 
-	def get_playback_plugin_sources(self) -> list[str]:
-		""" Retrieves the source URLs of any content embedded using the object/embed tags in the current web page and its frames. """
+	def get_playback_plugin_elements(self) -> list[tuple[str, dict[str, str]]]:
+		""" Retrieves the source URLs and attributes of any content embedded using the object/embed tags in the current web page and its frames. """
 
-		sources = []
+		elements = []
 
 		try:
 			for _ in self.traverse_frames():
-				frame_sources = self.driver.execute_script(	'''
+				frame_elements = self.driver.execute_script('''
 															const SOURCE_ATTRIBUTES = ["data", "src", "movie", "code", "object", "target", "mrl", "filename"];
-
 															const plugin_nodes = document.querySelectorAll("object, embed");
-															const plugin_sources = [];
+															const plugin_elements = [];
 
 															for(const element of plugin_nodes)
 															{
+																const attributes = [];
+
+																for(const attribute of element.attributes)
+																{
+																	attributes.push([attribute.name.toLowerCase(), attribute.value.toLowerCase()]);
+																}
+
+																if(element.tagName === "OBJECT")
+																{
+																	const param_nodes = element.querySelectorAll("param");
+																	for(const param of param_nodes)
+																	{
+																		let name = param.getAttribute("name");
+																		let value = param.getAttribute("value");
+																		if(name) name = name.toLowerCase();
+																		if(value) value = value.toLowerCase();
+																		attributes.push([name, value]);
+																	}
+																}
+
 																for(const source_attribute of SOURCE_ATTRIBUTES)
 																{
 																	const source = element.getAttribute(source_attribute);
-																	if(source) plugin_sources.push(source);
+																	if(source) plugin_elements.push([source, attributes]);
 																}
 															}
 
-															return plugin_sources;
+															return plugin_elements;
 															''')
-				sources.extend(frame_sources)
+				elements.extend(frame_elements)
 
 		except WebDriverException as error:
-			log.error(f'Failed to get the playback plugin sources with the error: {repr(error)}')
+			log.error(f'Failed to get the playback plugin elements with the error: {repr(error)}')
 
-		return sources
+		result = []
+		for source, attributes in elements:
+			attributes = {name: value for name, value in attributes}
+			result.append((source, attributes))
+
+		return result
 
 	def unload_plugin_content(self, skip_applets: bool = False) -> None:
 		""" Unloads any content embedded using the object/embed/applet tags in the current web page and its frames.
@@ -993,7 +1017,6 @@ class Browser:
 			for _ in self.traverse_frames():
 				self.driver.execute_script(	'''
 											const SOURCE_ATTRIBUTES = ["data", "src", "movie", "code", "object", "target", "mrl", "filename"];
-
 											const plugin_nodes = document.querySelectorAll(arguments[0]);
 
 											for(const element of plugin_nodes)
@@ -1038,7 +1061,6 @@ class Browser:
 			for _ in self.traverse_frames():
 				self.driver.execute_script(	'''
 											const SOURCE_ATTRIBUTES = ["data", "src", "movie", "code", "object", "target", "mrl", "filename"];
-
 											const plugin_nodes = document.querySelectorAll(arguments[0]);
 
 											for(const element of plugin_nodes)

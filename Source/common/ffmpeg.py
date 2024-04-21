@@ -90,12 +90,17 @@ def ffprobe_info(path: Path) -> dict:
 def ffprobe_has_video_stream(path: Path) -> bool:
 	""" Checks if a media file has a video stream. """
 	info = ffprobe_info(path)
-	return any(stream for stream in info['streams'] if stream['codec_type'] == 'video')
+	return any(stream['codec_type'] == 'video' for stream in info['streams'])
 
 def ffprobe_has_audio_stream(path: Path) -> bool:
 	""" Checks if a media file has an audio stream. """
 	info = ffprobe_info(path)
-	return any(stream for stream in info['streams'] if stream['codec_type'] == 'audio')
+	return any(stream['codec_type'] == 'audio' for stream in info['streams'])
+
+def ffprobe_is_audio_only(path: Path) -> bool:
+	""" Checks if a media file only has audio streams. """
+	info = ffprobe_info(path)
+	return all(stream['codec_type'] == 'audio' for stream in info['streams'])
 
 if config.ffmpeg_path is not None:
 	os.environ['PATH'] = str(config.ffmpeg_path) + ';' + os.environ.get('PATH', '')
