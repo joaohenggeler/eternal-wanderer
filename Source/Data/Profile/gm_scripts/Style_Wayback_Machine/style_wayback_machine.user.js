@@ -23,7 +23,7 @@ if(components.length === 3)
 {
 	// E.g. ["", "web", "20000101235959if_"] -> "2000"
 	const year = components[2].slice(0, 4);
-	if(year <= "2004")
+	if(year < "2009")
 	{
 		stylesheet_url = CSS_98_URL;
 	}
