@@ -30,7 +30,10 @@ from common.logger import setup_logger
 from common.net import tld_extract
 from common.recording import Recording
 from common.snapshot import Snapshot
-from common.util import container_to_lowercase, delete_file, was_exit_command_entered
+from common.util import (
+	container_to_lowercase, delete_file,
+	was_exit_command_entered,
+)
 
 @dataclass
 class PublishConfig(CommonConfig):

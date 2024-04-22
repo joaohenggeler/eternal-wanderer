@@ -21,7 +21,9 @@ import pywinauto # type: ignore
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
 from requests import RequestException
-from selenium.common.exceptions import SessionNotCreatedException, WebDriverException # type: ignore
+from selenium.common.exceptions import (
+	SessionNotCreatedException, WebDriverException,
+) # type: ignore
 from waybackpy import WaybackMachineSaveAPI
 from waybackpy.exceptions import TooManyRequestsError
 
@@ -655,7 +657,6 @@ if __name__ == '__main__':
 									# has a client height of zero.
 									# E.g. https://web.archive.org/web/20071012232916if_/http://profile.myspace.com:80/index.cfm?fuseaction=user.viewprofile&friendid=15134349
 									if frame_scroll_height > scroll_height and frame_client_height > 0:
-
 										scroll_height = frame_scroll_height
 										client_height = frame_client_height
 
@@ -786,6 +787,7 @@ if __name__ == '__main__':
 									log.info(f'Waited {elapsed_proxy_time:.1f} extra seconds for the proxy: {proxy_status_codes}')
 
 						if snapshot.IsMedia and realmedia_url is not None:
+
 							log.info(f'Regenerating the media page for the RealMedia file "{realmedia_url}".')
 							media_success, media_path, media_extension, media_duration, media_title, media_author = generate_media_page(realmedia_url)
 							wait_after_load = clamp(config.base_media_wait_after_load + media_duration, config.min_duration, config.max_duration)

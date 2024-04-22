@@ -87,7 +87,6 @@ class ScoutConfig(CommonConfig):
 			try:
 				if word.startswith('b64:'):
 					word = b64decode(word.removeprefix('b64:')).decode()
-
 				decoded_sensitive_words.add(word.lower())
 			except binascii.Error as error:
 				log.error(f'Failed to decode the sensitive word "{word}" with the error: {repr(error)}')
@@ -284,7 +283,6 @@ if __name__ == '__main__':
 
 				def invalidate_snapshot(snapshot: Snapshot) -> None:
 					""" Invalidates a snapshot that couldn't be scouted correctly due to a WebDriver error. """
-
 					try:
 						db.execute('UPDATE Snapshot SET State = :invalid_state WHERE Id = :id;', {'invalid_state': Snapshot.INVALID, 'id': snapshot.Id})
 						db.commit()
@@ -578,7 +576,7 @@ if __name__ == '__main__':
 										# E.g. http://www.sapo.pt/cgi/getid?id=http://www.terravista.pt/Meco/1217
 										# Which contains http://www.terravista.pt/Meco/1217
 										params = parse_qsl(parts.query)
-										for key, value in params:
+										for _, value in params:
 											match = URL_REGEX.search(value)
 											if match is not None:
 												url_list.append((match[0], wayback_timestamp))
