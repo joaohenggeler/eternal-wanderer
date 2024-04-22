@@ -1,10 +1,10 @@
 <UserScriptConfig>
-	
+
 	<Script basedir="Disable_Prompt_Functions" checkRemoteUpdates="0" description="Disables the alert, confirm, prompt, and print functions." enabled="true" filename="disable_prompt_functions.user.js" installTime="1654470000000" modified="1654470000000" name="Disable Prompt Functions" namespace="" noframes="false" runAt="document-start" updateMetaStatus="unknown" uuid="1e325bb7-22d8-4f88-bb8e-4116aeea4018" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
-	
+
 	<Script basedir="Style_Wayback_Machine" checkRemoteUpdates="0" description="Styles Wayback Machine snapshots depending on the year they were archived." enabled="true" filename="style_wayback_machine.user.js" installTime="1654470000000" modified="1654470000000" name="Style Wayback Machine" namespace="" noframes="false" runAt="document-start" updateMetaStatus="unknown" uuid="0fcf9bac-9d07-4e8e-bde2-c982baad5070" version="1.0.0">
 		<Grant>GM_getResourceURL</Grant>
 		<Match>*://web.archive.org/web/*</Match>
@@ -12,31 +12,37 @@
 		<Resource name="CSS_7" filename="7.css" mimetype="text/css"/>
 	</Script>
 
+	<Script basedir="Hide_Scrollbars" checkRemoteUpdates="0" description="Hides the scrollbars of every page element." enabled="true" filename="hide_scrollbars.user.js" installTime="1654470000000" modified="1654470000000" name="Hide Scrollbars" namespace="" noframes="false" runAt="document-start" updateMetaStatus="unknown" uuid="d63708a5-8d7a-4d70-8828-e58910a33738" version="1.0.0">
+		<Grant>GM_getResourceURL</Grant>
+		<Include>*</Include>
+		<Resource name="CSS_HIDE_SCROLLBARS" filename="hide_scrollbars.css" mimetype="text/css"/>
+	</Script>
+
 	<Script basedir="Crescendo_To_Standard_Embed" checkRemoteUpdates="0" description="Converts non-standard Crescendo or LiveUpdate embed tags to standard ones." enabled="true" filename="crescendo_to_standard_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Crescendo To Standard Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="50f83f18-8335-4a4c-8672-d9651804ac13" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
-	
+
 	<Script basedir="Bgsound_To_Embed" checkRemoteUpdates="0" description="Converts bgsound to embed tags. Avoids converting bgsound tags whose audio is already being played by an embed tag. Adapted from: https://userscripts-mirror.org/scripts/show/1827" enabled="true" filename="bgsound_to_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Bgsound To Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="3334ea18-4dce-432b-890c-8e9bf4273611" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
-	
+
 	<Script basedir="Fix_Wayback_Machine_Embed" checkRemoteUpdates="0" description="Fixes object, embed, and applet tags whose source URL is missing a Wayback Machine modifier." enabled="true" filename="fix_wayback_machine_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Fix Wayback Machine Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="ebbefd00-e76c-43e9-b6f0-4dc086da5323" version="1.0.0">
 		<Grant>none</Grant>
 		<Match>*://web.archive.org/web/*</Match>
 	</Script>
-	
+
 	<Script basedir="Autoplay_Random_Audio_And_Video" checkRemoteUpdates="0" description="Plays a random audio and video element. This includes the audio and video tags as well as any object and embed tags that use audio or video MIME types." enabled="true" filename="autoplay_random_audio_and_video.user.js" installTime="1654470000000" modified="1654470000000" name="Autoplay Random Audio And Video" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="bb89b659-0056-48dd-8b2b-be05b8cd9af3" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
-	
+
 	<Script basedir="Fix_Vlc_Embed" checkRemoteUpdates="0" description="Fixes playback issues with VLC. Also changes how the player is controlled (click to toggle pause, right-click to restart)." enabled="true" filename="fix_vlc_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Fix Vlc Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="416d9933-71d9-44c5-9936-56aaa4f2f314" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
-	
+
 	<Script basedir="Disable_Flash_Script_Access" checkRemoteUpdates="0" description="Prevents Flash movies from executing JavaScript code or navigating to a different page." enabled="true" filename="disable_flash_script_access.user.js" installTime="1654470000000" modified="1654470000000" name="Disable Flash Script Access" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="5fdf143d-ea8c-4607-ab58-196813fd354c" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
@@ -46,7 +52,7 @@
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
-	
+
 	<Script basedir="Random_Midplug_Skin" checkRemoteUpdates="0" description="Picks a random skin for the YAMAHA MIDPLUG player if one isn't set explicitly." enabled="true" filename="random_midplug_skin.user.js" installTime="1654470000000" modified="1654470000000" name="Random Midplug Skin" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="d0812582-7d4f-48f2-8502-463bba9ba3ab" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
@@ -56,5 +62,5 @@
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
-	
+
 </UserScriptConfig>

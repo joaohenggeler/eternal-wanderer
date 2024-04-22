@@ -193,6 +193,7 @@
 			"Fix Vlc Embed": true,
 			"Fix Wayback Machine Embed": true,
 			"Force Java Version": true,
+			"Hide Scrollbars": true,
 			"Random Midplug Skin": true,
 			"Remove Free Hosting Ads": true,
 			"Style Wayback Machine": true
