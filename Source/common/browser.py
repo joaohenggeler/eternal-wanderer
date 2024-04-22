@@ -854,8 +854,10 @@ class Browser:
 		requires the document's URL to already be formatted correctly, otherwise the it wouldn't be possible to
 		determine each snapshot's URL. """
 
+		root_url = self.driver.current_url
+
 		if format_wayback_urls:
-			root_wayback_parts = parse_wayback_machine_snapshot_url(self.driver.current_url)
+			root_wayback_parts = parse_wayback_machine_snapshot_url(root_url)
 
 		def recurse(current_url: str) -> Iterator[str]:
 			""" Helper function used to traverse through every frame recursively. """
@@ -923,9 +925,11 @@ class Browser:
 				self.driver.switch_to.parent_frame()
 
 		try:
-			yield from recurse(self.driver.current_url)
+			yield from recurse(root_url)
 		except WebDriverException as error:
 			log.error(f'Failed to traverse the frames with the error: {repr(error)}')
+		except RecursionError:
+			log.error(f'Exceeded the recursion limit when traversing "{root_url}".')
 
 		self.driver.switch_to.default_content()
 
