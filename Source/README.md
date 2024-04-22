@@ -165,8 +165,6 @@ Below is a summary of the Python scripts located in the [source directory](Sourc
 
 * `dump_proxy_addon.py`: a mitmproxy script that generates a dump file containing all HTTP/HTTPS responses received by the browser. This script should not be run directly and is instead started automatically by the browser script if the `-dump` argument was used.
 
-* `common.py`: a module that defines any general purpose functions used by all scripts, including loading configuration files, connecting to the database, and interfacing with Firefox.
-
 ## Types Of Snapshots
 
 The bot handles two types of snapshots: web pages and media files. The first are any snapshots that were successfully archived by the Wayback Machine (i.e. a 200 status code) and whose MIME type is `text/html` or `text/plain`. The second are any other successfully archived snapshots whose MIME type does *not* match the previous criteria. In other words, any standard and non-standard audiovisual media (e.g. `audio/*`, `video/*`, `application/*`, `x-world/*`, `music/*`, etc). This allows the bot to showcase multimedia (e.g. MIDI music, QuickTime videos, VRML worlds, etc) that was linked directly in a page instead of being embedded with the object and embed tags.
@@ -375,6 +373,8 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `check_availability`: enable to check if the Wayback Machine and CDX API are available before recording. If this is enabled and these services are down, the script will keep retrying indefinitely. While it's recommended that you leave this option enabled, there have been cases where this check says the services are down when snapshots can be loaded successfully. In those situations, this option should be temporarily disabled so the script doesn't hang forever.
 
+* `hide_scrollbars`: enable to hide the scrollbars of every page element.
+
 * `page_cache_wait`: how long to wait for a page snapshot to finish requesting and caching assets before recording (in seconds).
 
 * `media_cache_wait`: how long to wait for a media snapshot to finish requesting and caching assets before recording (in seconds).
@@ -555,7 +555,7 @@ Used by `publish.py` and `approve.py`.
 
 ## Custom Options
 
-Some of the options described above can be changed for specific snapshots using the `Options` column in the database. This column takes a JSON object with any options to override the default configuration. For example, if you wanted a recording to last longer and wanted to improve the chances of a short audio file being captured correctly, you could use the following: `{"min_duration": 60, "plugin_syncing_page_type": "reload_twice"}`. You can find a list of all mutable options in [`common.py`](common.py#L158).
+Some of the options described above can be changed for specific snapshots using the `Options` column in the database. This column takes a JSON object with any options to override the default configuration. For example, if you wanted a recording to last longer and wanted to improve the chances of a short audio file being captured correctly, you could use the following: `{"min_duration": 60, "plugin_syncing_page_type": "reload_twice"}`. You can find a list of all mutable options in [`common/config.py`](common/config.py#L104).
 
 This column also accepts the following extra options:
 

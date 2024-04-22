@@ -5,6 +5,7 @@ import queue
 import random
 import sqlite3
 from argparse import ArgumentParser
+from base64 import b64encode
 from collections import Counter
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
@@ -87,6 +88,7 @@ class RecordConfig(CommonConfig):
 	proxy_cache_missing_responses: bool
 
 	check_availability: bool
+	hide_scrollbars: bool
 
 	page_cache_wait: int
 	media_cache_wait: int
@@ -691,6 +693,7 @@ if __name__ == '__main__':
 											audio_urls[url] = (extension, loop)
 
 											try:
+												log.debug(f'Probing "{url}" for audio mixing.')
 												global_rate_limiter.wait_for_wayback_machine_rate_limit()
 												if extension == 'swf' or not ffprobe_is_audio_only(url):
 													audio_urls.clear()
@@ -716,6 +719,7 @@ if __name__ == '__main__':
 
 									for url, _ in browser.get_playback_plugin_elements():
 										try:
+											log.debug(f'Probing "{url}" for the duration.')
 											global_rate_limiter.wait_for_wayback_machine_rate_limit()
 											duration = ffprobe_duration(url)
 											if max_plugin_duration is not None:
@@ -949,6 +953,22 @@ if __name__ == '__main__':
 										browser.reload_plugin_content(skip_applets=True)
 
 									delayed_sync_plugins_thread = Thread(target=delayed_sync_plugins, name='sync_plugins', daemon=True)
+
+								if config.hide_scrollbars:
+									css = 	'''
+											* {
+												overflow: hidden !important;
+											}
+											'''
+									base64_css = b64encode(css.encode()).decode()
+									css_url = f'data:text/css;base64,{base64_css}'
+									for _ in browser.traverse_frames():
+										driver.execute_script(	'''
+																const link = document.createElement("link");
+																link.setAttribute("rel", "stylesheet");
+																link.setAttribute("href", arguments[0]);
+																document.head.prepend(link);
+																''', css_url)
 
 								with plugin_input_repeater, cosmo_player_viewpoint_cycler, ScreenCapture(path_prefix, config) as capture:
 

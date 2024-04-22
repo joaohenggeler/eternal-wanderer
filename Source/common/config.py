@@ -103,6 +103,8 @@ class CommonConfig:
 
 	MUTABLE_OPTIONS = [
 		# For the recorder script.
+		'hide_scrollbars'
+
 		'page_cache_wait',
 		'media_cache_wait',
 

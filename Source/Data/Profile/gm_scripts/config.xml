@@ -12,12 +12,6 @@
 		<Resource name="CSS_7" filename="7.css" mimetype="text/css"/>
 	</Script>
 
-	<Script basedir="Hide_Scrollbars" checkRemoteUpdates="0" description="Hides the scrollbars of every page element." enabled="true" filename="hide_scrollbars.user.js" installTime="1654470000000" modified="1654470000000" name="Hide Scrollbars" namespace="" noframes="false" runAt="document-start" updateMetaStatus="unknown" uuid="d63708a5-8d7a-4d70-8828-e58910a33738" version="1.0.0">
-		<Grant>GM_getResourceURL</Grant>
-		<Include>*</Include>
-		<Resource name="CSS_HIDE_SCROLLBARS" filename="hide_scrollbars.css" mimetype="text/css"/>
-	</Script>
-
 	<Script basedir="Crescendo_To_Standard_Embed" checkRemoteUpdates="0" description="Converts non-standard Crescendo or LiveUpdate embed tags to standard ones." enabled="true" filename="crescendo_to_standard_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Crescendo To Standard Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="50f83f18-8335-4a4c-8672-d9651804ac13" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
