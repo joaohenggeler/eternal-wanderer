@@ -169,6 +169,8 @@ class RecordConfig(CommonConfig):
 		super().__init__()
 		self.load_subconfig('record')
 
+		assert len(list(self.sound_fonts_path.glob('*.sf2'))) > 0, f'Missing at least one SoundFont in "{self.sound_fonts_path}".'
+
 		self.scheduler = container_to_lowercase(self.scheduler)
 
 		self.allowed_media_extensions = frozenset(extension for extension in container_to_lowercase(self.allowed_media_extensions))
@@ -1050,16 +1052,29 @@ if __name__ == '__main__':
 
 											fluidsynth(*args)
 											mix_urls[converted_path] = audio_urls[url]
+
+										elif extension == 'mp3':
+											# A quick-and-dirty solution to the fact that FFmpeg sometimes freezes when processing MP3 files.
+		   									# E.g. https://web.archive.org/web/20070206065503if_/http://churchstalros.ytmnd.com/
+											parts = urlparse(url)
+											converted_path = (media_download_path / Path(parts.path).name).with_suffix('.wav')
+											log.debug(f'Converting the MP3 file "{url}" to WAV.')
+											ffmpeg('-i', url, converted_path)
+											mix_urls[converted_path] = audio_urls[url]
 										else:
 											mix_urls[url] = audio_urls[url]
 
 									input_args = ['-guess_layout_max', 0, '-i', upload_path]
+
+									max_duration = ffprobe_duration(upload_path)
 									for url, (_, loop) in mix_urls.items():
-										# This should be -1 for infinite loops but that freezes FFmpeg after processing the video.
-		  								# For now, let's set this to a high value.
-										# @Future: find a way to make -stream_loop -1 work.
-										stream_loop = 10 if loop else 0
-										input_args.extend(['-guess_layout_max', 0, '-stream_loop', stream_loop, '-i', url])
+										loop_count = -1 if loop else 0
+										input_args.extend([
+											'-stream_loop', loop_count,
+											'-t', max_duration,
+											'-guess_layout_max', 0,
+											'-i', url,
+										])
 
 									mix_input = '[base]' + ''.join(f'[{i}:a]' for i in range(1, len(mix_urls) + 1))
 									mix_path = upload_path.with_suffix('.mix.mp4')
@@ -1094,8 +1109,9 @@ if __name__ == '__main__':
 							browser.go_to_blank_page_with_text('\N{Speaker With Three Sound Waves} Detecting Audio \N{Speaker With Three Sound Waves}', str(snapshot))
 
 							try:
-								log.debug(f'Detecting audio.')
+								log.debug(f'Detecting audio in "{upload_path}".')
 								has_audio = ffmpeg_detect_audio(upload_path)
+								log.info(f'Has Audio = {has_audio}.')
 							except FfmpegException as error:
 								log.error(f'Failed to detect audio with the error: {repr(error)}')
 
