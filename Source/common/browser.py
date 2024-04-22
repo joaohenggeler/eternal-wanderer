@@ -10,6 +10,7 @@ from base64 import b64encode
 from collections.abc import Iterator
 from pathlib import Path
 from subprocess import Popen
+from sys import getrecursionlimit, setrecursionlimit
 from time import sleep
 from typing import Optional, Union
 from urllib.parse import unquote, urlparse
@@ -925,13 +926,16 @@ class Browser:
 				self.driver.switch_to.parent_frame()
 
 		try:
+			previous_limit = getrecursionlimit()
+			setrecursionlimit(50)
 			yield from recurse(root_url)
 		except WebDriverException as error:
 			log.error(f'Failed to traverse the frames with the error: {repr(error)}')
 		except RecursionError:
 			log.error(f'Exceeded the recursion limit when traversing "{root_url}".')
-
-		self.driver.switch_to.default_content()
+		finally:
+			setrecursionlimit(previous_limit)
+			self.driver.switch_to.default_content()
 
 	def close_all_windows(self) -> None:
 		""" Closes every Firefox tab and window, leaving only a single blank page. """
