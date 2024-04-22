@@ -183,7 +183,7 @@ if __name__ == '__main__':
 			status_id = None
 
 			try:
-				media = twitter_api_v1.chunked_upload(filename=recording.UploadFilePath, file_type='video/mp4', media_category='TweetVideo')
+				media = twitter_api_v1.chunked_upload(filename=str(recording.UploadFilePath), file_type='video/mp4', media_category='TweetVideo')
 				media_id = media.media_id
 
 				# At the time of writing, you can't add alt text to videos.
@@ -232,7 +232,7 @@ if __name__ == '__main__':
 							for i, segment_path in enumerate(segment_file_paths, start=1):
 
 								sleep(config.twitter_api_wait)
-								tts_media = twitter_api_v1.chunked_upload(filename=segment_path, file_type='video/mp4', media_category='TweetVideo')
+								tts_media = twitter_api_v1.chunked_upload(filename=str(segment_path), file_type='video/mp4', media_category='TweetVideo')
 								tts_media_id = tts_media.media_id
 
 								# See above.
@@ -323,7 +323,7 @@ if __name__ == '__main__':
 
 				for i in range(config.mastodon_max_retries):
 					try:
-						media = mastodon_api.media_post(path, **kwargs)
+						media = mastodon_api.media_post(str(path), **kwargs)
 						break
 					except (MastodonNetworkError, MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
 						log.warning(f'Retrying the media post operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
@@ -445,7 +445,7 @@ if __name__ == '__main__':
 					# The official Tumblr library doesn't have any package-specific exceptions so
 					# we'll catch all of them to be safe.
 					# See: https://www.tumblr.com/docs/en/api/v2#post--create-a-new-blog-post-legacy
-					response = tumblr_api.create_video(tumblr_blog_name, tags=tags, caption=text, data=recording.UploadFilePath)
+					response = tumblr_api.create_video(tumblr_blog_name, tags=tags, caption=text, data=str(recording.UploadFilePath))
 					status_id = response.get('id')
 
 					if status_id is not None:
