@@ -275,6 +275,8 @@ Used by all scripts.
 
 * `fluidsynth_path`: the path to the FluidSynth executable directory. May be null if FluidSynth is already in the PATH.
 
+* `user_agent`: the user agent sent with each request from FFmpeg, FFprobe, and the requests library. This is not used by Firefox and is only sent when handling media files.
+
 * `language_names`: maps a language's ISO 639-1 code to its name. This currently only lists the languages supported by the Microsoft Speech API.
 
 ### Scout

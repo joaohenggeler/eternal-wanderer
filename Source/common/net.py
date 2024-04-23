@@ -92,6 +92,7 @@ adapter = HTTPAdapter(max_retries=retry)
 global_session = requests.Session()
 global_session.mount('http://web.archive.org', adapter)
 global_session.mount('https://web.archive.org', adapter)
+global_session.headers.update({'User-Agent': config.user_agent})
 
 del retry, adapter
 

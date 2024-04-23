@@ -17,7 +17,16 @@ def _run(*args) -> tuple[str, str]:
 	""" Runs FFmpeg or FFprobe. """
 
 	args = [str(arg) for arg in args]
-	process = subprocess.run(args, capture_output=True, text=True)
+
+	new_args = []
+	for i, arg in enumerate(args):
+		if arg == '-i':
+			url = args[i+1]
+			if url.startswith('http:') or url.startswith('https:'):
+				new_args.extend(['-headers', f'User-Agent: {config.user_agent}'])
+		new_args.append(arg)
+
+	process = subprocess.run(new_args, capture_output=True, text=True)
 
 	if process.returncode != 0:
 		raise FfmpegException(process.stderr.rstrip('\n'))
@@ -30,6 +39,9 @@ def ffmpeg(*args, log_level='warning') -> tuple[str, str]:
 
 def ffprobe(*args) -> str:
 	""" Runs FFprobe. """
+	# Although it's not necessary, the -i option helps when adding the user agent in _run.
+	args = list(args)
+	args.insert(len(args) - 1, '-i')
 	output, _ = _run('ffprobe', *args, '-loglevel', 'error')
 	return output
 

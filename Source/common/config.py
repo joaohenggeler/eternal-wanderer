@@ -93,6 +93,8 @@ class CommonConfig:
 	ffmpeg_path: Optional[Path]
 	fluidsynth_path: Optional[Path]
 
+	user_agent: str
+
 	language_names: dict[str, str]
 
 	# Determined at runtime.
