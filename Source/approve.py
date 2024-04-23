@@ -111,7 +111,7 @@ if __name__ == '__main__':
 					if snapshot.LanguageName is not None:
 						print(f'- Language: {snapshot.LanguageName}')
 
-					if snapshot.PageUsesPlugins is not None:
+					if snapshot.PageUsesPlugins:
 						print(f'- Uses Plugins: {snapshot.PageUsesPlugins}')
 
 					if snapshot.DisplayMetadata is not None:
