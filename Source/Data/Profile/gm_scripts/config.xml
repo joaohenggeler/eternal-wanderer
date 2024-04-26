@@ -5,13 +5,6 @@
 		<Include>*</Include>
 	</Script>
 
-	<Script basedir="Style_Wayback_Machine" checkRemoteUpdates="0" description="Styles Wayback Machine snapshots depending on the year they were archived." enabled="true" filename="style_wayback_machine.user.js" installTime="1654470000000" modified="1654470000000" name="Style Wayback Machine" namespace="" noframes="false" runAt="document-start" updateMetaStatus="unknown" uuid="0fcf9bac-9d07-4e8e-bde2-c982baad5070" version="1.0.0">
-		<Grant>GM_getResourceURL</Grant>
-		<Match>*://web.archive.org/web/*</Match>
-		<Resource name="CSS_98" filename="98.css" mimetype="text/css"/>
-		<Resource name="CSS_7" filename="7.css" mimetype="text/css"/>
-	</Script>
-
 	<Script basedir="Crescendo_To_Standard_Embed" checkRemoteUpdates="0" description="Converts non-standard Crescendo or LiveUpdate embed tags to standard ones." enabled="true" filename="crescendo_to_standard_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Crescendo To Standard Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="50f83f18-8335-4a4c-8672-d9651804ac13" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
@@ -47,12 +40,24 @@
 		<Include>*</Include>
 	</Script>
 
+	<Script basedir="Style_Wayback_Machine" checkRemoteUpdates="0" description="Styles Wayback Machine snapshots depending on the year they were archived." enabled="true" filename="style_wayback_machine.user.js" installTime="1654470000000" modified="1654470000000" name="Style Wayback Machine" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="0fcf9bac-9d07-4e8e-bde2-c982baad5070" version="1.0.0">
+		<Grant>GM_getResourceURL</Grant>
+		<Match>*://web.archive.org/web/*</Match>
+		<Resource name="WIN98_CSS" filename="98.css" mimetype="text/css"/>
+		<Resource name="WIN7_CSS" filename="7.css" mimetype="text/css"/>
+	</Script>
+
 	<Script basedir="Random_Midplug_Skin" checkRemoteUpdates="0" description="Picks a random skin for the YAMAHA MIDPLUG player if one isn't set explicitly." enabled="true" filename="random_midplug_skin.user.js" installTime="1654470000000" modified="1654470000000" name="Random Midplug Skin" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="d0812582-7d4f-48f2-8502-463bba9ba3ab" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>
 
 	<Script basedir="Remove_Free_Hosting_Ads" checkRemoteUpdates="0" description="Removes ads inserted by free hosting services like Angelfire and Tripod." enabled="true" filename="remove_free_hosting_ads.user.js" installTime="1654470000000" modified="1654470000000" name="Remove Free Hosting Ads" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="6ade9c83-2d2a-43f7-9336-6423091d79a3" version="1.0.0">
+		<Grant>none</Grant>
+		<Include>*</Include>
+	</Script>
+
+	<Script basedir="Replace_Broken_Image_Icon" checkRemoteUpdates="0" description="Replaces the icon shown when an image is missing." enabled="true" filename="replace_broken_image_icon.user.js" installTime="1654470000000" modified="1654470000000" name="Replace Broken Image Icon" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="f59121bf-9af3-4110-84e1-b35b3e783700" version="1.0.0">
 		<Grant>none</Grant>
 		<Include>*</Include>
 	</Script>

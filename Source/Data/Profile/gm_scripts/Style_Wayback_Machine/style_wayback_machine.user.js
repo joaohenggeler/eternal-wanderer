@@ -3,18 +3,19 @@
 // @description		Styles Wayback Machine snapshots depending on the year they were archived.
 // @version			1.0.0
 // @match			*://web.archive.org/web/*
-// @run-at			document-start
-// @resource		CSS_98 98.css
-// @resource		CSS_7 7.css
+// @resource		WIN98_CSS 98.css
+// @resource		WIN7_CSS 7.css
 // @grant			GM_getResourceURL
 // ==/UserScript==
 
 const LOG = true;
 
-const CSS_98_URL = GM_getResourceURL("CSS_98");
-const CSS_7_URL = GM_getResourceURL("CSS_7");
+// Example with various form elements:
+// https://web.archive.org/web/19961112095617if_/http://www.nforce.com:80/home/nfeedback.html
+const WIN98_CSS_URL = GM_getResourceURL("WIN98_CSS");
+const WIN7_CSS_URL = GM_getResourceURL("WIN7_CSS");
 
-let stylesheet_url = CSS_7_URL;
+let stylesheet_url = WIN7_CSS_URL;
 
 // E.g. "https://web.archive.org/web/20000101235959if_/http://www.example.com"
 // Splits into ["", "web", "20000101235959if_"]
@@ -25,7 +26,7 @@ if(components.length === 3)
 	const year = components[2].slice(0, 4);
 	if(year < "2009")
 	{
-		stylesheet_url = CSS_98_URL;
+		stylesheet_url = WIN98_CSS_URL;
 	}
 }
 
