@@ -179,7 +179,7 @@ if __name__ == '__main__':
 						]
 
 						if args.sfx is not None:
-							input_args.extend(['-guess_layout_max', 0, '-i', args.sfx])
+							input_args.extend(['-i', args.sfx])
 
 						output_args = config.text_to_speech_ffmpeg_output_args.copy() if args.tts else config.upload_ffmpeg_output_args.copy()
 

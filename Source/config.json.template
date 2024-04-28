@@ -573,7 +573,6 @@
 			"-crf", 18,
 			"-preset", "veryslow",
 			"-pix_fmt", "yuv420p",
-			"-fps_mode", "vfr",
 			"-vf", "scale=1920x1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1:color=black",
 			"-sws_flags", "lanczos",
 			"-c:a", "aac",
@@ -627,15 +626,10 @@
 			"zh": "Yaoyao"
 		},
 
-		"text_to_speech_ffmpeg_video_input_name": "color=black:size=50x50:rate=30/1",
-		"text_to_speech_ffmpeg_video_input_args":
+		"text_to_speech_ffmpeg_input_name": "color=black:size=50x50:rate=30/1",
+		"text_to_speech_ffmpeg_input_args":
 		[
 			"-f", "lavfi"
-		],
-
-		"text_to_speech_ffmpeg_audio_input_args":
-		[
-			"-guess_layout_max", 0
 		],
 
 		"text_to_speech_ffmpeg_output_args":

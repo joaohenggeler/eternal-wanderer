@@ -141,9 +141,8 @@ class RecordConfig(CommonConfig):
 	text_to_speech_default_voice: Optional[str]
 	text_to_speech_language_voices: dict[str, str]
 
-	text_to_speech_ffmpeg_video_input_name: str
-	text_to_speech_ffmpeg_video_input_args: list[Union[int, str]]
-	text_to_speech_ffmpeg_audio_input_args: list[Union[int, str]]
+	text_to_speech_ffmpeg_input_name: str
+	text_to_speech_ffmpeg_input_args: list[Union[int, str]]
 	text_to_speech_ffmpeg_output_args: list[Union[int, str]]
 
 	enable_media_conversion: bool
@@ -860,7 +859,7 @@ if __name__ == '__main__':
 									media_path = converted_path
 
 								input_args = [
-									'-guess_layout_max', 0, '-i', media_path,
+									'-i', media_path,
 									*config.media_conversion_ffmpeg_input_args, '-i', config.media_conversion_ffmpeg_input_name,
 								]
 
@@ -1023,7 +1022,7 @@ if __name__ == '__main__':
 								if text_to_speech_path is not None:
 									log.info(f'Saved the text-to-speech file to "{text_to_speech_path}".')
 
-							if config.enable_audio_mixing and audio_urls:
+							if config.enable_audio_mixing and audio_urls and state == Snapshot.RECORDED:
 
 								browser.go_to_blank_page_with_text('\N{Cocktail Glass} Mixing Audio \N{Cocktail Glass}', str(snapshot))
 
@@ -1052,27 +1051,15 @@ if __name__ == '__main__':
 
 											fluidsynth(*args)
 											mix_urls[converted_path] = audio_urls[url]
-
-										elif extension == 'mp3':
-											# A quick-and-dirty solution to the fact that FFmpeg sometimes freezes when processing MP3 files.
-		   									# E.g. https://web.archive.org/web/20070206065503if_/http://churchstalros.ytmnd.com/
-											parts = urlparse(url)
-											converted_path = (media_download_path / Path(parts.path).name).with_suffix('.wav')
-											log.debug(f'Converting the MP3 file "{url}" to WAV.')
-											ffmpeg('-i', url, converted_path)
-											mix_urls[converted_path] = audio_urls[url]
 										else:
 											mix_urls[url] = audio_urls[url]
 
-									input_args = ['-guess_layout_max', 0, '-i', upload_path]
+									input_args = ['-i', upload_path]
 
-									max_duration = ffprobe_duration(upload_path)
 									for url, (_, loop) in mix_urls.items():
 										loop_count = -1 if loop else 0
 										input_args.extend([
 											'-stream_loop', loop_count,
-											'-t', max_duration,
-											'-guess_layout_max', 0,
 											'-i', url,
 										])
 

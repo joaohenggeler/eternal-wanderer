@@ -100,12 +100,11 @@ class TextToSpeech:
 			self.engine.Speak(text, SpeechLib.SVSFPurgeBeforeSpeak | SpeechLib.SVSFIsNotXML)
 			self.stream.Close()
 
-			video_input_args = self.config.text_to_speech_ffmpeg_video_input_args + ['-i', self.config.text_to_speech_ffmpeg_video_input_name]
-			audio_input_args = self.config.text_to_speech_ffmpeg_audio_input_args + ['-i', self.temporary_file.name]
+			input_args = self.config.text_to_speech_ffmpeg_input_args + ['-i', self.config.text_to_speech_ffmpeg_input_name, '-i', self.temporary_file.name]
 			output_args = self.config.text_to_speech_ffmpeg_output_args + [output_path]
 
-			log.debug(f'Generating the text-to-speech file with the FFmpeg arguments: {video_input_args + audio_input_args + output_args}')
-			ffmpeg(*video_input_args, *audio_input_args, *output_args)
+			log.debug(f'Generating the text-to-speech file with the FFmpeg arguments: {input_args + output_args}')
+			ffmpeg(*input_args, *output_args)
 
 		except (COMError, FfmpegException) as error:
 			log.error(f'Failed to generate the text-to-speech file "{output_path}" with the error: {repr(error)}')
