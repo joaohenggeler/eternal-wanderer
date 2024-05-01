@@ -559,11 +559,11 @@ if __name__ == '__main__':
 					body = '\n'.join(filter(None, [snapshot.DisplayMetadata, snapshot.ShortDate, snapshot.WaybackUrl, emojis]))
 
 					# We have to format the link ourselves since the Tumblr API treats the post as HTML by default.
+					snapshot_type = 'media file' if snapshot.IsMedia else 'web page'
 					html_wayback_url = f'<a href="{snapshot.WaybackUrl}">Archived {snapshot_type.title()}</a>'
 					html_body = '<br>'.join(filter(None, [snapshot.DisplayMetadata, snapshot.ShortDate, html_wayback_url, emojis]))
 
 					# How the date is formatted depends on the current locale.
-					snapshot_type = 'media file' if snapshot.IsMedia else 'web page'
 					long_date = snapshot.OldestDatetime.strftime('%B %Y')
 					alt_text = f'The {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine.'
 
