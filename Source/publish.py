@@ -554,7 +554,7 @@ if __name__ == '__main__':
 					media_emoji = '\N{DVD}' if snapshot.IsMedia else ('\N{Jigsaw Puzzle Piece}' if snapshot.PageUsesPlugins else None)
 					sensitive_emoji = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
 					audio_emoji = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
-					emojis = ' '.join(filter(None, [media_emoji, sensitive_emoji, audio_emoji, snapshot.Emojis]))
+					emojis = ' '.join(filter(None, [media_emoji, sensitive_emoji, audio_emoji, *snapshot.Emojis]))
 
 					body = '\n'.join(filter(None, [snapshot.DisplayMetadata, snapshot.ShortDate, snapshot.WaybackUrl, emojis]))
 
