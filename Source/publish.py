@@ -137,6 +137,22 @@ if __name__ == '__main__':
 
 	log.info('Initializing the publisher.')
 
+	@dataclass(frozen=True)
+	class Post:
+		recording: Recording
+
+		title: str
+		body: str
+		html_body: str
+		alt_text: str
+
+		tts_body: str
+		tts_alt_text: str
+
+		sensitive: bool
+		emojis: str
+		tags: list[str]
+
 	if config.enable_twitter:
 
 		try:
@@ -172,7 +188,7 @@ if __name__ == '__main__':
 			log.error(f'Failed to initialize the Twitter API interface with the error: {repr(error)}')
 			sys.exit(1)
 
-		def publish_to_twitter(recording: Recording, title: str, body: str, alt_text: str, tts_body: str, tts_alt_text: str) -> tuple[Optional[int], Optional[int]]:
+		def publish_to_twitter(post: Post) -> tuple[Optional[int], Optional[int]]:
 			""" Publishes a snapshot recording and text-to-speech file on Twitter. The video recording is added to the main post along
 			with a message whose content is generated using the remaining arguments. The text-to-speech file is added as a reply to the
 			main post. If this file is too long for Twitter's video duration limit, then it's split across multiple replies. """
@@ -183,19 +199,18 @@ if __name__ == '__main__':
 			status_id = None
 
 			try:
-				media = twitter_api_v1.chunked_upload(filename=str(recording.UploadFilePath), file_type='video/mp4', media_category='TweetVideo')
+				media = twitter_api_v1.chunked_upload(filename=str(post.recording.UploadFilePath), file_type='video/mp4', media_category='TweetVideo')
 				media_id = media.media_id
 
 				# At the time of writing, you can't add alt text to videos.
 				# See: https://docs.tweepy.org/en/stable/api.html#tweepy.API.create_media_metadata
 				if False:
 					sleep(config.twitter_api_wait)
-					twitter_api_v1.create_media_metadata(media_id, alt_text)
+					twitter_api_v1.create_media_metadata(media_id, post.alt_text)
 
-				# We need to take into account the extra newline and the emoji identifiers since these count as two characters on Twitter.
-				emoji_length = len('\N{DVD}\N{No One Under Eighteen Symbol}\N{Speaker With Three Sound Waves}')
-				max_title_length = max(config.twitter_max_status_length - len('\n') - len(body) - emoji_length, 0)
-				text = title[:max_title_length] + '\n' + body
+				# Note that emojis count as two characters on Twitter.
+				max_title_length = max(config.twitter_max_status_length - len('\n') - len(post.body) - 2 * len(post.emojis), 0)
+				text = post.title[:max_title_length] + '\n' + post.body
 
 				sleep(config.twitter_api_wait)
 				response = twitter_api_v2.create_tweet(text=text, media_ids=[media_id])
@@ -206,12 +221,12 @@ if __name__ == '__main__':
 				# Add the text-to-speech file as a reply to the previous tweet. While Twitter has a generous
 				# file size limit, the maximum video duration isn't great for the text-to-speech files. To
 				# get around this, we'll split the video into segments and chain them together in the replies.
-				if config.reply_with_text_to_speech and recording.TextToSpeechFilename is not None:
+				if config.reply_with_text_to_speech and post.recording.TextToSpeechFilename is not None:
 
 					temporary_path = Path(tempfile.gettempdir())
-					segment_path_format = temporary_path / (CommonConfig.TEMPORARY_PATH_PREFIX + '%04d.' + recording.TextToSpeechFilename)
+					segment_path_format = temporary_path / (CommonConfig.TEMPORARY_PATH_PREFIX + '%04d.' + post.recording.TextToSpeechFilename)
 
-					input_args = ['-i', recording.TextToSpeechFilePath]
+					input_args = ['-i', post.recording.TextToSpeechFilePath]
 					output_args = [
 						'-c', 'copy',
 						'-f', 'segment',
@@ -223,7 +238,7 @@ if __name__ == '__main__':
 					log.debug(f'Splitting the text-to-speech file with the FFmpeg arguments: {input_args + output_args}')
 					ffmpeg(*input_args, *output_args)
 
-					segment_file_paths = sorted(temporary_path.glob('*.' + recording.TextToSpeechFilename))
+					segment_file_paths = sorted(temporary_path.glob('*.' + post.recording.TextToSpeechFilename))
 					last_status_id = status_id
 
 					try:
@@ -238,15 +253,15 @@ if __name__ == '__main__':
 								# See above.
 								if False:
 									sleep(config.twitter_api_wait)
-									twitter_api_v1.create_media_metadata(tts_media_id, tts_alt_text)
+									twitter_api_v1.create_media_metadata(tts_media_id, post.tts_alt_text)
 
-								segment_body = tts_body
+								segment_body = post.tts_body
 
 								if len(segment_file_paths) > 1:
 									segment_body += f'\n{i} of {len(segment_file_paths)}'
 
 								max_title_length = max(config.twitter_max_status_length - len('\n') - len(segment_body), 0)
-								tts_text = title[:max_title_length] + '\n' + segment_body
+								tts_text = post.title[:max_title_length] + '\n' + segment_body
 
 								sleep(config.twitter_api_wait)
 								tts_response = twitter_api_v2.create_tweet(text=tts_text, in_reply_to_tweet_id=last_status_id, media_ids=[tts_media_id])
@@ -280,7 +295,7 @@ if __name__ == '__main__':
 			log.error(f'Failed to initialize the Mastodon API interface with the error: {repr(error)}')
 			sys.exit(1)
 
-		def publish_to_mastodon(recording: Recording, title: str, body: str, alt_text: str, sensitive: bool, tts_body: str, tts_alt_text: str) -> tuple[Optional[int], Optional[int]]:
+		def publish_to_mastodon(post: Post) -> tuple[Optional[int], Optional[int]]:
 			""" Publishes a snapshot recording and text-to-speech file on a given Mastodon instance. The video recording is added to the
 			main post along with a message whose content is generated using the remaining arguments. The text-to-speech audio is added
 			as a reply to the main post. This function can optionally attempt to reduce the recording size before uploading it. If the
@@ -359,34 +374,34 @@ if __name__ == '__main__':
 			try:
 				# Unlike with Twitter, uploading videos to Mastodon can be trickier due to hosting costs.
 				# We'll try to reduce the file size while also having a maximum size limit.
-				recording_path = reduce_video_size(recording.UploadFilePath) if config.mastodon_reduce_file_size else recording.UploadFilePath
+				recording_path = reduce_video_size(post.recording.UploadFilePath) if config.mastodon_reduce_file_size else post.recording.UploadFilePath
 				recording_file_size = os.path.getsize(recording_path)
 
 				if config.mastodon_max_file_size is None or recording_file_size <= config.mastodon_max_file_size:
 
-					media_id = try_media_post(recording_path, mime_type='video/mp4', description=alt_text)
+					media_id = try_media_post(recording_path, mime_type='video/mp4', description=post.alt_text)
 
-					max_title_length = max(config.mastodon_max_status_length - len('\n') - len(body), 0)
-					text = title[:max_title_length] + '\n' + body
+					max_title_length = max(config.mastodon_max_status_length - len('\n') - len(post.body), 0)
+					text = post.title[:max_title_length] + '\n' + post.body
 
-					status_id = try_status_post(text, media_ids=[media_id], sensitive=sensitive)
+					status_id = try_status_post(text, media_ids=[media_id], sensitive=post.sensitive)
 
 					log.info(f'Posted the recording status #{status_id} with the media #{media_id} ({recording_file_size / 10 ** 6:.1f} MB) using {len(text)} characters.')
 
 					try:
-						if config.reply_with_text_to_speech and recording.TextToSpeechFilePath is not None:
+						if config.reply_with_text_to_speech and post.recording.TextToSpeechFilePath is not None:
 
-							tts_path = extract_audio(recording.TextToSpeechFilePath)
+							tts_path = extract_audio(post.recording.TextToSpeechFilePath)
 							tts_file_size = os.path.getsize(tts_path)
 
 							if config.mastodon_max_file_size is None or tts_file_size <= config.mastodon_max_file_size:
 
-								tts_media_id = try_media_post(tts_path, mime_type='audio/mpeg', description=tts_alt_text)
+								tts_media_id = try_media_post(tts_path, mime_type='audio/mpeg', description=post.tts_alt_text)
 
-								max_title_length = max(config.mastodon_max_status_length - len('\n') - len(tts_body), 0)
-								tts_text = title[:max_title_length] + '\n' + tts_body
+								max_title_length = max(config.mastodon_max_status_length - len('\n') - len(post.tts_body), 0)
+								tts_text = post.title[:max_title_length] + '\n' + post.tts_body
 
-								tts_status_id = try_status_post(tts_text, in_reply_to_id=status_id, media_ids=[tts_media_id], sensitive=sensitive)
+								tts_status_id = try_status_post(tts_text, in_reply_to_id=status_id, media_ids=[tts_media_id], sensitive=post.sensitive)
 
 								log.info(f'Posted the text-to-speech status #{tts_status_id} with the media #{tts_media_id} ({tts_file_size / 10 ** 6:.1f} MB) using {len(tts_text)} characters.')
 							else:
@@ -426,7 +441,7 @@ if __name__ == '__main__':
 			log.error(f'Failed to initialize the Tumblr API interface with the error: {repr(error)}')
 			sys.exit(1)
 
-		def publish_to_tumblr(recording: Recording, title: str, body: str, tags: list[str]) -> Optional[int]:
+		def publish_to_tumblr(post: Post) -> Optional[int]:
 			""" Publishes a snapshot recording on Tumblr. The video recording is added to the main post along
 			with a message whose content is generated using the remaining arguments. Unlike the Twitter and
 			Mastodon counterparts, posting text-to-speech files is not supported. It's also not possible to
@@ -437,15 +452,15 @@ if __name__ == '__main__':
 			status_id = None
 
 			try:
-				max_title_length = max(config.tumblr_max_status_length - len('<br>') - len(body), 0)
-				text = title[:max_title_length] + '<br>' + body
+				max_title_length = max(config.tumblr_max_status_length - len('<br>') - len(post.html_body), 0)
+				text = post.title[:max_title_length] + '<br>' + post.html_body
 
 				for i in range(config.tumblr_max_retries):
 
 					# The official Tumblr library doesn't have any package-specific exceptions so
 					# we'll catch all of them to be safe.
 					# See: https://www.tumblr.com/docs/en/api/v2#post--create-a-new-blog-post-legacy
-					response = tumblr_api.create_video(tumblr_blog_name, tags=tags, caption=text, data=str(recording.UploadFilePath))
+					response = tumblr_api.create_video(tumblr_blog_name, tags=post.tags, caption=text, data=str(post.recording.UploadFilePath))
 					status_id = response.get('id')
 
 					if status_id is not None:
@@ -536,37 +551,49 @@ if __name__ == '__main__':
 
 					log.info(f'[{recording_index+1} of {num_recordings}] Publishing recording #{recording.Id} of snapshot #{snapshot.Id} {snapshot} (approved = {snapshot.State == Snapshot.APPROVED}).')
 
-					title = snapshot.DisplayTitle
-					display_metadata = snapshot.DisplayMetadata
+					media_emoji = '\N{DVD}' if snapshot.IsMedia else ('\N{Jigsaw Puzzle Piece}' if snapshot.PageUsesPlugins else None)
+					sensitive_emoji = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
+					audio_emoji = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
+					emojis = ' '.join(filter(None, [media_emoji, sensitive_emoji, audio_emoji, snapshot.Emojis]))
 
-					media_identifier = '\N{DVD}' if snapshot.IsMedia else ('\N{Jigsaw Puzzle Piece}' if snapshot.PageUsesPlugins else None)
-					sensitive_identifier = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
-					audio_identifier = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
-					emoji_identifiers = ' '.join(filter(None, [media_identifier, sensitive_identifier, audio_identifier]))
+					body = '\n'.join(filter(None, [snapshot.DisplayMetadata, snapshot.ShortDate, snapshot.WaybackUrl, emojis]))
 
-					body = '\n'.join(filter(None, [display_metadata, snapshot.ShortDate, snapshot.WaybackUrl, emoji_identifiers]))
+					# We have to format the link ourselves since the Tumblr API treats the post as HTML by default.
+					html_wayback_url = f'<a href="{snapshot.WaybackUrl}">Archived {snapshot_type.title()}</a>'
+					html_body = '<br>'.join(filter(None, [snapshot.DisplayMetadata, snapshot.ShortDate, html_wayback_url, emojis]))
 
 					# How the date is formatted depends on the current locale.
 					snapshot_type = 'media file' if snapshot.IsMedia else 'web page'
 					long_date = snapshot.OldestDatetime.strftime('%B %Y')
 					alt_text = f'The {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine.'
-					sensitive = snapshot.IsSensitive
 
 					tts_language = f'Text-to-Speech ({snapshot.LanguageName})' if snapshot.LanguageName is not None else 'Text-to-Speech'
 					tts_body = '\n'.join(filter(None, [snapshot.ShortDate, tts_language]))
 					tts_alt_text = f'An audio recording of the {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine. Generated using text-to-speech.'
 
-					# We have to format the link ourselves since the Tumblr API treats the post as HTML by default.
-					tumblr_wayback_url = f'<a href="{snapshot.WaybackUrl}">Archived {snapshot_type.title()}</a>'
-					tumblr_body = '<br>'.join(filter(None, [display_metadata, snapshot.ShortDate, tumblr_wayback_url, emoji_identifiers]))
-
 					extract = tld_extract(snapshot.Url)
 					year = str(snapshot.OldestDatetime.year)
 					tags = [extract.domain, year, *snapshot.Tags]
 
-					twitter_media_id, twitter_status_id = publish_to_twitter(recording, title, body, alt_text, tts_body, tts_alt_text) if config.enable_twitter else (None, None)
-					mastodon_media_id, mastodon_status_id = publish_to_mastodon(recording, title, body, alt_text, sensitive, tts_body, tts_alt_text) if config.enable_mastodon else (None, None)
-					tumblr_status_id = publish_to_tumblr(recording, title, tumblr_body, tags) if config.enable_tumblr else None
+					post = Post(
+						recording=recording,
+
+						title=snapshot.DisplayTitle,
+						body=body,
+						html_body=html_body,
+						alt_text=alt_text,
+
+						tts_body=tts_body,
+						tts_alt_text=tts_alt_text,
+
+						sensitive=snapshot.IsSensitive,
+						emojis=emojis,
+						tags=tags,
+					)
+
+					twitter_media_id, twitter_status_id = publish_to_twitter(post) if config.enable_twitter else (None, None)
+					mastodon_media_id, mastodon_status_id = publish_to_mastodon(post) if config.enable_mastodon else (None, None)
+					tumblr_status_id = publish_to_tumblr(post) if config.enable_tumblr else None
 
 					if config.delete_files_after_upload:
 						delete_file(recording.UploadFilePath)

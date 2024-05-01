@@ -248,7 +248,7 @@ class CommonConfig:
 		bucket = ceil(id_ / self.max_recordings_per_directory) * self.max_recordings_per_directory
 		return self.recordings_path / str(bucket)
 
-for option in ['encoding', 'media_extension_override', 'notes', 'script', 'tags']:
+for option in ['emojis', 'encoding', 'media_extension_override', 'notes', 'script', 'tags']:
 	assert option not in CommonConfig.MUTABLE_OPTIONS, f'The mutable option name "{option}" is reserved.'
 
 del option

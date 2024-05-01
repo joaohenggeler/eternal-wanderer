@@ -48,6 +48,7 @@ class Snapshot:
 	Points: Optional[int]
 
 	# Determined from the Options column.
+	Emojis: str
 	Encoding: str
 	MediaExtensionOverride: Optional[str]
 	Notes: str
@@ -116,6 +117,7 @@ class Snapshot:
 		else:
 			self.Options = {}
 
+		self.Emojis = self.Options.get('emojis', '')
 		self.Encoding = self.Options.get('encoding', '')
 		self.MediaExtensionOverride = self.Options.get('media_extension_override')
 		self.Notes = self.Options.get('notes', '')
