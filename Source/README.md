@@ -559,6 +559,8 @@ Some of the options described above can be changed for specific snapshots using 
 
 This column also accepts the following extra options:
 
+* `emojis`: a list of emojis to add to the post. Can be used to group snapshots in platforms that don't support tags.
+
 * `encoding`: force a specific fallback character encoding. This takes precedence over the guessed encoding from the Wayback Machine. Only used if `enable_fallback_encoding` is enabled.
 
 * `media_extension_override`: force a specific file extension for a media snapshot. Used in rare cases where a snapshot has an incorrect extension that affects how the media is displayed (e.g. `ram` instead of `rm`).
