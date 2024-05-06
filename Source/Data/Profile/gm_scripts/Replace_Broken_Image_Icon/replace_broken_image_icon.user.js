@@ -21,15 +21,14 @@ document.addEventListener("readystatechange", function(event)
 			// - https://web.archive.org/web/19981203150142if_/http://w3.one.net:80/~tecumsah/patch.htm
 			// - https://web.archive.org/web/20020910205836if_/http://www.theozfiles.com:80/index.html
 
+			let horizontal_position = "left 6px";
+			let vertical_position = "top 6px";
+
+			if(image.width <= 24) horizontal_position = "center";
+			if(image.height <= 24) vertical_position = "center";
+
 			image.style.minWidth = "24px";
 			image.style.minHeight = "24px";
-
-			let horizontal_position = "center";
-			let vertical_position = "center";
-
-			if(image.width > 24) horizontal_position = "left 6px";
-			if(image.height > 24) vertical_position = "top 6px";
-
 			image.style.objectFit = "none";
 			image.style.objectPosition = horizontal_position + " " + vertical_position;
 
