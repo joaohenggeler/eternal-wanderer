@@ -270,13 +270,15 @@ if __name__ == '__main__':
 								minutes, seconds = divmod(round(current_duration), 60)
 								hours, minutes = divmod(minutes, 60)
 								timestamp = f'{hours:02}:{minutes:02}:{seconds:02}'
-								media_identifier = '\N{DVD}' if snapshot.IsMedia else ('\N{Jigsaw Puzzle Piece}' if snapshot.PageUsesPlugins else None)
-								sensitive_identifier = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
-								audio_identifier = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
 
-								recording_identifiers = [timestamp, snapshot.DisplayTitle, f'({snapshot.ShortDate})', media_identifier, sensitive_identifier, audio_identifier]
-								timestamp_line = ' '.join(filter(None, recording_identifiers)) + '\n'
-								timestamps_file.write(timestamp_line)
+								media_emoji = '\N{DVD}' if snapshot.IsMedia else ('\N{Jigsaw Puzzle Piece}' if snapshot.PageUsesPlugins else None)
+								sensitive_emoji = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
+								audio_emoji = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
+								emojis = [media_emoji, sensitive_emoji, audio_emoji, *snapshot.Emojis]
+
+								line = [timestamp, snapshot.DisplayTitle, f'({snapshot.ShortDate})', *emojis]
+								line = ' '.join(filter(None, line)) + '\n'
+								timestamps_file.write(line)
 
 								current_duration += ffprobe_duration(intermediate_file.name) + transition_duration
 
