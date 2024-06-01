@@ -700,7 +700,7 @@
 			"--audio-file-format", "s16",
 			"--sample-rate", 48000,
 			"--audio-channels", 1,
-			"--gain", 0.4
+			"--gain", 0.5
 		]
 	},
 
