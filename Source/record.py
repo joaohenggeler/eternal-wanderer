@@ -370,7 +370,7 @@ if __name__ == '__main__':
 
 							# See: https://wiki.multimedia.cx/index.php/FFmpeg_Metadata
 							tags = info['format'].get('tags', {})
-							title = tags.get('title')
+							title = tags.get('title') or tags.get('name')
 							author = tags.get('author') or tags.get('artist') or tags.get('album_artist') or tags.get('composer') or tags.get('copyright')
 							log.debug(f'The media file "{title}" by "{author}" has the following tags: {tags}')
 
