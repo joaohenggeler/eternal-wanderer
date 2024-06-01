@@ -276,7 +276,7 @@ if __name__ == '__main__':
 								audio_emoji = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
 								emojis = [media_emoji, sensitive_emoji, audio_emoji, *snapshot.Emojis]
 
-								line = [timestamp, snapshot.DisplayTitle, f'({snapshot.ShortDate})', *emojis]
+								line = [timestamp, snapshot.DisplayTitle, snapshot.DisplayMetadata, f'({snapshot.ShortDate})', *emojis]
 								line = ' '.join(filter(None, line)) + '\n'
 								timestamps_file.write(line)
 
