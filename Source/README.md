@@ -570,3 +570,5 @@ This column also accepts the following extra options:
 * `script`: JavaScript code to execute after loading the snapshot's page but before the recording starts.
 
 * `tags`: a list of tags to add to the Tumblr post. Can be used to group snapshots by theme and for content warnings (e.g. `["halloween", "jumpscare"]`).
+
+* `title_override`: force a specific title. Used to improve the metadata shown in the posts and compilations (e.g. when a page has an incorrect title).

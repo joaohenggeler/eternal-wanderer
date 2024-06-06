@@ -54,6 +54,7 @@ class Snapshot:
 	Notes: str
 	Script: Optional[str]
 	Tags: list[str]
+	TitleOverride: Optional[str]
 
 	# Determined at runtime.
 	PriorityName: str
@@ -123,6 +124,7 @@ class Snapshot:
 		self.Notes = self.Options.get('notes', '')
 		self.Script = self.Options.get('script')
 		self.Tags = self.Options.get('tags', [])
+		self.TitleOverride = self.Options.get('title_override')
 
 		# In some rare cases, media snapshots can have incorrect file extensions.
 		# To solve this, we'll allow forcing the media conversion by overriding
@@ -155,9 +157,9 @@ class Snapshot:
 		# How the date is formatted depends on the current locale.
 		self.ShortDate = self.OldestDatetime.strftime('%b %Y')
 
-		self.DisplayTitle = self.PageTitle
-		if not self.DisplayTitle:
+		self.DisplayTitle = self.TitleOverride or self.PageTitle
 
+		if not self.DisplayTitle:
 			parts = urlparse(unquote(self.Url))
 			self.DisplayTitle = Path(parts.path).name
 
