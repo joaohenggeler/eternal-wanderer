@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import sleep
 from typing import Optional, Union
-from urllib.parse import parse_qsl, unquote, urlparse, urlunparse
+from urllib.parse import parse_qs, parse_qsl, unquote, urlparse, urlunparse
 
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
@@ -677,6 +677,57 @@ if __name__ == '__main__':
 					# Remove any duplicates to minimize the amount of requests to the CDX API.
 					url_list = list(dict.fromkeys(url_list))
 
+					# Find a YouTube video's file based on the page where the player was embedded.
+					# If the video was archived, then we can do this by passing its YouTube ID to
+					# the Wayback Machine's special fake URL. Since we're already scouting the video's
+					# page, we can find its title by looking at the meta tags.
+					#
+					# E.g.
+					# - Old Layout: https://web.archive.org/web/20061208083125if_/http://www.youtube.com/watch%3Fv%3DjNQXAC9IVRw
+					# - New Layout: https://web.archive.org/web/20240905040326if_/https://www.youtube.com/watch?v=jNQXAC9IVRw
+					# - Multiple Parameters: https://web.archive.org/web/20110826025741if_/http://www.youtube.com/watch?v=inly68KgOcs&gl=US&hl=en&amp;has_verified=1
+
+					video_snapshot = None
+
+					try:
+						url = unquote(snapshot.Url)
+						if is_url_from_domain(url, 'youtube.com'):
+
+							parts = urlparse(url)
+							params = parse_qs(parts.query)
+
+							if 'v' in params:
+
+								youtube_id = params['v'][0]
+								fake_url = f'http://wayback-fakeurl.archive.org/yt/{youtube_id}'
+
+								log.info(f'Locating the YouTube video snapshot of "{youtube_id}".')
+								video_snapshot = find_child_snapshot(snapshot, fake_url, snapshot.Timestamp)
+
+								if video_snapshot is not None:
+									if video_snapshot['is_media']:
+										video_snapshot['media_extension'] = 'mp4'
+										video_snapshot['media_title'] = None
+
+										meta = driver.find_element_by_xpath(r'//meta[@name="title"]')
+										title = meta.get_attribute('content')
+										video_snapshot['media_title'] = title
+
+										log.info(f'Found the YouTube video snapshot of "{title}" ({youtube_id}).')
+									else:
+										log.warning('The YouTube video snapshot is not a media file.')
+										video_snapshot = None
+								else:
+									log.info('No YouTube video snapshot found.')
+
+					except SessionNotCreatedException as error:
+						log.warning(f'Terminated the WebDriver session abruptly with the error: {repr(error)}')
+						break
+					except WebDriverException as error:
+						log.warning(f'Could not analyze the YouTube snapshot\'s page with the error: {repr(error)}')
+
+					# Do not access the document via the driver beyond this point!
+
 					try:
 						# Analyze the page and its frames by using the Wayback Machine identical modifier.
 						# The main advantage of this modifier is that it excludes the tags inserted by the
@@ -747,6 +798,18 @@ if __name__ == '__main__':
 										INSERT OR IGNORE INTO Topology (ParentId, ChildId)
 										VALUES (:parent_id, (SELECT Id FROM Snapshot WHERE Url = :url AND Timestamp = :timestamp))
 										''', topology)
+
+						if video_snapshot is not None:
+							db.execute(	'''
+										INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsMedia, MediaExtension, MediaTitle, ScoutTime, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+										VALUES (:parent_id, :depth, :state, :is_excluded, :is_media, :media_extension, :media_title, :scout_time, :url, :timestamp, :last_modified_time, :url_key, :digest);
+										''', video_snapshot)
+
+							db.execute(	'''
+										INSERT OR IGNORE INTO Topology (ParentId, ChildId)
+										VALUES (:parent_id, (SELECT Id FROM Snapshot WHERE Url = :url AND Timestamp = :timestamp))
+										''',
+										{'parent_id': video_snapshot['parent_id'], 'url': video_snapshot['url'], 'timestamp': video_snapshot['timestamp']})
 
 						if config.store_all_words_and_tags:
 							word_and_tag_values = [{'word': word, 'is_tag': is_tag} for word, is_tag in word_and_tag_counter]
