@@ -18,6 +18,7 @@ if __name__ == '__main__':
 	parser.add_argument('-alternate', action='store_true', help='Alternate recordings between the beginning and the end.')
 	parser.add_argument('-randomize', action='store_true', help='Randomize the order in which approved recordings are published. Cannot be used with -customize.')
 	parser.add_argument('-customize', action='store_true', help='Ask for the order in which approved recordings are published. Cannot be used with -randomize.')
+	parser.add_argument('-withhold', action='store_true', help='Prevent approved recordings from being published right away. Useful for storing recordings for future events.')
 	parser.add_argument('-redo', action='store_true', help='Record every snapshot again.')
 	args = parser.parse_args()
 
@@ -165,8 +166,14 @@ if __name__ == '__main__':
 					if not verdict:
 						continue
 					elif verdict[0] == 'y':
-						print('[APPROVED]')
-						state = Snapshot.APPROVED
+
+						if args.withhold:
+							print('[APPROVED BUT WITHHELD]')
+							state = Snapshot.WITHHELD
+						else:
+							print('[APPROVED]')
+							state = Snapshot.APPROVED
+
 						priority = Snapshot.randomize_priority(Snapshot.MIN_PUBLISH_PRIORITY) if args.randomize else snapshot.Priority
 						is_processed = recording.IsProcessed
 						num_approved += 1
@@ -209,7 +216,7 @@ if __name__ == '__main__':
 
 						break
 
-					if args.customize and state == Snapshot.APPROVED:
+					if args.customize and state in [Snapshot.APPROVED, Snapshot.WITHHELD]:
 						while True:
 							try:
 								priority = input(f'Custom Priority [{Snapshot.MIN_PUBLISH_PRIORITY} to {Snapshot.MAX_PUBLISH_PRIORITY}]: ')
