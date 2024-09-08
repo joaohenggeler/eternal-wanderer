@@ -680,7 +680,9 @@ if __name__ == '__main__':
 					# Find a YouTube video's file based on the page where the player was embedded.
 					# If the video was archived, then we can do this by passing its YouTube ID to
 					# the Wayback Machine's special fake URL. Since we're already scouting the video's
-					# page, we can find its title by looking at the meta tags.
+					# page, we can find its title by looking at the meta tags. We'll also move the
+					# parent snapshot's priority to the video itself since that's what we want most
+					# of the time.
 					#
 					# E.g.
 					# - Old Layout: https://web.archive.org/web/20061208083125if_/http://www.youtube.com/watch%3Fv%3DjNQXAC9IVRw
@@ -706,6 +708,7 @@ if __name__ == '__main__':
 
 								if video_snapshot is not None:
 									if video_snapshot['is_media']:
+										video_snapshot['priority'] = snapshot.Priority
 										video_snapshot['media_extension'] = 'mp4'
 										video_snapshot['media_title'] = None
 
@@ -801,8 +804,8 @@ if __name__ == '__main__':
 
 						if video_snapshot is not None:
 							db.execute(	'''
-										INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, IsExcluded, IsMedia, MediaExtension, MediaTitle, ScoutTime, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
-										VALUES (:parent_id, :depth, :state, :is_excluded, :is_media, :media_extension, :media_title, :scout_time, :url, :timestamp, :last_modified_time, :url_key, :digest);
+										INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, Priority, IsExcluded, IsMedia, MediaExtension, MediaTitle, ScoutTime, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
+										VALUES (:parent_id, :depth, :state, :priority, :is_excluded, :is_media, :media_extension, :media_title, :scout_time, :url, :timestamp, :last_modified_time, :url_key, :digest);
 										''', video_snapshot)
 
 							db.execute(	'''
@@ -810,6 +813,8 @@ if __name__ == '__main__':
 										VALUES (:parent_id, (SELECT Id FROM Snapshot WHERE Url = :url AND Timestamp = :timestamp))
 										''',
 										{'parent_id': video_snapshot['parent_id'], 'url': video_snapshot['url'], 'timestamp': video_snapshot['timestamp']})
+
+							db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
 
 						if config.store_all_words_and_tags:
 							word_and_tag_values = [{'word': word, 'is_tag': is_tag} for word, is_tag in word_and_tag_counter]
