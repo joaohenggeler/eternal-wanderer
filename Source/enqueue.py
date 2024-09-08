@@ -27,7 +27,7 @@ if __name__ == '__main__':
 	elif args.timestamp is None:
 		parser.error('The timestamp cannot be omitted unless the URL already points to a Wayback Machine snapshot.')
 
-	names_to_values = {'scout': Snapshot.SCOUT_PRIORITY, 'record': Snapshot.RECORD_PRIORITY, 'publish': Snapshot.PUBLISH_PRIORITY}
+	names_to_values = {'scout': Snapshot.MIN_SCOUT_PRIORITY, 'record': Snapshot.MIN_RECORD_PRIORITY, 'publish': Snapshot.MIN_PUBLISH_PRIORITY}
 	priority = names_to_values[args.priority_name]
 
 	with Database() as db:

@@ -16,7 +16,8 @@ if __name__ == '__main__':
 	parser.add_argument('max_recordings', nargs='?', type=int, default=-1, help='How many recordings to approve. Omit or set to %(default)s to approve all recordings.')
 	parser.add_argument('-tts', action='store_true', help='Play the text-to-speech audio files after each recording.')
 	parser.add_argument('-alternate', action='store_true', help='Alternate recordings between the beginning and the end.')
-	parser.add_argument('-randomize', action='store_true', help='Randomize the order in which approved recordings are published.')
+	parser.add_argument('-randomize', action='store_true', help='Randomize the order in which approved recordings are published. Cannot be used with -customize.')
+	parser.add_argument('-customize', action='store_true', help='Ask for the order in which approved recordings are published. Cannot be used with -randomize.')
 	parser.add_argument('-redo', action='store_true', help='Record every snapshot again.')
 	args = parser.parse_args()
 
@@ -24,6 +25,9 @@ if __name__ == '__main__':
 
 	if not config.require_approval:
 		parser.error('This script can only be used if the "require_approval" option is enabled.')
+
+	if args.randomize and args.customize:
+		parser.error('The -randomize and -customize options cannot be used at the same time.')
 
 	with Database() as db:
 
@@ -66,7 +70,7 @@ if __name__ == '__main__':
 				""" Tells the other scripts that this snapshot must be recorded again as soon as possible. """
 
 				state = Snapshot.SCOUTED
-				priority = max(snapshot.Priority, Snapshot.RECORD_PRIORITY)
+				priority = max(snapshot.Priority, Snapshot.MIN_RECORD_PRIORITY)
 				is_sensitive_override = snapshot.IsSensitiveOverride
 				is_processed = True
 
@@ -163,7 +167,7 @@ if __name__ == '__main__':
 					elif verdict[0] == 'y':
 						print('[APPROVED]')
 						state = Snapshot.APPROVED
-						priority = Snapshot.randomize_priority(Snapshot.PUBLISH_PRIORITY) if args.randomize else snapshot.Priority
+						priority = Snapshot.randomize_priority(Snapshot.MIN_PUBLISH_PRIORITY) if args.randomize else snapshot.Priority
 						is_processed = recording.IsProcessed
 						num_approved += 1
 
@@ -177,7 +181,7 @@ if __name__ == '__main__':
 					elif verdict[0] == 'r':
 						print('[RECORD AGAIN]')
 						state = Snapshot.SCOUTED
-						priority = max(snapshot.Priority, Snapshot.RECORD_PRIORITY)
+						priority = max(snapshot.Priority, Snapshot.MIN_RECORD_PRIORITY)
 						is_processed = True
 						num_to_record_again += 1
 
@@ -204,6 +208,19 @@ if __name__ == '__main__':
 							continue
 
 						break
+
+					if args.customize and state == Snapshot.APPROVED:
+						while True:
+							try:
+								priority = input(f'Custom Priority [{Snapshot.MIN_PUBLISH_PRIORITY} to {Snapshot.MAX_PUBLISH_PRIORITY}]: ')
+								priority = int(priority)
+								if Snapshot.MIN_PUBLISH_PRIORITY <= priority <= Snapshot.MAX_PUBLISH_PRIORITY:
+									print(f'[{priority}]')
+									break
+								else:
+									print(f'Invalid priority {priority}.')
+							except ValueError:
+								print(f'Invalid input "{priority}".')
 
 					snapshot_updates.append({'state': state, 'priority': priority, 'is_sensitive_override': is_sensitive_override, 'id': snapshot.Id})
 					recording_updates.append({'is_processed': is_processed, 'id': recording.Id})
