@@ -27,7 +27,7 @@ from common.config import CommonConfig
 from common.database import Database
 from common.ffmpeg import ffmpeg, FfmpegException
 from common.logger import setup_logger
-from common.net import tld_extract
+from common.net import is_url_from_domain, tld_extract
 from common.recording import Recording
 from common.snapshot import Snapshot
 from common.util import (
@@ -551,27 +551,57 @@ if __name__ == '__main__':
 
 					log.info(f'[{recording_index+1} of {num_recordings}] Publishing recording #{recording.Id} of snapshot #{snapshot.Id} {snapshot} (approved = {snapshot.State == Snapshot.APPROVED}).')
 
+					url = snapshot.Url
+					wayback_url = snapshot.WaybackUrl
+
+					# Use the parent snapshot's URL if the media file is a YouTube video since these have extremely long URLs.
+					if snapshot.IsMedia and snapshot.MediaExtension == 'mp4':
+						try:
+							cursor = db.execute('''
+												SELECT S.*, SI.IsSensitive
+						   						FROM Snapshot S
+						   						INNER JOIN SnapshotInfo SI ON S.Id = SI.Id
+						   						WHERE S.Id = :parent_id;
+						   						''',
+												{'parent_id': snapshot.ParentId})
+
+							row = cursor.fetchone()
+							if row is not None:
+								parent_snapshot = Snapshot(**row)
+
+								if is_url_from_domain(parent_snapshot.Url, 'youtube.com'):
+									log.info(f'Using the YouTube URL from the parent snapshot #{parent_snapshot.Id} {parent_snapshot}.')
+									url = parent_snapshot.Url
+									wayback_url = parent_snapshot.WaybackUrl
+
+								assert parent_snapshot.IsSensitive is not None, 'The IsSensitive column is not being computed properly.'
+							else:
+								log.warning(f'Could not find the parent of snapshot {snapshot}.')
+
+						except sqlite3.Error as error:
+							log.warning(f'Could not find the parent of snapshot {snapshot} with the error: {repr(error)}')
+
 					media_emoji = '\N{DVD}' if snapshot.IsMedia else ('\N{Jigsaw Puzzle Piece}' if snapshot.PageUsesPlugins else None)
 					sensitive_emoji = '\N{No One Under Eighteen Symbol}' if snapshot.IsSensitive else None
 					audio_emoji = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
 					emojis = ' '.join(filter(None, [media_emoji, sensitive_emoji, audio_emoji, *snapshot.Emojis]))
 
-					body = '\n'.join(filter(None, [snapshot.DisplayMetadata, snapshot.ShortDate, snapshot.WaybackUrl, emojis]))
+					body = '\n'.join(filter(None, [snapshot.DisplayMetadata, snapshot.ShortDate, wayback_url, emojis]))
 
 					# We have to format the link ourselves since the Tumblr API treats the post as HTML by default.
 					snapshot_type = 'media file' if snapshot.IsMedia else 'web page'
-					html_wayback_url = f'<a href="{snapshot.WaybackUrl}">Archived {snapshot_type.title()}</a>'
+					html_wayback_url = f'<a href="{wayback_url}">Archived {snapshot_type.title()}</a>'
 					html_body = '<br>'.join(filter(None, [snapshot.DisplayMetadata, snapshot.ShortDate, html_wayback_url, emojis]))
 
 					# How the date is formatted depends on the current locale.
 					long_date = snapshot.OldestDatetime.strftime('%B %Y')
-					alt_text = f'The {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine.'
+					alt_text = f'The {snapshot_type} "{url}" as seen on {long_date} via the Wayback Machine.'
 
 					tts_language = f'Text-to-Speech ({snapshot.LanguageName})' if snapshot.LanguageName is not None else 'Text-to-Speech'
 					tts_body = '\n'.join(filter(None, [snapshot.ShortDate, tts_language]))
-					tts_alt_text = f'An audio recording of the {snapshot_type} "{snapshot.Url}" as seen on {long_date} via the Wayback Machine. Generated using text-to-speech.'
+					tts_alt_text = f'An audio recording of the {snapshot_type} "{url}" as seen on {long_date} via the Wayback Machine. Generated using text-to-speech.'
 
-					extract = tld_extract(snapshot.Url)
+					extract = tld_extract(url)
 					year = str(snapshot.OldestDatetime.year)
 					tags = [extract.domain, year, *snapshot.Tags]
 
