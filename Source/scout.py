@@ -18,8 +18,8 @@ from urllib.parse import parse_qs, parse_qsl, unquote, urlparse, urlunparse
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
 from selenium.common.exceptions import ( # type: ignore
-	SessionNotCreatedException, StaleElementReferenceException,
-	WebDriverException,
+	NoSuchElementException, SessionNotCreatedException,
+	StaleElementReferenceException, WebDriverException,
 )
 from waybackpy.exceptions import BlockedSiteError, NoCDXRecordFound
 
@@ -680,9 +680,10 @@ if __name__ == '__main__':
 					# Find a YouTube video's file based on the page where the player was embedded.
 					# If the video was archived, then we can do this by passing its YouTube ID to
 					# the Wayback Machine's special fake URL. Since we're already scouting the video's
-					# page, we can find its title by looking at the meta tags. We'll also move the
-					# parent snapshot's priority to the video itself since that's what we want most
-					# of the time.
+					# page, we can find its title by looking at the meta tags (or from the page title
+					# as a fallback). We'll also move the parent snapshot's priority to the video itself
+					# since that's what we want most of the time. Finally, we have to hardcode a media
+					# extension since YouTube's endpoint doesn't have one.
 					#
 					# E.g.
 					# - Old Layout: https://web.archive.org/web/20061208083125if_/http://www.youtube.com/watch%3Fv%3DjNQXAC9IVRw
@@ -708,12 +709,18 @@ if __name__ == '__main__':
 
 								if video_snapshot is not None:
 									if video_snapshot['is_media']:
+
 										video_snapshot['priority'] = snapshot.Priority
 										video_snapshot['media_extension'] = 'mp4'
 										video_snapshot['media_title'] = None
 
-										meta = driver.find_element_by_xpath(r'//meta[@name="title"]')
-										title = meta.get_attribute('content')
+										try:
+											meta = driver.find_element_by_xpath(r'//meta[@name="title"]')
+											title = meta.get_attribute('content')
+										except NoSuchElementException:
+											title = driver.title.removeprefix('YouTube - ').removesuffix(' - YouTube')
+											log.warning(f'Using fallback YouTube title: "{driver.title}" -> "{title}".')
+
 										video_snapshot['media_title'] = title
 
 										log.info(f'Found the YouTube video snapshot of "{title}" ({youtube_id}).')

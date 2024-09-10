@@ -36,7 +36,7 @@ from xml.etree import ElementTree
 from .config import config
 from .database import Database
 from .logger import log
-from .net import global_session, is_url_available
+from .net import global_session, is_url_available, is_url_from_domain
 from .rate_limiter import global_rate_limiter
 from .snapshot import Snapshot
 from .temporary_registry import TemporaryRegistry
@@ -757,8 +757,14 @@ class Browser:
 		# 6. https://web.archive.org/web/19990117005032if_/http://www.ce.washington.edu:80/%7Esoroos/java/published/pool.html
 		# Is decoded when viewed in GUI mode (i.e. not headless):
 		# https://web.archive.org/web/19990117005032if_/http://www.ce.washington.edu:80/~soroos/java/published/pool.html
-		# But this is *not* a redirect even though the URL strings are technically different.
+		# But this is *not* a redirect even though the URL strings are different.
 		# In this case, the redirectCount is zero.
+		#
+		# 7. https://web.archive.org/web/20190930182230if_/https://www.youtube.com/watch?v=GXMl9wWsU2U&gl=US&hl=en
+		# Is changed to the following on Firefox 52 ESR: https://web.archive.org/watch?v=GXMl9wWsU2U&gl=US&hl=en
+		# This is also not a redirect even though the URL strings are different.
+		# In this case, the redirectCount is zero.
+		# Note also that the resulting page no longer follows the snapshot URL format.
 		#
 		# Additionally, keep in mind that the Wayback Machine considers certain URLs the same for the sake of convenience.
 		# For example, the following are all the same snapshot:
@@ -776,15 +782,22 @@ class Browser:
 		current_url = self.driver.current_url
 		current_wayback_parts = parse_wayback_machine_snapshot_url(current_url)
 
-		# Catches example #4.
+		# Catches example #4 but lets #7 through.
 		if current_wayback_parts is None:
+
+			current_parts = urlparse(unquote(current_url))
+
+			if is_url_from_domain(current_url, 'web.archive.org') and len(current_parts.path) > 1:
+				log.debug(f'Failed the redirection test since the current page is a Wayback Machine page with a path: "{expected_wayback_url}" -> "{current_url}".')
+				return False, None, None
+
 			log.debug(f'Passed the redirection test since the current page is not a valid snapshot: "{expected_wayback_url}" -> "{current_url}".')
 			return True, current_url, expected_wayback_parts.timestamp
 
 		# Catches examples #2 and #5.
 		redirect_count = self.driver.execute_script('return window.performance.navigation.redirectCount;')
 		if redirect_count > 0:
-			log.debug(f'Passed the redirection test with the redirect count at {redirect_count}: "{expected_wayback_url}" -> "{current_url}".')
+			log.debug(f'Passed the redirection test since the redirect count is {redirect_count}: "{expected_wayback_url}" -> "{current_url}".')
 			return True, current_wayback_parts.url, current_wayback_parts.timestamp
 
 		# Catches example #1.
