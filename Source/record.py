@@ -453,6 +453,8 @@ if __name__ == '__main__':
 
 				for snapshot_index in range(num_snapshots):
 
+					progress = f'{snapshot_index+1} of {num_snapshots}'
+
 					if was_exit_command_entered():
 
 						log.info('Stopping at the user\'s request.')
@@ -842,7 +844,7 @@ if __name__ == '__main__':
 							log.info(f'Converting the media file "{media_path.name}".')
 
 							browser.close_all_windows()
-							browser.go_to_blank_page_with_text('\N{DNA Double Helix} Converting Media \N{DNA Double Helix}', str(snapshot))
+							browser.go_to_blank_page_with_text('\N{DNA Double Helix} Converting Media \N{DNA Double Helix}', progress, str(snapshot))
 
 							upload_path = Path(str(path_prefix) + '.mp4')
 							archive_path = None
@@ -997,7 +999,7 @@ if __name__ == '__main__':
 									log.error(f'The page was redirected to "{url}" at {timestamp} while recording.')
 
 							browser.close_all_windows()
-							browser.go_to_blank_page_with_text('\N{Film Projector} Post Processing \N{Film Projector}', str(snapshot))
+							browser.go_to_blank_page_with_text('\N{Film Projector} Post Processing \N{Film Projector}', progress, str(snapshot))
 							capture.perform_post_processing()
 
 							upload_path = capture.upload_path
@@ -1014,7 +1016,7 @@ if __name__ == '__main__':
 
 							if config.enable_text_to_speech and not snapshot.IsMedia and state == Snapshot.RECORDED:
 
-								browser.go_to_blank_page_with_text('\N{Speech Balloon} Generating Text-to-Speech \N{Speech Balloon}', str(snapshot))
+								browser.go_to_blank_page_with_text('\N{Speech Balloon} Generating Text-to-Speech \N{Speech Balloon}', progress, str(snapshot))
 
 								page_text = '.\n'.join(frame_text_list)
 								text_to_speech_path = text_to_speech.generate_text_to_speech_file(snapshot.DisplayTitle, snapshot.OldestDatetime, page_text, snapshot.PageLanguage, path_prefix)
@@ -1024,7 +1026,7 @@ if __name__ == '__main__':
 
 							if config.enable_audio_mixing and audio_urls and state == Snapshot.RECORDED:
 
-								browser.go_to_blank_page_with_text('\N{Cocktail Glass} Mixing Audio \N{Cocktail Glass}', str(snapshot))
+								browser.go_to_blank_page_with_text('\N{Cocktail Glass} Mixing Audio \N{Cocktail Glass}', progress, str(snapshot))
 
 								try:
 									mix_urls = {}
@@ -1093,7 +1095,7 @@ if __name__ == '__main__':
 						has_audio = False
 						if state == Snapshot.RECORDED:
 
-							browser.go_to_blank_page_with_text('\N{Speaker With Three Sound Waves} Detecting Audio \N{Speaker With Three Sound Waves}', str(snapshot))
+							browser.go_to_blank_page_with_text('\N{Speaker With Three Sound Waves} Detecting Audio \N{Speaker With Three Sound Waves}', progress, str(snapshot))
 
 							try:
 								log.debug(f'Detecting audio in "{upload_path}".')
