@@ -728,7 +728,7 @@
 		"twitter_api_wait": 10,
 
 		"twitter_max_status_length": 280,
-		"twitter_max_video_duration": 138,
+		"twitter_max_video_duration": 140,
 		"twitter_max_text_to_speech_segments": 1,
 
 		"mastodon_instance_url": "<Instance URL>",

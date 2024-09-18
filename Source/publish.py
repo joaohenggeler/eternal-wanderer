@@ -134,6 +134,8 @@ if __name__ == '__main__':
 	class Post:
 		recording: Recording
 
+		trim: bool
+
 		title: str
 		body: str
 		html_body: str
@@ -145,6 +147,21 @@ if __name__ == '__main__':
 		sensitive: bool
 		emojis: str
 		tags: list[str]
+
+	def trim_video(path: Path, duration: int) -> Path:
+		""" Trim a video to a specific duration. """
+
+		# Closing the file right away makes it easier to delete it later.
+		output_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
+		output_file.close()
+
+		input_args = ['-i', path]
+		output_args = ['-t', duration, '-c', 'copy', output_file.name]
+
+		log.debug(f'Trimming the video with the FFmpeg arguments: {input_args + output_args}')
+		ffmpeg(*input_args, *output_args)
+
+		return Path(output_file.name)
 
 	if config.enable_twitter:
 
@@ -191,8 +208,15 @@ if __name__ == '__main__':
 			media_id = None
 			status_id = None
 
+			recording_path = None
+
 			try:
-				media = twitter_api_v1.chunked_upload(filename=str(post.recording.UploadFilePath), file_type='video/mp4', media_category='TweetVideo')
+				if post.trim:
+					recording_path = trim_video(post.recording.UploadFilePath, config.twitter_max_video_duration)
+				else:
+					recording_path = post.recording.UploadFilePath
+
+				media = twitter_api_v1.chunked_upload(filename=str(recording_path), file_type='video/mp4', media_category='TweetVideo')
 				media_id = media.media_id
 
 				# At the time of writing, you can't add alt text to videos.
@@ -272,10 +296,13 @@ if __name__ == '__main__':
 						for segment_path in segment_file_paths:
 							delete_file(segment_path)
 
+			except FfmpegException as error:
+				log.error(f'Failed to process the video with the error: {repr(error)}')
 			except TweepyException as error:
 				log.error(f'Failed to post the recording status with the error: {repr(error)}')
-			except FfmpegException as error:
-				log.error(f'Failed to split the text-to-speech file with the error: {repr(error)}')
+			finally:
+				if post.trim and recording_path is not None:
+					delete_file(recording_path)
 
 			return media_id, status_id
 
@@ -405,12 +432,12 @@ if __name__ == '__main__':
 				else:
 					log.info(f'Skipping the recording since its size ({recording_file_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_video_size / 10 ** 6} MB.')
 
+			except FfmpegException as error:
+				log.error(f'Failed to process the video with the error: {repr(error)}')
+			except OSError as error:
+				log.error(f'Failed to determine the video size with the error: {repr(error)}')
 			except MastodonError as error:
 				log.error(f'Failed to post the recording status with the error: {repr(error)}')
-			except OSError as error:
-				log.error(f'Failed to determine the video file size with the error: {repr(error)}')
-			except FfmpegException as error:
-				log.error(f'Failed to process the video file with the error: {repr(error)}')
 			finally:
 				if recording_path is not None:
 					delete_file(recording_path)
@@ -440,9 +467,19 @@ if __name__ == '__main__':
 
 			log.info('Publishing on Tumblr.')
 
+			class TumblrException(Exception):
+				pass
+
 			status_id = None
 
+			recording_path = None
+
 			try:
+				if post.trim:
+					recording_path = trim_video(post.recording.UploadFilePath, config.tumblr_max_video_duration)
+				else:
+					recording_path = post.recording.UploadFilePath
+
 				max_title_length = max(config.tumblr_max_status_length - len('<br>') - len(post.html_body), 0)
 				text = post.title[:max_title_length] + '<br>' + post.html_body
 
@@ -451,7 +488,7 @@ if __name__ == '__main__':
 					# The official Tumblr library doesn't have any package-specific exceptions so
 					# we'll catch all of them to be safe.
 					# See: https://www.tumblr.com/docs/en/api/v2#post--create-a-new-blog-post-legacy
-					response = tumblr_api.create_video(tumblr_blog_name, tags=post.tags, caption=text, data=str(post.recording.UploadFilePath))
+					response = tumblr_api.create_video(tumblr_blog_name, tags=post.tags, caption=text, data=str(recording_path))
 					status_id = response.get('id')
 
 					if status_id is not None:
@@ -465,12 +502,17 @@ if __name__ == '__main__':
 							sleep(config.tumblr_retry_wait)
 							continue
 						else:
-							raise Exception(f'Tumblr Response: {response}')
+							raise TumblrException(f'Tumblr Response: {response}')
 				else:
-					raise Exception(f'Tumblr Response: {response}')
+					raise TumblrException(f'Tumblr Response: {response}')
 
-			except Exception as error:
+			except FfmpegException as error:
+				log.error(f'Failed to process the video with the error: {repr(error)}')
+			except TumblrException as error:
 				log.error(f'Failed to post the recording status with the error: {repr(error)}')
+			finally:
+				if post.trim and recording_path is not None:
+					delete_file(recording_path)
 
 			return status_id
 
@@ -598,6 +640,8 @@ if __name__ == '__main__':
 
 					post = Post(
 						recording=recording,
+
+						trim=snapshot.IsMedia,
 
 						title=snapshot.DisplayTitle,
 						body=body,

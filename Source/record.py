@@ -893,7 +893,8 @@ if __name__ == '__main__':
 								else:
 									output_args.extend(['-map', 0])
 
-								output_args.extend(['-t', config.max_duration, '-shortest', upload_path])
+								# This is not capped to the maximum duration.
+								output_args.extend(['-shortest', upload_path])
 
 								log.debug(f'Converting the media file with the FFmpeg arguments: {input_args + output_args}')
 								output, warnings = ffmpeg(*input_args, *output_args)
