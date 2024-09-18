@@ -43,13 +43,13 @@ class PublishConfig(CommonConfig):
 	scheduler: dict[str, Union[int, str]]
 	num_recordings_per_scheduled_batch: int
 
-	enable_twitter: bool
-	enable_mastodon: bool
-	enable_tumblr: bool
-
 	require_approval: bool
 	reply_with_text_to_speech: bool
 	delete_files_after_upload: bool
+
+	enable_twitter: bool
+	enable_mastodon: bool
+	enable_tumblr: bool
 
 	twitter_api_key: str
 	twitter_api_secret: str
@@ -72,9 +72,6 @@ class PublishConfig(CommonConfig):
 
 	mastodon_max_status_length: int
 	mastodon_max_file_size: Optional[int]
-
-	mastodon_reduce_file_size: bool
-	mastodon_reduce_file_size_ffmpeg_output_args: list[Union[int, str]]
 
 	tumblr_api_key: str
 	tumblr_api_secret: str
@@ -311,7 +308,7 @@ if __name__ == '__main__':
 				output_file.close()
 
 				input_args = ['-i', path]
-				output_args = config.mastodon_reduce_file_size_ffmpeg_output_args + [output_file.name]
+				output_args = ['-vf', 'fps=30', output_file.name]
 
 				log.debug(f'Reducing the video size with the FFmpeg arguments: {input_args + output_args}')
 				ffmpeg(*input_args, *output_args)
@@ -374,7 +371,7 @@ if __name__ == '__main__':
 			try:
 				# Unlike with Twitter, uploading videos to Mastodon can be trickier due to hosting costs.
 				# We'll try to reduce the file size while also having a maximum size limit.
-				recording_path = reduce_video_size(post.recording.UploadFilePath) if config.mastodon_reduce_file_size else post.recording.UploadFilePath
+				recording_path = reduce_video_size(post.recording.UploadFilePath)
 				recording_file_size = os.path.getsize(recording_path)
 
 				if config.mastodon_max_file_size is None or recording_file_size <= config.mastodon_max_file_size:
@@ -419,13 +416,11 @@ if __name__ == '__main__':
 			except FfmpegException as error:
 				log.error(f'Failed to process the video file with the error: {repr(error)}')
 			finally:
-				if config.mastodon_reduce_file_size:
+				if recording_path is not None:
+					delete_file(recording_path)
 
-					if recording_path is not None:
-						delete_file(recording_path)
-
-					if tts_path is not None:
-						delete_file(tts_path)
+				if tts_path is not None:
+					delete_file(tts_path)
 
 			return media_id, status_id
 

@@ -709,13 +709,13 @@
 		"scheduler": {"day_of_week": "mon-sat", "hour": "*/3", "jitter": 1200},
 		"num_recordings_per_scheduled_batch": 1,
 
-		"enable_twitter": true,
-		"enable_mastodon": true,
-		"enable_tumblr": true,
-
 		"require_approval": true,
 		"reply_with_text_to_speech": true,
 		"delete_files_after_upload": false,
+
+		"enable_twitter": true,
+		"enable_mastodon": true,
+		"enable_tumblr": true,
 
 		"twitter_api_key": "<API Key>",
 		"twitter_api_secret": "<API Secret>",
@@ -738,12 +738,6 @@
 
 		"mastodon_max_status_length": 500,
 		"mastodon_max_file_size": 40,
-
-		"mastodon_reduce_file_size": true,
-		"mastodon_reduce_file_size_ffmpeg_output_args":
-		[
-			"-vf", "fps=30"
-		],
 
 		"tumblr_api_key": "<API Key>",
 		"tumblr_api_secret": "<API Secret>",
