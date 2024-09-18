@@ -431,9 +431,9 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `cosmo_player_viewpoint_wait_per_cycle`: how long to wait between viewpoints (in seconds). Only used if `enable_cosmo_player_viewpoint_cycler` is enabled.
 
-* `min_duration`: the minimum recording duration (in seconds). Used to stay within the Twitter, Mastodon, and Tumblr media guidelines.
+* `min_duration`: the minimum recording duration (in seconds).
 
-* `max_duration`: the maximum recording duration (in seconds). Used to stay within the Twitter, Mastodon, and Tumblr media guidelines.
+* `max_duration`: the maximum recording duration (in seconds). This should be the lowest video duration limit of all supported platforms. Note that media snapshots converted when `enable_media_conversion` is enabled keep their original duration and are instead trimmed to different durations when publishing to each platform. This also means that these snapshots keep their original duration when compiling recordings.
 
 * `save_archive_copy`: enable to save a lossless copy of the raw recording for archival purposes. Although this copy is smaller than the raw footage, it's still significantly larger than the lossy recording.
 
@@ -519,7 +519,7 @@ Used by `publish.py` and `approve.py`.
 
 * `twitter_max_status_length`: the maximum amount of characters in a Twitter post. This should be set to the current Twitter character limit.
 
-* `twitter_max_video_duration`: the maximum duration of a Twitter video (in seconds). Used to trim media snapshots and to split text-to-speech recordings across multiple posts.
+* `twitter_max_video_duration`: the maximum duration of a Twitter video (in seconds). This should be set to the current Twitter video duration limit. Used to trim media snapshots and to split text-to-speech recordings across multiple posts.
 
 * `twitter_max_text_to_speech_segments`: the maximum amount of text-to-speech segments (i.e. replies) to post. If the recording requires more than this amount, the text-to-speech replies are skipped. May be null if there's no maximum. Only used if `reply_with_text_to_speech` is enabled.
 
@@ -541,7 +541,7 @@ Used by `publish.py` and `approve.py`.
 
 * `tumblr_max_status_length`: the maximum amount of characters in a Tumblr post. This should be set to the current Tumblr character limit.
 
-* `tumblr_max_video_duration`: the maximum duration of a Tumblr video (in seconds). This should be set to the current Tumblr video duration limit while taking into account the post frequency and the daily total limit. At the time of writing, this is a total of 60 minutes of video per day (or at most 450 seconds per video when posting every 3 hours).
+* `tumblr_max_video_duration`: the maximum duration of a Tumblr video (in seconds). This should be set to the current Tumblr video duration limit while taking into account the post frequency and the daily total limit. At the time of writing, this is a total of 60 minutes of video per day (or at most 450 seconds per video when posting every 3 hours). Used to trim media snapshots.
 
 ## Custom Options
 
