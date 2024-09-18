@@ -77,6 +77,7 @@ class PublishConfig(CommonConfig):
 	tumblr_access_token_secret: str
 
 	tumblr_max_status_length: int
+	tumblr_max_video_duration: int
 
 	def __init__(self):
 
