@@ -2,11 +2,11 @@
 
 import os
 import sqlite3
-import sys
 import tempfile
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
+from sys import exit
 from tempfile import NamedTemporaryFile
 from time import sleep
 from typing import Optional, Union
@@ -196,7 +196,7 @@ if __name__ == '__main__':
 
 		except TweepyException as error:
 			log.error(f'Failed to initialize the Twitter API interface with the error: {repr(error)}')
-			sys.exit(1)
+			exit(1)
 
 		def publish_to_twitter(post: Post) -> tuple[Optional[int], Optional[int]]:
 			""" Publishes a snapshot recording and text-to-speech file on Twitter. The video recording is added to the main post along
@@ -313,7 +313,7 @@ if __name__ == '__main__':
 			mastodon_api = Mastodon(access_token=config.mastodon_access_token, api_base_url=config.mastodon_instance_url)
 		except MastodonError as error:
 			log.error(f'Failed to initialize the Mastodon API interface with the error: {repr(error)}')
-			sys.exit(1)
+			exit(1)
 
 		def publish_to_mastodon(post: Post) -> tuple[Optional[int], Optional[int]]:
 			""" Publishes a snapshot recording and text-to-speech file on a given Mastodon instance. The video recording is added to the
@@ -457,7 +457,7 @@ if __name__ == '__main__':
 			tumblr_blog_name = info['user']['name']
 		except Exception as error:
 			log.error(f'Failed to initialize the Tumblr API interface with the error: {repr(error)}')
-			sys.exit(1)
+			exit(1)
 
 		def publish_to_tumblr(post: Post) -> Optional[int]:
 			""" Publishes a snapshot recording on Tumblr. The video recording is added to the main post along
