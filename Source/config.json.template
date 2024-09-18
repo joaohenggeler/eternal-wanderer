@@ -713,6 +713,9 @@
 		"reply_with_text_to_speech": true,
 		"delete_files_after_upload": false,
 
+		"max_retries": 10,
+		"retry_wait": 30,
+
 		"enable_twitter": true,
 		"enable_mastodon": true,
 		"enable_tumblr": true,
@@ -723,29 +726,21 @@
 		"twitter_access_token_secret": "<Access Token Secret>",
 
 		"twitter_api_wait": 10,
-		"twitter_max_retries": 10,
-		"twitter_retry_wait": 30,
 
 		"twitter_max_status_length": 280,
-		"twitter_text_to_speech_segment_duration": 138,
+		"twitter_max_video_duration": 138,
 		"twitter_max_text_to_speech_segments": 1,
 
 		"mastodon_instance_url": "<Instance URL>",
 		"mastodon_access_token": "<Access Token>",
 
-		"mastodon_max_retries": 10,
-		"mastodon_retry_wait": 30,
-
 		"mastodon_max_status_length": 500,
-		"mastodon_max_file_size": 40,
+		"mastodon_max_video_size": 40,
 
 		"tumblr_api_key": "<API Key>",
 		"tumblr_api_secret": "<API Secret>",
 		"tumblr_access_token": "<Access Token>",
 		"tumblr_access_token_secret": "<Access Token Secret>",
-
-		"tumblr_max_retries": 10,
-		"tumblr_retry_wait": 30,
 
 		"tumblr_max_status_length": 4096
 	}

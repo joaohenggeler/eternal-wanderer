@@ -491,17 +491,21 @@ Used by `publish.py` and `approve.py`.
 
 * `num_recordings_per_scheduled_batch`: how many recordings to publish when executing a scheduled batch.
 
+* `require_approval`: enable to only publish recordings that have been manually approved using `approve.py`.
+
+* `reply_with_text_to_speech`: enable to add the text-to-speech recording as a reply to the post. When publishing on Twitter, the recording may have to be split into multiple replies. Not supported when publishing on Tumblr.
+
+* `delete_files_after_upload`: enable to delete the recording file after being uploaded to all enabled platforms.
+
+* `max_retries`: the maximum amount of times to retry an API request when an unexpected error occurs.
+
+* `retry_wait`: how long to wait before retrying an API request (in seconds).
+
 * `enable_twitter`: enable to publish on Twitter.
 
 * `enable_mastodon`: enable to publish on Mastodon.
 
 * `enable_tumblr`: enable to publish on Tumblr.
-
-* `require_approval`: enable to only publish recordings that have been manually approved using `approve.py`.
-
-* `reply_with_text_to_speech`: enable to add the text-to-speech recording as a reply to the post. When publishing on Twitter, the recording may have to be split into multiple replies. Not supported when publishing on Tumblr.
-
-* `delete_files_after_upload`: enable to delete the recording file after being uploaded to all platforms.
 
 * `twitter_api_key`: the API key obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Twitter.**
 
@@ -513,31 +517,19 @@ Used by `publish.py` and `approve.py`.
 
 * `twitter_api_wait`: how long to wait after making a request to the Twitter API (in seconds). This was added to reduce the chance of being flagged by the Twitter spam algorithm, though it probably doesn't do too much in practice.
 
-* `twitter_max_retries`: the maximum amount of times to retry a Twitter API request when an unexpected error occurs.
-
-* `twitter_retry_wait`: how long to wait before retrying a Twitter API request (in seconds).
-
 * `twitter_max_status_length`: the maximum amount of characters in a Twitter post. This should be set to the current Twitter character limit.
 
-* `twitter_text_to_speech_segment_duration`: the maximum duration of each segment when splitting the text-to-speech recordings (in seconds). This should be set to slightly under the current Twitter video duration limit.
+* `twitter_max_video_duration`: the maximum duration of a Twitter video (in seconds). Used to trim media snapshots and to split text-to-speech recordings across multiple posts.
 
-* `twitter_max_text_to_speech_segments`: the maximum amount of text-to-speech segments (i.e. replies) to post. If the recording requires more than this amount, the text-to-speech replies are skipped. May be null if there's no maximum.
+* `twitter_max_text_to_speech_segments`: the maximum amount of text-to-speech segments (i.e. replies) to post. If the recording requires more than this amount, the text-to-speech replies are skipped. May be null if there's no maximum. Only used if `reply_with_text_to_speech` is enabled.
 
 * `mastodon_instance_url`: the instance's URL decided in the [setup guide](#setup-guide). **Must be changed before publishing on Mastodon.**
 
 * `mastodon_access_token`: the access token obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Mastodon.**
 
-* `mastodon_max_retries`: the maximum amount of times to retry a Mastodon API request when an unexpected error occurs.
-
-* `mastodon_retry_wait`: how long to wait before retrying a Mastodon API request (in seconds).
-
 * `mastodon_max_status_length`: the maximum amount of characters in a Mastodon post. This should be set to the instance's character limit.
 
-* `mastodon_max_file_size`: the maximum size of each recording file (in megabytes). This should be set to the instance's video size limit. May be null if there's no maximum.
-
-* `mastodon_reduce_file_size`: enable to run every recording through FFmpeg in order to reduce the file size. It's strongly recommended that you enable this option since Mastodon's default limit would otherwise exclude a lot of recordings. Additionally, this reduces the total amount of disk space used by the bot in the instance.
-
-* `mastodon_reduce_file_size_ffmpeg_output_args`: the output arguments used to reduce the file size. Aside from using filters, one trick is to avoid specifying any output bitrates so that FFmpeg reencodes the files using the default values. In most cases, this should lower the file size significantly. Only used if `mastodon_reduce_file_size` is enabled.
+* `mastodon_max_video_size`: the maximum size of a Mastodon video (in megabytes). This should be set to the instance's video size limit. May be null if there's no maximum.
 
 * `tumblr_api_key`: the consumer key obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Tumblr.**
 
@@ -546,10 +538,6 @@ Used by `publish.py` and `approve.py`.
 * `tumblr_access_token`: the token obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Tumblr.**
 
 * `tumblr_access_token_secret`: the token secret obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Tumblr.**
-
-* `tumblr_max_retries`: the maximum amount of times to retry a Tumblr API request when an unexpected error occurs.
-
-* `tumblr_retry_wait`: how long to wait before retrying a Tumblr API request (in seconds).
 
 * `tumblr_max_status_length`: the maximum amount of characters in a Tumblr post. This should be set to the current Tumblr character limit.
 

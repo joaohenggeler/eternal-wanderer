@@ -47,6 +47,9 @@ class PublishConfig(CommonConfig):
 	reply_with_text_to_speech: bool
 	delete_files_after_upload: bool
 
+	max_retries: int
+	retry_wait: int
+
 	enable_twitter: bool
 	enable_mastodon: bool
 	enable_tumblr: bool
@@ -57,29 +60,21 @@ class PublishConfig(CommonConfig):
 	twitter_access_token_secret: str
 
 	twitter_api_wait: int
-	twitter_max_retries: int
-	twitter_retry_wait: int
 
 	twitter_max_status_length: int
-	twitter_text_to_speech_segment_duration: int
+	twitter_max_video_duration: int
 	twitter_max_text_to_speech_segments: Optional[int]
 
 	mastodon_instance_url: str
 	mastodon_access_token: str
 
-	mastodon_max_retries: int
-	mastodon_retry_wait: int
-
 	mastodon_max_status_length: int
-	mastodon_max_file_size: Optional[int]
+	mastodon_max_video_size: Optional[int]
 
 	tumblr_api_key: str
 	tumblr_api_secret: str
 	tumblr_access_token: str
 	tumblr_access_token_secret: str
-
-	tumblr_max_retries: int
-	tumblr_retry_wait: int
 
 	tumblr_max_status_length: int
 
@@ -105,8 +100,8 @@ class PublishConfig(CommonConfig):
 		if self.mastodon_access_token is None:
 			self.mastodon_access_token = os.environ['WANDERER_MASTODON_ACCESS_TOKEN']
 
-		if self.mastodon_max_file_size is not None:
-			self.mastodon_max_file_size = self.mastodon_max_file_size * 10 ** 6
+		if self.mastodon_max_video_size is not None:
+			self.mastodon_max_video_size = self.mastodon_max_video_size * 10 ** 6
 
 		if self.tumblr_api_key is None:
 			self.tumblr_api_key = os.environ['WANDERER_TUMBLR_API_KEY']
@@ -167,8 +162,8 @@ if __name__ == '__main__':
 
 			twitter_api_v1 = tweepy.API(
 				twitter_auth,
-				retry_count=config.twitter_max_retries,
-				retry_delay=config.twitter_retry_wait,
+				retry_count=config.max_retries,
+				retry_delay=config.retry_wait,
 				retry_errors=[408, 502, 503, 504],
 				wait_on_rate_limit=True,
 			)
@@ -227,7 +222,7 @@ if __name__ == '__main__':
 					output_args = [
 						'-c', 'copy',
 						'-f', 'segment',
-						'-segment_time', config.twitter_text_to_speech_segment_duration,
+						'-segment_time', config.twitter_max_video_duration,
 						'-reset_timestamps', 1,
 						segment_path_format,
 					]
@@ -374,7 +369,7 @@ if __name__ == '__main__':
 				recording_path = reduce_video_size(post.recording.UploadFilePath)
 				recording_file_size = os.path.getsize(recording_path)
 
-				if config.mastodon_max_file_size is None or recording_file_size <= config.mastodon_max_file_size:
+				if config.mastodon_max_video_size is None or recording_file_size <= config.mastodon_max_video_size:
 
 					media_id = try_media_post(recording_path, mime_type='video/mp4', description=post.alt_text)
 
@@ -391,7 +386,7 @@ if __name__ == '__main__':
 							tts_path = extract_audio(post.recording.TextToSpeechFilePath)
 							tts_file_size = os.path.getsize(tts_path)
 
-							if config.mastodon_max_file_size is None or tts_file_size <= config.mastodon_max_file_size:
+							if config.mastodon_max_video_size is None or tts_file_size <= config.mastodon_max_video_size:
 
 								tts_media_id = try_media_post(tts_path, mime_type='audio/mpeg', description=post.tts_alt_text)
 
@@ -402,12 +397,12 @@ if __name__ == '__main__':
 
 								log.info(f'Posted the text-to-speech status #{tts_status_id} with the media #{tts_media_id} ({tts_file_size / 10 ** 6:.1f} MB) using {len(tts_text)} characters.')
 							else:
-								log.info(f'Skipping the text-to-speech audio since its size ({tts_file_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_file_size / 10 ** 6} MB.')
+								log.info(f'Skipping the text-to-speech audio since its size ({tts_file_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_video_size / 10 ** 6} MB.')
 
 					except MastodonError as error:
 						log.error(f'Failed to post the text-to-speech audio with the error: {repr(error)}')
 				else:
-					log.info(f'Skipping the recording since its size ({recording_file_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_file_size / 10 ** 6} MB.')
+					log.info(f'Skipping the recording since its size ({recording_file_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_video_size / 10 ** 6} MB.')
 
 			except MastodonError as error:
 				log.error(f'Failed to post the recording status with the error: {repr(error)}')
