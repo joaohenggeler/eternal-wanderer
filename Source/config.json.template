@@ -743,6 +743,6 @@
 		"tumblr_access_token_secret": "<Access Token Secret>",
 
 		"tumblr_max_status_length": 4096,
-		"tumblr_max_video_duration": 300
+		"tumblr_max_video_duration": 450
 	}
 }

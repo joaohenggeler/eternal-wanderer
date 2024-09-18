@@ -541,6 +541,8 @@ Used by `publish.py` and `approve.py`.
 
 * `tumblr_max_status_length`: the maximum amount of characters in a Tumblr post. This should be set to the current Tumblr character limit.
 
+* `tumblr_max_video_duration`: the maximum duration of a Tumblr video (in seconds). This should be set to the current Tumblr video duration limit while taking into account the post frequency and the daily total limit. At the time of writing, this is a total of 60 minutes of video per day (or at most 450 seconds per video when posting every 3 hours).
+
 ## Custom Options
 
 Some of the options described above can be changed for specific snapshots using the `Options` column in the database. This column takes a JSON object with any options to override the default configuration. For example, if you wanted a recording to last longer and wanted to improve the chances of a short audio file being captured correctly, you could use the following: `{"min_duration": 60, "plugin_syncing_page_type": "reload_twice"}`. You can find a list of all mutable options in [`common/config.py`](common/config.py#L104).
