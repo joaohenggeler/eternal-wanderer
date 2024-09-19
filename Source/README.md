@@ -47,6 +47,8 @@ The following Python packages are used:
 
 * [PyTumblr](https://github.com/tumblr/pytumblr): to upload the recorded videos to Tumblr and create posts.
 
+* [atproto](https://github.com/MarshalX/atproto): to upload the recorded videos to Bluesky and create posts.
+
 * [APScheduler](https://github.com/agronholm/apscheduler): to schedule the scouting, recording, and publishing scripts.
 
 * [fastText](https://github.com/facebookresearch/fastText): to detect a page's language from its text. Only used if `detect_page_language` is enabled.
@@ -97,13 +99,15 @@ Below is a step-by-step guide on how to obtain and configure all the necessary c
 
 13.	If you want to generate the text-to-speech audio recordings, enable `enable_text_to_speech` and install any missing voice packages in the Windows settings by going to `Ease of Access > Speech (under Interaction) > Additional speech settings (under Related settings) > Add Voices (under Manage voices)`. Note that just installing the packages isn't enough to make the voices visible to the Microsoft Speech API. You can run the following script to generate a REG file that will automatically add all installed voices to the appropriate registry key: `voices.py -registry`. Execute the resulting `voices.reg` file and then run the following script to list every visible voice: `voices.py -list`. The script will warn you if it can't find a voice specified in `text_to_speech_language_voices`. The configuration template lists every language available in the Windows 10 speech menu at the time of writing. You can also use the `-speak` argument together with `-list` to test each voice and make sure it works properly. Run `voices.py -list -speak all` to test all voices or `voices.py -list -speak "spanish (mexico)"` (for example) to test a specific language. If a voice test fails with the error `COMError -2147200966`, you must install that voice's language package in the Window settings by going to `Time & Language > Language > Add a language (under Preferred languages)`. You only have to install the text-to-speech feature in each package.
 
-14. If you want to approve the recordings before publishing them on Twitter, Mastodon, or Tumblr (i.e. if `require_approval` is enabled), you can set the portable VLC version installed in step 6 as the default MP4 file viewer.
+14. If you want to approve the recordings before publishing them on Twitter, Mastodon, Tumblr, or Bluesky (i.e. if `require_approval` is enabled), you can set the portable VLC version installed in step 6 as the default MP4 file viewer.
 
 15. To publish the recorded videos on Twitter, create an account for the bot, log into the [Twitter Developer Platform](https://developer.twitter.com/en), and apply for elevated access on the dashboard. Then, create a new project and application, set up OAuth 1.0a authentication with at least read and write permissions, and generate an access token and access token secret. Enter your application's API key, API secret, and the previous tokens into `twitter_api_key`, `twitter_api_secret`, `twitter_access_token`, and `twitter_access_token_secret`, respectively. Alternatively, you can set these options to null and place the credentials in the `WANDERER_TWITTER_API_KEY`, `WANDERER_TWITTER_API_SECRET`, `WANDERER_TWITTER_ACCESS_TOKEN`, and `WANDERER_TWITTER_ACCESS_TOKEN_SECRET` environment variables. At the time of writing, you need to use the standard Twitter API version 1.1 to upload videos. This requires having elevated access and using OAuth 1.0a. You also need to use version 2 of the API to create tweets.
 
 16. To publish the recorded videos on Mastodon, create an account for the bot in an appropriate instance. Choose either an instance your hosting yourself or one that was designed specifically for bots. Then, go to `Settings > Development` and create a new application. While doing so, select the `write:media` and `write:statuses` scopes and uncheck any others. Save these changes and copy the generated access token to `mastodon_access_token`. Alternatively, you can set this option to null and place the token in the `WANDERER_MASTODON_ACCESS_TOKEN` environment variable. Finally, set `mastodon_instance_url` to the instance's URL. It's strongly recommended that you enable automated post deletion on your account with a threshold of one or two weeks.
 
 17. To publish the recorded videos on Tumblr, create an account for the bot and register a new application on [this page](https://www.tumblr.com/oauth/apps). Then, go to [this page](https://api.tumblr.com/console) and authenticate using your application's consumer key and secret. Agree to any necessary permissions, make sure `OAuth 1.0a` authentication is selected, and click on `Show keys`. Enter your application's consumer key, consumer secret, token, and token secret into `tumblr_api_key`, `tumblr_api_secret`, `tumblr_access_token`, and `tumblr_access_token_secret`, respectively. Alternatively, you can set these options to null and place the credentials in the `WANDERER_TUMBLR_API_KEY`, `WANDERER_TUMBLR_API_SECRET`, `WANDERER_TUMBLR_ACCESS_TOKEN`, and `WANDERER_TUMBLR_ACCESS_TOKEN_SECRET` environment variables.
+
+18. To publish the recorded videos on Bluesky, create an account for the bot in an appropriate instance (e.g. [Bluesky Social](https://bsky.social)). Then enter either the handle (e.g. `example.bsky.social`) or username (e.g. `user@example.com`) into `bluesky_username`, and the password into `bluesky_password`. Alternatively, you can set these options to null and place the credentials in the `WANDERER_BLUESKY_USERNAME` and `WANDERER_BLUESKY_PASSWORD` environment variables. Finally, set `bluesky_instance_url` to the instance's URL. At the time of writing, Bluesky video support is very recent, meaning this setup might change in the future.
 
 ### Additional Steps For Remote Machines
 
@@ -141,7 +145,7 @@ Below is a summary of the Python scripts located in the [source directory](Sourc
 
 * `record.py`: records the previously scouted snapshots on a set schedule by opening their pages in Firefox and scrolling through them at a set pace. If the recorder script detects that any plugins crashed or that the page was redirected while capturing the screen, the recording is aborted. **This script is inherently unsafe since it relies on web plugins (e.g. Flash, Shockwave, Java, etc).**
 
-* `publish.py`: publishes the previously recorded snapshots on Twitter, Mastodon, and Tumblr on a set schedule. The publisher script uploads the recordings and generates posts with the web page's title, its date, and a link to its Wayback Machine capture.
+* `publish.py`: publishes the previously recorded snapshots on Twitter, Mastodon, Tumblr, and Bluesky on a set schedule. The publisher script uploads the recordings and generates posts with the web page's title, its date, and a link to its Wayback Machine capture.
 
 * `approve.py`: approves recordings for publishing. This process is optional and can only be done if the publisher script was started with the `require_approval` option enabled.
 
@@ -433,7 +437,7 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `min_duration`: the minimum recording duration (in seconds).
 
-* `max_duration`: the maximum recording duration (in seconds). This should be the lowest video duration limit of all supported platforms. Note that media snapshots converted when `enable_media_conversion` is enabled keep their original duration and are instead trimmed to different durations when publishing to each platform. This also means that these snapshots keep their original duration when compiling recordings.
+* `max_duration`: the maximum recording duration (in seconds). This should be the lowest video duration limit of all supported platforms (minus a one or two second safety margin). Note that media snapshots converted when `enable_media_conversion` is enabled keep their original duration and are instead trimmed to different durations when publishing to each platform. This also means that these snapshots keep their original duration when compiling recordings.
 
 * `save_archive_copy`: enable to save a lossless copy of the raw recording for archival purposes. Although this copy is smaller than the raw footage, it's still significantly larger than the lossy recording.
 
@@ -447,7 +451,7 @@ Used by `record.py`, `compile.py`, `voices.py`, and `wayback_proxy_addon.py`.
 
 * `archive_ffmpeg_output_args`: the output arguments used to generate a lossless recording from the raw footage. Only used if `save_archive_copy` is enabled.
 
-* `upload_ffmpeg_output_args`: the output arguments used to generate a lossy recording from the raw footage. Refer to the recommended audio and video encoding settings of the supported platforms before changing any parameters: [YouTube](https://support.google.com/youtube/answer/1722171), [Twitter](https://developer.twitter.com/en/docs/twitter-api/v1/media/upload-media/uploading-media/media-best-practices), [Mastodon](https://docs.joinmastodon.org/user/posting/#attachments), [Tumblr](https://help.tumblr.com/hc/en-us/articles/231455628-Adding-Video).
+* `upload_ffmpeg_output_args`: the output arguments used to generate a lossy recording from the raw footage. Refer to the recommended audio and video encoding settings of the supported platforms before changing any parameters: [YouTube](https://support.google.com/youtube/answer/1722171), [Twitter](https://developer.twitter.com/en/docs/twitter-api/v1/media/upload-media/uploading-media/media-best-practices), [Mastodon](https://docs.joinmastodon.org/user/posting/#attachments), [Tumblr](https://help.tumblr.com/hc/en-us/articles/231455628-Adding-Video), [Bluesky](https://bsky.social/about/blog/09-11-2024-video).
 
 * `enable_text_to_speech`: enable to generate a text-to-speech recording of a page snapshot's content.
 
@@ -507,6 +511,8 @@ Used by `publish.py` and `approve.py`.
 
 * `enable_tumblr`: enable to publish on Tumblr.
 
+* `enable_bluesky`: enable to publish on Bluesky.
+
 * `twitter_api_key`: the API key obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Twitter.**
 
 * `twitter_api_secret`: the API secret obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Twitter.**
@@ -521,7 +527,7 @@ Used by `publish.py` and `approve.py`.
 
 * `twitter_max_video_duration`: the maximum duration of a Twitter video (in seconds). This should be set to the current Twitter video duration limit. Used to trim media snapshots and to split text-to-speech recordings across multiple posts.
 
-* `twitter_max_text_to_speech_segments`: the maximum amount of text-to-speech segments (i.e. replies) to post. If the recording requires more than this amount, the text-to-speech replies are skipped. May be null if there's no maximum. Only used if `reply_with_text_to_speech` is enabled.
+* `twitter_max_text_to_speech_segments`: the maximum amount of text-to-speech segments (i.e. replies) to post. If the recording requires more than this amount, the text-to-speech replies are skipped. Only used if `reply_with_text_to_speech` is enabled.
 
 * `mastodon_instance_url`: the instance's URL decided in the [setup guide](#setup-guide). **Must be changed before publishing on Mastodon.**
 
@@ -529,7 +535,7 @@ Used by `publish.py` and `approve.py`.
 
 * `mastodon_max_status_length`: the maximum amount of characters in a Mastodon post. This should be set to the instance's character limit.
 
-* `mastodon_max_video_size`: the maximum size of a Mastodon video (in megabytes). This should be set to the instance's video size limit. May be null if there's no maximum.
+* `mastodon_max_video_size`: the maximum size of a Mastodon video (in megabytes). This should be set to the instance's video size limit.
 
 * `tumblr_api_key`: the consumer key obtained in the [setup guide](#setup-guide). **Must be changed before publishing on Tumblr.**
 
@@ -543,9 +549,23 @@ Used by `publish.py` and `approve.py`.
 
 * `tumblr_max_video_duration`: the maximum duration of a Tumblr video (in seconds). This should be set to the current Tumblr video duration limit while taking into account the post frequency and the daily total limit. At the time of writing, this is a total of 60 minutes of video per day (or at most 450 seconds per video when posting every 3 hours). Used to trim media snapshots.
 
+* `bluesky_instance_url`: the instance's URL decided in the [setup guide](#setup-guide). **Must be changed before publishing on Bluesky.**
+
+* `bluesky_username`: the handle or username decided in the [setup guide](#setup-guide). **Must be changed before publishing on Bluesky.**
+
+* `bluesky_password`: the password decided in the [setup guide](#setup-guide). **Must be changed before publishing on Bluesky.**
+
+* `bluesky_max_status_length`: the maximum amount of characters in a Bluesky post. This should be set to the instance's character limit.
+
+* `bluesky_max_video_duration`: the maximum duration of a Bluesky video (in seconds). This should be set to the instance's video duration limit. Used to trim media snapshots and to split text-to-speech recordings across multiple posts.
+
+* `bluesky_max_video_size`: the maximum size of a Bluesky video (in megabytes). This should be set to the instance's video size limit.
+
+* `bluesky_max_text_to_speech_segments`: the maximum amount of text-to-speech segments (i.e. replies) to post. If the recording requires more than this amount, the text-to-speech replies are skipped. Only used if `reply_with_text_to_speech` is enabled.
+
 ## Custom Options
 
-Some of the options described above can be changed for specific snapshots using the `Options` column in the database. This column takes a JSON object with any options to override the default configuration. For example, if you wanted a recording to last longer and wanted to improve the chances of a short audio file being captured correctly, you could use the following: `{"min_duration": 60, "plugin_syncing_page_type": "reload_twice"}`. You can find a list of all mutable options in [`common/config.py`](common/config.py#L104).
+Some of the options described above can be changed for specific snapshots using the `Options` column in the database. This column takes a JSON object with any options to override the default configuration. For example, if you wanted a recording to last longer and wanted to improve the chances of a short audio file being captured correctly, you could use the following: `{"min_duration": 60, "plugin_syncing_page_type": "reload_twice"}`. You can find a list of all mutable options in [`common/config.py`](common/config.py#L106).
 
 This column also accepts the following extra options:
 
@@ -559,6 +579,6 @@ This column also accepts the following extra options:
 
 * `script`: JavaScript code to execute after loading the snapshot's page but before the recording starts.
 
-* `tags`: a list of tags to add to the Tumblr post. Can be used to group snapshots by theme and for content warnings (e.g. `["halloween", "jumpscare"]`).
+* `tags`: a list of tags to add to the Tumblr and Bluesky posts. Can be used to group snapshots by theme and for content warnings (e.g. `["halloween", "jumpscare"]`).
 
 * `title_override`: force a specific title. Used to improve the metadata shown in the posts and compilations (e.g. when a page has an incorrect title).

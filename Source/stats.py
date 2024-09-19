@@ -132,9 +132,7 @@ if __name__ == '__main__':
 
 			queries = [
 				('Last Created', 'SELECT S.*, R.*, R.Id AS RecordingId, R.CreationTime AS LastTime FROM Snapshot S INNER JOIN Recording R ON S.Id = R.SnapshotId ORDER BY CreationTime DESC LIMIT 1;'),
-				('Last Published (Twitter)', 'SELECT S.*, R.*, R.Id AS RecordingId, R.PublishTime AS LastTime FROM Snapshot S INNER JOIN Recording R ON S.Id = R.SnapshotId WHERE TwitterStatusId IS NOT NULL ORDER BY PublishTime DESC LIMIT 1;'),
-				('Last Published (Mastodon)', 'SELECT S.*, R.*, R.Id AS RecordingId, R.PublishTime AS LastTime FROM Snapshot S INNER JOIN Recording R ON S.Id = R.SnapshotId WHERE MastodonStatusId IS NOT NULL ORDER BY PublishTime DESC LIMIT 1;'),
-				('Last Published (Tumblr)', 'SELECT S.*, R.*, R.Id AS RecordingId, R.PublishTime AS LastTime FROM Snapshot S INNER JOIN Recording R ON S.Id = R.SnapshotId WHERE TumblrStatusId IS NOT NULL ORDER BY PublishTime DESC LIMIT 1;'),
+				('Last Published', 'SELECT S.*, R.*, R.Id AS RecordingId, R.PublishTime AS LastTime FROM Snapshot S INNER JOIN Recording R ON S.Id = R.SnapshotId ORDER BY PublishTime DESC LIMIT 1;'),
 			]
 
 			for name, query in queries:
@@ -152,6 +150,7 @@ if __name__ == '__main__':
 					twitter_url = f'https://twitter.com/waybackwanderer/status/{recording.TwitterStatusId}' if recording.TwitterStatusId is not None else '-'
 					mastodon_url = f'https://botsin.space/@eternalwanderer/{recording.MastodonStatusId}' if recording.MastodonStatusId is not None else '-'
 					tumblr_url = f'https://www.tumblr.com/waybackwanderer/{recording.TumblrStatusId}' if recording.TumblrStatusId is not None else '-'
+					bluesky_url = recording.BlueskyUri if recording.BlueskyUri is not None else '-'
 
 					print(f'- {name}: {last_time}')
 					print(f'-> Snapshot: #{snapshot.Id} {snapshot}')
@@ -159,6 +158,7 @@ if __name__ == '__main__':
 					print(f'-> Twitter: {twitter_url}')
 					print(f'-> Mastodon: {mastodon_url}')
 					print(f'-> Tumblr: {tumblr_url}')
+					print(f'-> Bluesky: {bluesky_url}')
 				else:
 					print(f'- {name}: -')
 

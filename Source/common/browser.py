@@ -5,12 +5,12 @@ import itertools
 import os
 import re
 import shutil
-import tempfile
 from base64 import b64encode
 from collections.abc import Iterator
 from pathlib import Path
 from subprocess import Popen
 from sys import getrecursionlimit, setrecursionlimit
+from tempfile import gettempdir
 from time import sleep
 from typing import Optional, Union
 from urllib.parse import unquote, urlparse
@@ -554,7 +554,7 @@ class Browser:
 		except WebDriverException as error:
 			log.error(f'Failed to quit the WebDriver with the error: {repr(error)}')
 
-		temporary_path = Path(tempfile.gettempdir())
+		temporary_path = Path(gettempdir())
 
 		# Delete the temporary files directories from previous executions. Remeber that there's a bug
 		# when running the Firefox WebDriver on Windows that prevents it from shutting down properly

@@ -27,6 +27,8 @@ class Recording:
 	MastodonMediaId: Optional[int]
 	MastodonStatusId: Optional[int]
 	TumblrStatusId: Optional[int]
+	BlueskyUri: Optional[str]
+	BlueskyCid: Optional[str]
 
 	# Determined at runtime.
 	UploadFilePath: Path

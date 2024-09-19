@@ -2,12 +2,11 @@
 
 import os
 import sqlite3
-import tempfile
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
 from sys import exit
-from tempfile import NamedTemporaryFile
+from tempfile import gettempdir, NamedTemporaryFile
 from time import sleep
 from typing import Optional, Union
 from uuid import uuid4
@@ -15,6 +14,11 @@ from uuid import uuid4
 import tweepy # type: ignore
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
+from atproto import Client as AtClient
+from atproto.exceptions import AtProtocolError, NetworkError as AtNetworkError
+from atproto_client.models.app.bsky.feed.post import CreateRecordResponse, ReplyRef
+from atproto_client.models.utils import create_strong_ref
+from atproto_client.utils.text_builder import TextBuilder as AtTextBuilder
 from mastodon import ( # type: ignore
 	Mastodon, MastodonBadGatewayError, MastodonError,
 	MastodonGatewayTimeoutError, MastodonNetworkError,
@@ -53,6 +57,7 @@ class PublishConfig(CommonConfig):
 	enable_twitter: bool
 	enable_mastodon: bool
 	enable_tumblr: bool
+	enable_bluesky: bool
 
 	twitter_api_key: str
 	twitter_api_secret: str
@@ -63,13 +68,13 @@ class PublishConfig(CommonConfig):
 
 	twitter_max_status_length: int
 	twitter_max_video_duration: int
-	twitter_max_text_to_speech_segments: Optional[int]
+	twitter_max_text_to_speech_segments: int
 
 	mastodon_instance_url: str
 	mastodon_access_token: str
 
 	mastodon_max_status_length: int
-	mastodon_max_video_size: Optional[int]
+	mastodon_max_video_size: int
 
 	tumblr_api_key: str
 	tumblr_api_secret: str
@@ -78,6 +83,15 @@ class PublishConfig(CommonConfig):
 
 	tumblr_max_status_length: int
 	tumblr_max_video_duration: int
+
+	bluesky_instance_url: str
+	bluesky_username: str
+	bluesky_password: str
+
+	bluesky_max_status_length: int
+	bluesky_max_video_duration: int
+	bluesky_max_video_size: int
+	bluesky_max_text_to_speech_segments: int
 
 	def __init__(self):
 
@@ -101,8 +115,7 @@ class PublishConfig(CommonConfig):
 		if self.mastodon_access_token is None:
 			self.mastodon_access_token = os.environ['WANDERER_MASTODON_ACCESS_TOKEN']
 
-		if self.mastodon_max_video_size is not None:
-			self.mastodon_max_video_size = self.mastodon_max_video_size * 10 ** 6
+		self.mastodon_max_video_size = self.mastodon_max_video_size * 10 ** 6
 
 		if self.tumblr_api_key is None:
 			self.tumblr_api_key = os.environ['WANDERER_TUMBLR_API_KEY']
@@ -116,6 +129,14 @@ class PublishConfig(CommonConfig):
 		if self.tumblr_access_token_secret is None:
 			self.tumblr_access_token_secret = os.environ['WANDERER_TUMBLR_ACCESS_TOKEN_SECRET']
 
+		if self.bluesky_username is None:
+			self.bluesky_username = os.environ['WANDERER_BLUESKY_USERNAME']
+
+		if self.bluesky_password is None:
+			self.bluesky_password = os.environ['WANDERER_BLUESKY_PASSWORD']
+
+		self.bluesky_max_video_size = self.bluesky_max_video_size * 10 ** 6
+
 if __name__ == '__main__':
 
 	parser = ArgumentParser(description='Publishes the previously recorded snapshots on Twitter, Mastodon, and Tumblr on a set schedule. The publisher script uploads the recordings and generates posts with the web page\'s title, its date, and a link to its Wayback Machine capture.')
@@ -125,7 +146,7 @@ if __name__ == '__main__':
 	config = PublishConfig()
 	log = setup_logger('publish')
 
-	if not config.enable_twitter and not config.enable_mastodon and not config.enable_tumblr:
+	if not config.enable_twitter and not config.enable_mastodon and not config.enable_tumblr and not config.enable_bluesky:
 		parser.error('The configuration must enable publishing to at least one platform.')
 
 	log.info('Initializing the publisher.')
@@ -139,6 +160,7 @@ if __name__ == '__main__':
 		title: str
 		body: str
 		html_body: str
+		at_builder: AtTextBuilder
 		alt_text: str
 
 		tts_body: str
@@ -148,8 +170,8 @@ if __name__ == '__main__':
 		emojis: str
 		tags: list[str]
 
-	def trim_video(path: Path, duration: int) -> Path:
-		""" Trim a video to a specific duration. """
+	def trim_video(path: Path, duration: float) -> Path:
+		""" Trims a video to a specific duration. """
 
 		# Closing the file right away makes it easier to delete it later.
 		output_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
@@ -162,6 +184,45 @@ if __name__ == '__main__':
 		ffmpeg(*input_args, *output_args)
 
 		return Path(output_file.name)
+
+	def compress_video(path: Path) -> Path:
+		""" Compresses a video to reduce its size. """
+
+		# Closing the file right away makes it easier to delete it later.
+		output_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
+		output_file.close()
+
+		input_args = ['-i', path]
+		output_args = ['-vf', 'fps=30', output_file.name]
+
+		log.debug(f'Compressing the video with the FFmpeg arguments: {input_args + output_args}')
+		ffmpeg(*input_args, *output_args)
+
+		return Path(output_file.name)
+
+	def split_video(path: Path, duration: float) -> list[Path]:
+		""" Splits a video into smaller segments of a specific duration. """
+
+		temporary_path = Path(gettempdir())
+		out_pattern = CommonConfig.TEMPORARY_PATH_PREFIX + '%04d.' + path.name
+		segment_format = temporary_path / out_pattern
+
+		input_args = ['-i', path]
+		output_args = [
+			'-c', 'copy',
+			'-f', 'segment',
+			'-segment_time', duration,
+			'-reset_timestamps', 1,
+			segment_format,
+		]
+
+		log.debug(f'Splitting the video with the FFmpeg arguments: {input_args + output_args}')
+		ffmpeg(*input_args, *output_args)
+
+		in_pattern = CommonConfig.TEMPORARY_PATH_PREFIX + '*.' + path.name
+		segments = temporary_path.glob(in_pattern)
+
+		return sorted(segments)
 
 	if config.enable_twitter:
 
@@ -199,9 +260,7 @@ if __name__ == '__main__':
 			exit(1)
 
 		def publish_to_twitter(post: Post) -> tuple[Optional[int], Optional[int]]:
-			""" Publishes a snapshot recording and text-to-speech file on Twitter. The video recording is added to the main post along
-			with a message whose content is generated using the remaining arguments. The text-to-speech file is added as a reply to the
-			main post. If this file is too long for Twitter's video duration limit, then it's split across multiple replies. """
+			""" Publishes a snapshot recording and text-to-speech file on Twitter. """
 
 			log.info('Publishing on Twitter.')
 
@@ -235,36 +294,18 @@ if __name__ == '__main__':
 
 				log.info(f'Posted the recording status #{status_id} with the media #{media_id} using {len(text)} characters.')
 
-				# Add the text-to-speech file as a reply to the previous tweet. While Twitter has a generous
-				# file size limit, the maximum video duration isn't great for the text-to-speech files. To
-				# get around this, we'll split the video into segments and chain them together in the replies.
 				if config.reply_with_text_to_speech and post.recording.TextToSpeechFilename is not None:
 
-					temporary_path = Path(tempfile.gettempdir())
-					segment_path_format = temporary_path / (CommonConfig.TEMPORARY_PATH_PREFIX + '%04d.' + post.recording.TextToSpeechFilename)
-
-					input_args = ['-i', post.recording.TextToSpeechFilePath]
-					output_args = [
-						'-c', 'copy',
-						'-f', 'segment',
-						'-segment_time', config.twitter_max_video_duration,
-						'-reset_timestamps', 1,
-						segment_path_format,
-					]
-
-					log.debug(f'Splitting the text-to-speech file with the FFmpeg arguments: {input_args + output_args}')
-					ffmpeg(*input_args, *output_args)
-
-					segment_file_paths = sorted(temporary_path.glob('*.' + post.recording.TextToSpeechFilename))
+					segments = split_video(post.recording.TextToSpeechFilePath, config.twitter_max_video_duration)
 					last_status_id = status_id
 
 					try:
-						if config.twitter_max_text_to_speech_segments is None or len(segment_file_paths) <= config.twitter_max_text_to_speech_segments:
+						if len(segments) <= config.twitter_max_text_to_speech_segments:
 
-							for i, segment_path in enumerate(segment_file_paths, start=1):
+							for i, path in enumerate(segments, start=1):
 
 								sleep(config.twitter_api_wait)
-								tts_media = twitter_api_v1.chunked_upload(filename=str(segment_path), file_type='video/mp4', media_category='TweetVideo')
+								tts_media = twitter_api_v1.chunked_upload(filename=str(path), file_type='video/mp4', media_category='TweetVideo')
 								tts_media_id = tts_media.media_id
 
 								# See above.
@@ -272,29 +313,29 @@ if __name__ == '__main__':
 									sleep(config.twitter_api_wait)
 									twitter_api_v1.create_media_metadata(tts_media_id, post.tts_alt_text)
 
-								segment_body = post.tts_body
+								body = post.tts_body
 
-								if len(segment_file_paths) > 1:
-									segment_body += f'\n{i} of {len(segment_file_paths)}'
+								if len(segments) > 1:
+									body += f'\n{i} of {len(segments)}'
 
-								max_title_length = max(config.twitter_max_status_length - len('\n') - len(segment_body), 0)
-								tts_text = post.title[:max_title_length] + '\n' + segment_body
+								max_title_length = max(config.twitter_max_status_length - len('\n') - len(body), 0)
+								tts_text = post.title[:max_title_length] + '\n' + body
 
 								sleep(config.twitter_api_wait)
 								tts_response = twitter_api_v2.create_tweet(text=tts_text, in_reply_to_tweet_id=last_status_id, media_ids=[tts_media_id])
 								last_status_id = int(tts_response.data['id'])
 
-								log.debug(f'Posted the text-to-speech status #{last_status_id} with the media #{tts_media_id} ({i} of {len(segment_file_paths)}) using {len(tts_text)} characters.')
+								log.debug(f'Posted the text-to-speech status #{last_status_id} with the media #{tts_media_id} ({i} of {len(segments)}) using {len(tts_text)} characters.')
 
-							log.info(f'Posted {len(segment_file_paths)} text-to-speech segments.')
+							log.info(f'Posted {len(segments)} text-to-speech segments.')
 						else:
-							log.info(f'Skipping {len(segment_file_paths)} text-to-speech segments since it exceeds the limit of {config.twitter_max_text_to_speech_segments} files.')
+							log.info(f'Skipping {len(segments)} text-to-speech segments since they exceed the limit of {config.twitter_max_text_to_speech_segments} files.')
 
 					except TweepyException as error:
 						log.error(f'Failed to post the text-to-speech segments with the error: {repr(error)}')
 					finally:
-						for segment_path in segment_file_paths:
-							delete_file(segment_path)
+						for path in segments:
+							delete_file(path)
 
 			except FfmpegException as error:
 				log.error(f'Failed to process the video with the error: {repr(error)}')
@@ -316,27 +357,9 @@ if __name__ == '__main__':
 			exit(1)
 
 		def publish_to_mastodon(post: Post) -> tuple[Optional[int], Optional[int]]:
-			""" Publishes a snapshot recording and text-to-speech file on a given Mastodon instance. The video recording is added to the
-			main post along with a message whose content is generated using the remaining arguments. The text-to-speech audio is added
-			as a reply to the main post. This function can optionally attempt to reduce the recording size before uploading it. If the
-			file exceeds the user-defined size limit, then it will be skipped. """
+			""" Publishes a snapshot recording and text-to-speech file on a given Mastodon instance. """
 
 			log.info('Publishing on Mastodon.')
-
-			def reduce_video_size(path: Path) -> Path:
-				""" Reduces a video's file size. """
-
-				# Closing the file right away makes it easier to delete it later.
-				output_file = NamedTemporaryFile(mode='wb', prefix=CommonConfig.TEMPORARY_PATH_PREFIX, suffix='.mp4', delete=False)
-				output_file.close()
-
-				input_args = ['-i', path]
-				output_args = ['-vf', 'fps=30', output_file.name]
-
-				log.debug(f'Reducing the video size with the FFmpeg arguments: {input_args + output_args}')
-				ffmpeg(*input_args, *output_args)
-
-				return Path(output_file.name)
 
 			def extract_audio(path: Path) -> Path:
 				""" Extracts the audio from a video file. """
@@ -356,13 +379,13 @@ if __name__ == '__main__':
 			def try_media_post(path: Path, **kwargs) -> int:
 				""" Posts a media file to the Mastodon instance, retrying if it fails with a 502, 503, or 504 HTTP error. """
 
-				for i in range(config.mastodon_max_retries):
+				for i in range(config.max_retries):
 					try:
 						media = mastodon_api.media_post(str(path), **kwargs)
 						break
 					except (MastodonNetworkError, MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
-						log.warning(f'Retrying the media post operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
-						sleep(config.mastodon_retry_wait)
+						log.warning(f'Retrying the media post operation ({i+1} of {config.max_retries}) after failing with the error: {repr(error)}')
+						sleep(config.retry_wait)
 				else:
 					raise
 
@@ -373,13 +396,13 @@ if __name__ == '__main__':
 
 				idempotency_key = str(uuid4())
 
-				for i in range(config.mastodon_max_retries):
+				for i in range(config.max_retries):
 					try:
 						status = mastodon_api.status_post(text, idempotency_key=idempotency_key, **kwargs)
 						break
 					except (MastodonNetworkError, MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
-						log.warning(f'Retrying the status post operation ({i+1} of {config.mastodon_max_retries}) after failing with the error: {repr(error)}')
-						sleep(config.mastodon_retry_wait)
+						log.warning(f'Retrying the status post operation ({i+1} of {config.max_retries}) after failing with the error: {repr(error)}')
+						sleep(config.retry_wait)
 				else:
 					raise
 
@@ -392,12 +415,11 @@ if __name__ == '__main__':
 			tts_path = None
 
 			try:
-				# Unlike with Twitter, uploading videos to Mastodon can be trickier due to hosting costs.
-				# We'll try to reduce the file size while also having a maximum size limit.
-				recording_path = reduce_video_size(post.recording.UploadFilePath)
-				recording_file_size = os.path.getsize(recording_path)
+				# Unlike with Twitter, uploading videos to Mastodon can be trickier due to the size limit.
+				recording_path = compress_video(post.recording.UploadFilePath)
+				recording_size = os.path.getsize(recording_path)
 
-				if config.mastodon_max_video_size is None or recording_file_size <= config.mastodon_max_video_size:
+				if recording_size <= config.mastodon_max_video_size:
 
 					media_id = try_media_post(recording_path, mime_type='video/mp4', description=post.alt_text)
 
@@ -406,15 +428,15 @@ if __name__ == '__main__':
 
 					status_id = try_status_post(text, media_ids=[media_id], sensitive=post.sensitive)
 
-					log.info(f'Posted the recording status #{status_id} with the media #{media_id} ({recording_file_size / 10 ** 6:.1f} MB) using {len(text)} characters.')
+					log.info(f'Posted the recording status #{status_id} with the media #{media_id} ({recording_size / 10 ** 6:.1f} MB) using {len(text)} characters.')
 
 					try:
 						if config.reply_with_text_to_speech and post.recording.TextToSpeechFilePath is not None:
 
 							tts_path = extract_audio(post.recording.TextToSpeechFilePath)
-							tts_file_size = os.path.getsize(tts_path)
+							tts_size = os.path.getsize(tts_path)
 
-							if config.mastodon_max_video_size is None or tts_file_size <= config.mastodon_max_video_size:
+							if tts_size <= config.mastodon_max_video_size:
 
 								tts_media_id = try_media_post(tts_path, mime_type='audio/mpeg', description=post.tts_alt_text)
 
@@ -423,14 +445,14 @@ if __name__ == '__main__':
 
 								tts_status_id = try_status_post(tts_text, in_reply_to_id=status_id, media_ids=[tts_media_id], sensitive=post.sensitive)
 
-								log.info(f'Posted the text-to-speech status #{tts_status_id} with the media #{tts_media_id} ({tts_file_size / 10 ** 6:.1f} MB) using {len(tts_text)} characters.')
+								log.info(f'Posted the text-to-speech status #{tts_status_id} with the media #{tts_media_id} ({tts_size / 10 ** 6:.1f} MB) using {len(tts_text)} characters.')
 							else:
-								log.info(f'Skipping the text-to-speech audio since its size ({tts_file_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_video_size / 10 ** 6} MB.')
+								log.info(f'Skipping the text-to-speech audio since its size ({tts_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_video_size / 10 ** 6} MB.')
 
 					except MastodonError as error:
 						log.error(f'Failed to post the text-to-speech audio with the error: {repr(error)}')
 				else:
-					log.info(f'Skipping the recording since its size ({recording_file_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_video_size / 10 ** 6} MB.')
+					log.info(f'Skipping the recording since its size ({recording_size / 10 ** 6:.1f}) exceeds the limit of {config.mastodon_max_video_size / 10 ** 6} MB.')
 
 			except FfmpegException as error:
 				log.error(f'Failed to process the video with the error: {repr(error)}')
@@ -460,15 +482,9 @@ if __name__ == '__main__':
 			exit(1)
 
 		def publish_to_tumblr(post: Post) -> Optional[int]:
-			""" Publishes a snapshot recording on Tumblr. The video recording is added to the main post along
-			with a message whose content is generated using the remaining arguments. Unlike the Twitter and
-			Mastodon counterparts, posting text-to-speech files is not supported. It's also not possible to
-			mark a post as sensitive or add any alt text. This function also adds tags to the post. """
+			""" Publishes a snapshot recording on Tumblr. """
 
 			log.info('Publishing on Tumblr.')
-
-			class TumblrException(Exception):
-				pass
 
 			status_id = None
 
@@ -483,7 +499,7 @@ if __name__ == '__main__':
 				max_title_length = max(config.tumblr_max_status_length - len('<br>') - len(post.html_body), 0)
 				text = post.title[:max_title_length] + '<br>' + post.html_body
 
-				for i in range(config.tumblr_max_retries):
+				for i in range(config.max_retries):
 
 					# The official Tumblr library doesn't have any package-specific exceptions so
 					# we'll catch all of them to be safe.
@@ -498,23 +514,137 @@ if __name__ == '__main__':
 						status_code = response['meta']['status']
 
 						if status_code in [408, 502, 503, 504]:
-							log.warning(f'Retrying the status post operation ({i+1} of {config.tumblr_max_retries}) after failing with the error: {repr(response)}')
-							sleep(config.tumblr_retry_wait)
+							log.warning(f'Retrying the status post operation ({i+1} of {config.max_retries}) after failing with the error: {repr(response)}')
+							sleep(config.retry_wait)
 							continue
 						else:
-							raise TumblrException(f'Tumblr Response: {response}')
+							raise Exception(f'Tumblr Response: {response}')
 				else:
-					raise TumblrException(f'Tumblr Response: {response}')
+					raise Exception(f'Tumblr Response: {response}')
 
 			except FfmpegException as error:
 				log.error(f'Failed to process the video with the error: {repr(error)}')
-			except TumblrException as error:
+			except Exception as error:
 				log.error(f'Failed to post the recording status with the error: {repr(error)}')
 			finally:
 				if post.trim and recording_path is not None:
 					delete_file(recording_path)
 
 			return status_id
+
+	if config.enable_bluesky:
+
+		try:
+			log.info('Initializing the Bluesky API interface.')
+			bluesky_api = AtClient(config.bluesky_instance_url)
+			bluesky_api.login(config.bluesky_username, config.bluesky_password)
+		except AtProtocolError as error:
+			log.error(f'Failed to initialize the Bluesky API interface with the error: {repr(error)}')
+			exit(1)
+
+		def publish_to_bluesky(post: Post) -> tuple[Optional[str], Optional[str]]:
+			""" Publishes a snapshot recording and text-to-speech file on a given Bluesky instance. """
+
+			log.info('Publishing on Bluesky.')
+
+			def try_send_video(path: Path, **kwargs) -> CreateRecordResponse:
+				""" Posts a status and video to the Bluesky instance, retrying if it fails with a network error. """
+
+				with open(path, 'rb') as file:
+
+					video = file.read()
+
+					for i in range(config.max_retries):
+						try:
+							response = bluesky_api.send_video(video=video, **kwargs)
+							break
+						except AtNetworkError as error:
+							log.warning(f'Retrying the send video operation ({i+1} of {config.max_retries}) after failing with the error: {repr(error)}')
+							sleep(config.retry_wait)
+					else:
+						raise
+
+				return response
+
+			uri = None
+			cid = None
+
+			recording_path = None
+			tts_path = None
+
+			try:
+				if post.trim:
+					recording_path = trim_video(post.recording.UploadFilePath, config.bluesky_max_video_duration)
+				else:
+					recording_path = post.recording.UploadFilePath
+
+				# Unlike with Twitter, uploading videos to Bluesky can be trickier due to the size limit.
+				recording_path = compress_video(recording_path)
+				recording_size = os.path.getsize(recording_path)
+
+				if recording_size <= config.bluesky_max_video_size:
+
+					response = try_send_video(recording_path, text=post.at_builder, video_alt=post.alt_text)
+					uri, cid = response.uri, response.cid
+
+					log.info(f'Posted the recording status {response} ({recording_size / 10 ** 6:.1f} MB) using {len(post.at_builder.build_text())} characters.')
+
+					if config.reply_with_text_to_speech and post.recording.TextToSpeechFilename is not None:
+
+						tts_path = compress_video(post.recording.TextToSpeechFilePath)
+						segments = split_video(tts_path, config.bluesky_max_video_duration)
+
+						try:
+							if all(os.path.getsize(path) <= config.bluesky_max_video_size for path in segments):
+
+								if len(segments) <= config.bluesky_max_text_to_speech_segments:
+
+									last_response = response
+									for i, path in enumerate(segments, start=1):
+
+										# No TextBuilder here since we don't need links or tags.
+										body = post.tts_body
+
+										if len(segments) > 1:
+											body += f'\n{i} of {len(segments)}'
+
+										max_title_length = max(config.bluesky_max_status_length - len('\n') - len(body), 0)
+										tts_text = post.title[:max_title_length] + '\n' + body
+
+										parent_ref = create_strong_ref(last_response)
+										root_ref = create_strong_ref(response)
+										reply_ref = ReplyRef(parent=parent_ref, root=root_ref)
+
+										last_response = try_send_video(path, reply_to=reply_ref, text=tts_text, video_alt=post.tts_alt_text)
+
+										log.debug(f'Posted the text-to-speech status {last_response} ({i} of {len(segments)}, {os.path.getsize(path) / 10 ** 6:.1f} MB) using {len(tts_text)} characters.')
+
+									log.info(f'Posted {len(segments)} text-to-speech segments.')
+								else:
+									log.info(f'Skipping {len(segments)} text-to-speech segments since they exceed the limit of {config.twitter_max_text_to_speech_segments} files.')
+							else:
+								log.info(f'Skipping {len(segments)} text-to-speech segments since at least one exceeds the limit of {config.bluesky_max_video_size / 10 ** 6} MB.')
+
+						except AtProtocolError as error:
+							log.error(f'Failed to post the text-to-speech segments with the error: {repr(error)}')
+						finally:
+							for path in segments:
+								delete_file(path)
+				else:
+					log.info(f'Skipping the recording since its size ({recording_size / 10 ** 6:.1f}) exceeds the limit of {config.bluesky_max_video_size / 10 ** 6} MB.')
+
+			except FfmpegException as error:
+				log.error(f'Failed to process the video with the error: {repr(error)}')
+			except AtProtocolError as error:
+				log.error(f'Failed to post the recording status with the error: {repr(error)}')
+			finally:
+				if recording_path is not None:
+					delete_file(recording_path)
+
+				if tts_path is not None:
+					delete_file(tts_path)
+
+			return uri, cid
 
 	scheduler = BlockingScheduler()
 
@@ -619,12 +749,46 @@ if __name__ == '__main__':
 					audio_emoji = '\N{Speaker With Three Sound Waves}' if recording.HasAudio else None
 					emojis = ' '.join(filter(None, [media_emoji, sensitive_emoji, audio_emoji, *snapshot.Emojis]))
 
+					title = snapshot.DisplayTitle
 					body = '\n'.join(filter(None, [snapshot.DisplayMetadata, snapshot.ShortDate, wayback_url, emojis]))
 
 					# We have to format the link ourselves since the Tumblr API treats the post as HTML by default.
 					snapshot_type = 'media file' if snapshot.IsMedia else 'web page'
 					html_wayback_url = f'<a href="{wayback_url}">Archived {snapshot_type.title()}</a>'
 					html_body = '<br>'.join(filter(None, [snapshot.DisplayMetadata, snapshot.ShortDate, html_wayback_url, emojis]))
+
+					# We have to use the TextBuilder to add links and tags on Bluesky, meaning we have to expose
+					# logic from its respective publish function here. The builder doesn't let us prepend text
+					# so we use the body length above (which is mostly the same as the final one aside from the
+					# link text).
+					at_builder = AtTextBuilder()
+
+					max_title_length = max(config.bluesky_max_status_length - len('\n') - len(body), 0)
+					at_builder.text(title[:max_title_length] + '\n')
+
+					if snapshot.DisplayMetadata:
+						at_builder.text(snapshot.DisplayMetadata + '\n')
+
+					at_builder.text(snapshot.ShortDate + '\n')
+					at_builder.link(f'Archived {snapshot_type.title()}', wayback_url)
+					at_builder.text('\n')
+
+					if emojis:
+						at_builder.text(emojis + '\n')
+
+					extract = tld_extract(url)
+					year = str(snapshot.OldestDatetime.year)
+					tags = [extract.domain, year, *snapshot.Tags]
+
+					for i, tag in enumerate(tags):
+						current_text = at_builder.build_text()
+						tag_text = '#' + tag
+						if len(current_text) + len(tag_text) + 1 <= config.bluesky_max_status_length:
+							at_builder.tag(tag_text, tag)
+							if i != len(tags) - 1:
+								at_builder.text(' ')
+						else:
+							break
 
 					# How the date is formatted depends on the current locale.
 					long_date = snapshot.OldestDatetime.strftime('%B %Y')
@@ -634,18 +798,15 @@ if __name__ == '__main__':
 					tts_body = '\n'.join(filter(None, [snapshot.ShortDate, tts_language]))
 					tts_alt_text = f'An audio recording of the {snapshot_type} "{url}" as seen on {long_date} via the Wayback Machine. Generated using text-to-speech.'
 
-					extract = tld_extract(url)
-					year = str(snapshot.OldestDatetime.year)
-					tags = [extract.domain, year, *snapshot.Tags]
-
 					post = Post(
 						recording=recording,
 
 						trim=snapshot.IsMedia,
 
-						title=snapshot.DisplayTitle,
+						title=title,
 						body=body,
 						html_body=html_body,
+						at_builder=at_builder,
 						alt_text=alt_text,
 
 						tts_body=tts_body,
@@ -659,6 +820,7 @@ if __name__ == '__main__':
 					twitter_media_id, twitter_status_id = publish_to_twitter(post) if config.enable_twitter else (None, None)
 					mastodon_media_id, mastodon_status_id = publish_to_mastodon(post) if config.enable_mastodon else (None, None)
 					tumblr_status_id = publish_to_tumblr(post) if config.enable_tumblr else None
+					bluesky_uri, bluesky_cid = publish_to_bluesky(post) if config.enable_bluesky else (None, None)
 
 					if config.delete_files_after_upload:
 						delete_file(recording.UploadFilePath)
@@ -675,13 +837,14 @@ if __name__ == '__main__':
 										IsProcessed = TRUE, PublishTime = CURRENT_TIMESTAMP,
 										TwitterMediaId = :twitter_media_id, TwitterStatusId = :twitter_status_id,
 										MastodonMediaId = :mastodon_media_id, MastodonStatusId = :mastodon_status_id,
-										TumblrStatusId = :tumblr_status_id
+										TumblrStatusId = :tumblr_status_id, BlueskyUri = :bluesky_uri,
+				 						BlueskyCid = :bluesky_cid
 									WHERE Id = :id;
 									''',
 									{'twitter_media_id': twitter_media_id, 'twitter_status_id': twitter_status_id,
 									 'mastodon_media_id': mastodon_media_id, 'mastodon_status_id': mastodon_status_id,
-									 'tumblr_status_id': tumblr_status_id,
-									 'id': recording.Id})
+									 'tumblr_status_id': tumblr_status_id, 'bluesky_uri': bluesky_uri,
+									 'bluesky_cid': bluesky_cid, 'id': recording.Id})
 
 						# Mark any earlier recordings as processed so the same snapshot isn't published multiple times in
 						# cases where there is more than one video file. See the LastCreationTime part in the main query.

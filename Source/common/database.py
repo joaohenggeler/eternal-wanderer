@@ -205,6 +205,8 @@ class Database:
 									MastodonMediaId INTEGER,
 									MastodonStatusId INTEGER,
 									TumblrStatusId INTEGER,
+									BlueskyUri TEXT,
+									BlueskyCid TEXT,
 
 									FOREIGN KEY (SnapshotId) REFERENCES Snapshot (Id)
 								);

@@ -494,9 +494,9 @@
 
 		"viewport_scroll_percentage": 0.85,
 		"base_wait_after_load": 10,
-		"wait_after_load_per_plugin_instance": 15,
-		"base_wait_per_scroll": 10,
-		"wait_after_scroll_per_plugin_instance": 10,
+		"wait_after_load_per_plugin_instance": 5,
+		"base_wait_per_scroll": 5,
+		"wait_after_scroll_per_plugin_instance": 5,
 		"wait_for_plugin_playback_after_load": true,
 		"base_media_wait_after_load": 2,
 
@@ -520,8 +520,8 @@
 		"enable_cosmo_player_viewpoint_cycler": true,
 		"cosmo_player_viewpoint_wait_per_cycle": 8,
 
-		"min_duration": 2,
-		"max_duration": 138,
+		"min_duration": 1,
+		"max_duration": 59,
 		"save_archive_copy": false,
 
 		"screen_capture_recorder_settings":
@@ -719,6 +719,7 @@
 		"enable_twitter": true,
 		"enable_mastodon": true,
 		"enable_tumblr": true,
+		"enable_bluesky": true,
 
 		"twitter_api_key": "<API Key>",
 		"twitter_api_secret": "<API Secret>",
@@ -735,7 +736,7 @@
 		"mastodon_access_token": "<Access Token>",
 
 		"mastodon_max_status_length": 500,
-		"mastodon_max_video_size": 40,
+		"mastodon_max_video_size": 99,
 
 		"tumblr_api_key": "<API Key>",
 		"tumblr_api_secret": "<API Secret>",
@@ -743,6 +744,15 @@
 		"tumblr_access_token_secret": "<Access Token Secret>",
 
 		"tumblr_max_status_length": 4096,
-		"tumblr_max_video_duration": 450
+		"tumblr_max_video_duration": 450,
+
+		"bluesky_instance_url": "<Instance URL>",
+		"bluesky_username": "<Username>",
+		"bluesky_password": "<Password>",
+
+		"bluesky_max_status_length": 300,
+		"bluesky_max_video_duration": 60,
+		"bluesky_max_video_size": 50,
+		"bluesky_max_text_to_speech_segments": 1
 	}
 }
