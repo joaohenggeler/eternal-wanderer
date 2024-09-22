@@ -101,7 +101,7 @@ if __name__ == '__main__':
 
 			for key, total in priority_total.items():
 				priority = key * Snapshot.PRIORITY_SIZE
-				name = Snapshot.get_priority_name(priority)
+				name = Snapshot.get_priority_name(priority).title()
 				percent = total / total_snapshots * 100 if total_snapshots > 0 else 0
 				print(f'-> {name}: {total} ({percent:.2f}%)')
 

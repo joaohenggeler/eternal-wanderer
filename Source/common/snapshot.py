@@ -194,15 +194,15 @@ class Snapshot:
 		priority //= Snapshot.PRIORITY_SIZE
 
 		if priority == 0:
-			name = 'None'
+			name = 'none'
 		elif priority == 1:
-			name = 'Scout'
+			name = 'scout'
 		elif priority == 2:
-			name = 'Record'
+			name = 'record'
 		elif priority == 3:
-			name = 'Publish'
+			name = 'publish'
 		else:
-			name = 'Unknown'
+			name = 'unknown'
 
 		return name
 
