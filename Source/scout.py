@@ -713,6 +713,7 @@ if __name__ == '__main__':
 										video_snapshot['priority'] = snapshot.Priority
 										video_snapshot['media_extension'] = 'mp4'
 										video_snapshot['media_title'] = None
+										video_snapshot['options'] = snapshot.Options
 
 										try:
 											meta = driver.find_element_by_xpath(r'//meta[@name="title"]')
@@ -811,8 +812,8 @@ if __name__ == '__main__':
 
 						if video_snapshot is not None:
 							db.execute(	'''
-										INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, Priority, IsExcluded, IsMedia, MediaExtension, MediaTitle, ScoutTime, Url, Timestamp, LastModifiedTime, UrlKey, Digest)
-										VALUES (:parent_id, :depth, :state, :priority, :is_excluded, :is_media, :media_extension, :media_title, :scout_time, :url, :timestamp, :last_modified_time, :url_key, :digest);
+										INSERT OR IGNORE INTO Snapshot (ParentId, Depth, State, Priority, IsExcluded, IsMedia, MediaExtension, MediaTitle, ScoutTime, Url, Timestamp, LastModifiedTime, UrlKey, Digest, Options)
+										VALUES (:parent_id, :depth, :state, :priority, :is_excluded, :is_media, :media_extension, :media_title, :scout_time, :url, :timestamp, :last_modified_time, :url_key, :digest, :options);
 										''', video_snapshot)
 
 							db.execute(	'''
@@ -821,7 +822,7 @@ if __name__ == '__main__':
 										''',
 										{'parent_id': video_snapshot['parent_id'], 'url': video_snapshot['url'], 'timestamp': video_snapshot['timestamp']})
 
-							db.execute('UPDATE Snapshot SET Priority = :no_priority WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
+							db.execute('UPDATE Snapshot SET Priority = :no_priority, Options = NULL WHERE Id = :id;', {'no_priority': Snapshot.NO_PRIORITY, 'id': snapshot.Id})
 
 						if config.store_all_words_and_tags:
 							word_and_tag_values = [{'word': word, 'is_tag': is_tag} for word, is_tag in word_and_tag_counter]
