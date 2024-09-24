@@ -117,11 +117,11 @@ if __name__ == '__main__':
 						print(f'Could not add or update the snapshot ({best_snapshot.original}, {best_snapshot.timestamp}) since another one with the same digest but different URL and timestamp values already exists.')
 
 				except sqlite3.Error as error:
-					print(f'Could not update the snapshot with the error: {repr(error)}')
+					print(f'Could not update the snapshot at "{args.url}" near {args.timestamp} with the error: {repr(error)}')
 					db.rollback()
 
 			except sqlite3.Error as error:
-				print(f'Could not insert the snapshot with the error: {repr(error)}')
+				print(f'Could not insert the snapshot at "{args.url}" near {args.timestamp} with the error: {repr(error)}')
 				db.rollback()
 
 		except NoCDXRecordFound as error:
