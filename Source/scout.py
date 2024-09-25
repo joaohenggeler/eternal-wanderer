@@ -2,6 +2,7 @@
 
 import binascii
 import itertools
+import json
 import re
 import sqlite3
 import sys
@@ -713,7 +714,7 @@ if __name__ == '__main__':
 										video_snapshot['priority'] = snapshot.Priority
 										video_snapshot['media_extension'] = 'mp4'
 										video_snapshot['media_title'] = None
-										video_snapshot['options'] = snapshot.Options
+										video_snapshot['options'] = json.dumps(snapshot.Options) if snapshot.Options else None
 
 										try:
 											meta = driver.find_element_by_xpath(r'//meta[@name="title"]')
