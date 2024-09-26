@@ -680,17 +680,7 @@ if __name__ == '__main__':
 
 					# Find a YouTube video's file based on the page where the player was embedded.
 					# If the video was archived, then we can do this by passing its YouTube ID to
-					# the Wayback Machine's special fake URL. Since we're already scouting the video's
-					# page, we can find its title by looking at the meta tags (or from the page title
-					# as a fallback). We'll also move the parent snapshot's priority to the video itself
-					# since that's what we want most of the time. Finally, we have to hardcode a media
-					# extension since YouTube's endpoint doesn't have one.
-					#
-					# E.g.
-					# - Old Layout: https://web.archive.org/web/20061208083125if_/http://www.youtube.com/watch%3Fv%3DjNQXAC9IVRw
-					# - New Layout: https://web.archive.org/web/20240905040326if_/https://www.youtube.com/watch?v=jNQXAC9IVRw
-					# - Multiple Parameters: https://web.archive.org/web/20110826025741if_/http://www.youtube.com/watch?v=inly68KgOcs&gl=US&hl=en&amp;has_verified=1
-
+					# the Wayback Machine's special fake URL.
 					video_snapshot = None
 
 					try:
@@ -711,12 +701,16 @@ if __name__ == '__main__':
 								if video_snapshot is not None:
 									if video_snapshot['is_media']:
 
+										# We have to hardcode a media extension since YouTube's endpoint doesn't have one.
 										video_snapshot['priority'] = snapshot.Priority
 										video_snapshot['media_extension'] = 'mp4'
 										video_snapshot['media_title'] = None
 										video_snapshot['options'] = json.dumps(snapshot.Options) if snapshot.Options else None
 
 										try:
+											# E.g.
+											# - Prefix: https://web.archive.org/web/20061208083125if_/http://www.youtube.com/watch%3Fv%3DjNQXAC9IVRw
+											# - Suffix: https://web.archive.org/web/20240905040326if_/https://www.youtube.com/watch?v=jNQXAC9IVRw
 											meta = driver.find_element_by_xpath(r'//meta[@name="title"]')
 											title = meta.get_attribute('content')
 										except NoSuchElementException:
@@ -725,7 +719,19 @@ if __name__ == '__main__':
 
 										video_snapshot['media_title'] = title
 
-										log.info(f'Found the YouTube video snapshot of "{title}" ({youtube_id}).')
+										try:
+											# E.g. https://web.archive.org/web/20170205034704if_/https://www.youtube.com/watch?v=AdpQkqUH-qU&feature=youtu.be
+											# Where the video timestamp is from 2017, the last modified time is from 2016, but the date published is from 2011.
+											meta = driver.find_element_by_xpath(r'//meta[@itemprop="datePublished"]')
+											date = meta.get_attribute('content')
+											date = date.replace('-', '').ljust(len(video_snapshot['timestamp']), '0')
+										except NoSuchElementException:
+											date = None
+
+										if date is not None:
+											video_snapshot['last_modified_time'] = date
+
+										log.info(f'Found the YouTube video snapshot of "{title}" (date published = {date}).')
 									else:
 										log.warning('The YouTube video snapshot is not a media file.')
 										video_snapshot = None
