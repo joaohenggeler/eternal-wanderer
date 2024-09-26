@@ -103,6 +103,9 @@ if __name__ == '__main__':
 
 						db.execute('UPDATE Snapshot SET State = :state, Priority = :priority WHERE Id = :id;', {'state': new_state, 'priority': args.priority, 'id': snapshot.Id})
 
+						if snapshot.LastModifiedTime is None:
+							db.execute('UPDATE Snapshot SET LastModifiedTime = :last_modified_time WHERE Id = :id;', {'last_modified_time': last_modified_time, 'id': snapshot.Id})
+
 						if args.options is not None:
 							db.execute('UPDATE Snapshot SET Options = :options WHERE Id = :id;', {'options': args.options, 'id': snapshot.Id})
 
