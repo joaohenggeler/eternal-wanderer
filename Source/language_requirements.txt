@@ -1,4 +1,4 @@
-comtypes>=1.1.11
-fasttext>=0.9.2
-fugashi>=1.1.2
-unidic-lite>=1.0.8
+comtypes==1.1.11
+fasttext==0.9.2
+fugashi==1.1.2
+unidic-lite==1.0.8
