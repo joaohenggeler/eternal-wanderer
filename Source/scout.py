@@ -766,8 +766,11 @@ if __name__ == '__main__':
 							if config.store_all_words_and_tags:
 								element_list = driver.find_elements_by_xpath(r'//*')
 								for element in element_list:
-									tag = element.tag_name
-									word_and_tag_counter[(tag, True)] += 1
+									try:
+										tag = element.tag_name
+										word_and_tag_counter[(tag, True)] += 1
+									except StaleElementReferenceException:
+										log.warning('Skipping stale element.')
 							else:
 								for tag in config.tag_points:
 									tag_list = driver.find_elements_by_tag_name(tag)
