@@ -6,7 +6,7 @@ This page documents every relevant component of the Eternal Wanderer including h
 
 ## Dependencies
 
-Python 3.9 (64-bit) or later is required to run the scripts. You can install the required dependencies by running the following command:
+Python 3.10 (64-bit) or later is required to run the scripts. You can install the required dependencies by running the following command:
 
 ```
 pip install -r requirements.txt
@@ -67,7 +67,7 @@ If you encounter any errors while installing the packages, try the following two
 
 * Download and install the latest [Microsoft Visual C++ Redistributable](https://docs.microsoft.com/en-US/cpp/windows/latest-supported-vc-redist?view=msvc-170).
 
-If you followed the previous instructions and fastText still fails to install with the error `Microsoft Visual C++ 14.0 or greater is required. Get it with "Microsoft C++ Build Tools"`, try installing [this package](https://github.com/messense/fasttext-wheel) instead by running the command `pip install fasttext-wheel>=0.9.2`.
+If you followed the previous instructions and fastText still fails to install with the error `Microsoft Visual C++ 14.0 or greater is required. Get it with "Microsoft C++ Build Tools"`, try installing [this package](https://github.com/messense/fasttext-wheel) instead by running the command `pip install fasttext-wheel==0.9.2`.
 
 ## Setup Guide
 

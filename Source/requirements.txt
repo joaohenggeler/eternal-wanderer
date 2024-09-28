@@ -9,7 +9,7 @@ requests==2.31.0
 selenium==3.141.0
 tldextract==3.3.0
 tweepy==4.14.0
-typing-extensions==4.2.0
+typing-extensions>=4.3
 waybackpy==3.0.6
 
 # Fixes an error when creating the Firefox WebDriver with Selenium.
