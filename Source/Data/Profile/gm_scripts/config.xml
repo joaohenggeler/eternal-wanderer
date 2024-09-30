@@ -15,7 +15,7 @@
 		<Include>*</Include>
 	</Script>
 
-	<Script basedir="Fix_Wayback_Machine_Embed" checkRemoteUpdates="0" description="Fixes object, embed, and applet tags whose source URL is missing a Wayback Machine modifier." enabled="true" filename="fix_wayback_machine_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Fix Wayback Machine Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="ebbefd00-e76c-43e9-b6f0-4dc086da5323" version="1.0.0">
+	<Script basedir="Fix_Wayback_Machine_Embed" checkRemoteUpdates="0" description="Fixes object and embed tags whose source URL is missing the correct Wayback Machine modifier." enabled="true" filename="fix_wayback_machine_embed.user.js" installTime="1654470000000" modified="1654470000000" name="Fix Wayback Machine Embed" namespace="" noframes="false" runAt="document-end" updateMetaStatus="unknown" uuid="ebbefd00-e76c-43e9-b6f0-4dc086da5323" version="1.0.0">
 		<Grant>none</Grant>
 		<Match>*://web.archive.org/web/*</Match>
 	</Script>
