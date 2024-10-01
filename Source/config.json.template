@@ -192,7 +192,7 @@
 			"Disable Prompt Functions": true,
 			"Fix Vlc Embed": true,
 			"Fix Wayback Machine Embed": true,
-			"Force Java Version": true,
+			"Force Java Version": false,
 			"Random Midplug Skin": true,
 			"Remove Free Hosting Ads": true,
 			"Replace Broken Image Icon": true,
