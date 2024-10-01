@@ -21,7 +21,6 @@ from urllib.parse import urljoin, urlparse, urlunparse
 import pywinauto # type: ignore
 from apscheduler.schedulers import SchedulerNotRunningError # type: ignore
 from apscheduler.schedulers.blocking import BlockingScheduler # type: ignore
-from requests import RequestException
 from selenium.common.exceptions import (
 	SessionNotCreatedException, WebDriverException,
 ) # type: ignore
@@ -40,8 +39,8 @@ from common.ffmpeg import (
 from common.fluidsynth import fluidsynth, FluidSynthException
 from common.logger import setup_logger
 from common.net import (
-	extract_media_extension_from_url,
-	global_session, is_url_available,
+	download_to_directory, extract_media_extension_from_url,
+	is_url_available,
 )
 from common.plugin_crash_timer import PluginCrashTimer
 from common.plugin_input_repeater import CosmoPlayerViewpointCycler, PluginInputRepeater
@@ -352,34 +351,31 @@ if __name__ == '__main__':
 					if media_extension not in config.multi_asset_media_extensions:
 
 						try:
-							global_rate_limiter.wait_for_wayback_machine_rate_limit()
-							response = global_session.get(wayback_url)
-							response.raise_for_status()
-
 							# We need to keep the file extension so Firefox can choose the right plugin to play it.
-							download_path = media_download_path / url_path.name
-							with open(download_path, 'wb') as file:
-								file.write(response.content)
+							global_rate_limiter.wait_for_wayback_machine_rate_limit()
+							downloaded, download_path = download_to_directory(wayback_url, media_download_path)
 
-							log.debug(f'Downloaded the media file "{wayback_url}" to "{download_path}".')
+							if downloaded:
+								log.debug(f'Downloaded the media file "{wayback_url}" to "{download_path}".')
 
-							embed_url = f'file:///{download_path}'
-							loop = 'false'
+								embed_url = f'file:///{download_path}'
+								loop = 'false'
 
-							info = ffprobe_info(download_path)
+								info = ffprobe_info(download_path)
 
-							# See: https://wiki.multimedia.cx/index.php/FFmpeg_Metadata
-							tags = info['format'].get('tags', {})
-							title = tags.get('title') or tags.get('name')
-							author = tags.get('author') or tags.get('artist') or tags.get('album_artist') or tags.get('composer') or tags.get('copyright')
-							log.debug(f'The media file "{title}" by "{author}" has the following tags: {tags}')
+								# See: https://wiki.multimedia.cx/index.php/FFmpeg_Metadata
+								tags = info['format'].get('tags', {})
+								title = tags.get('title') or tags.get('name')
+								author = tags.get('author') or tags.get('artist') or tags.get('album_artist') or tags.get('composer') or tags.get('copyright')
+								log.debug(f'The media file "{title}" by "{author}" has the following tags: {tags}')
 
-							duration = float(info['format']['duration'])
-							log.debug(f'The media file has a duration of {duration:.2f} seconds.')
+								duration = float(info['format']['duration'])
+								log.debug(f'The media file has a duration of {duration:.2f} seconds.')
 
-						except RequestException as error:
-							log.error(f'Failed to download the media file "{wayback_url}" with the error: {repr(error)}')
-							success = False
+							else:
+								log.error(f'Failed to download the media file "{wayback_url}".')
+								success = False
+
 						except (FfmpegException, KeyError, ValueError) as error:
 							log.warning(f'Could not parse the media file\'s metadata with the error: {repr(error)}')
 
@@ -598,7 +594,7 @@ if __name__ == '__main__':
 						plugin_crash_timeout = config.base_plugin_crash_timeout + config.page_load_timeout + config.plugin_load_wait + cache_wait + proxy_wait
 
 						frame_text_list = []
-						audio_urls = {}
+						audio_paths = {}
 						realmedia_url = None
 
 						# Wait for the page and its resources to be cached.
@@ -693,16 +689,21 @@ if __name__ == '__main__':
 											except ValueError:
 												loop = False
 
-											audio_urls[url] = (extension, loop)
+											global_rate_limiter.wait_for_wayback_machine_rate_limit()
+											downloaded, path = download_to_directory(url, media_download_path)
 
-											try:
-												log.debug(f'Probing "{url}" for audio mixing.')
-												global_rate_limiter.wait_for_wayback_machine_rate_limit()
-												if extension == 'swf' or not ffprobe_is_audio_only(url):
-													audio_urls.clear()
-													break
-											except FfmpegException as error:
-												log.warning(f'Could not probe the audio file "{url}" with the error: {repr(error)}')
+											if downloaded:
+												audio_paths[path] = (extension, loop)
+
+												try:
+													log.debug(f'Probing "{url}" for audio mixing.')
+													if extension == 'swf' or not ffprobe_is_audio_only(path):
+														audio_paths.clear()
+														break
+												except FfmpegException as error:
+													log.warning(f'Could not probe the audio file "{url}" with the error: {repr(error)}')
+											else:
+												log.warning(f'Could not download the audio file "{url}".')
 
 								# While this works for most cases, there are pages where the scroll and client
 								# height have the same value even though there's a scrollbar. This happens even
@@ -724,13 +725,19 @@ if __name__ == '__main__':
 										try:
 											log.debug(f'Probing "{url}" for the duration.')
 											global_rate_limiter.wait_for_wayback_machine_rate_limit()
-											duration = ffprobe_duration(url)
-											if max_plugin_duration is not None:
-												max_plugin_duration = max(max_plugin_duration, duration)
+											downloaded, path = download_to_directory(url, media_download_path)
+
+											if downloaded:
+												duration = ffprobe_duration(path)
+												if max_plugin_duration is not None:
+													max_plugin_duration = max(max_plugin_duration, duration)
+												else:
+													max_plugin_duration = duration
 											else:
-												max_plugin_duration = duration
+												log.warning(f'Could not download the plugin file "{url}".')
+
 										except FfmpegException as error:
-											log.warning(f'Could not determine the duration of "{url}" with the error: {repr(error)}')
+											log.warning(f'Could not determine the duration of the plugin file "{url}" with the error: {repr(error)}')
 
 									if max_plugin_duration is not None:
 										log.info(f'Found the maximum plugin content duration of {max_plugin_duration:.1f} seconds.')
@@ -852,7 +859,6 @@ if __name__ == '__main__':
 
 							try:
 								if media_extension in ['mid', 'midi']:
-									# This intermediate file is deleted later like the others in the media download directory.
 									converted_path = media_path.with_suffix('.wav')
 									sound_font_path = random.choice(list(config.sound_fonts_path.glob('*.sf2')))
 									args = config.midi_fluidsynth_args + ['--fast-render', converted_path, sound_font_path, media_path]
@@ -1025,54 +1031,44 @@ if __name__ == '__main__':
 								if text_to_speech_path is not None:
 									log.info(f'Saved the text-to-speech file to "{text_to_speech_path}".')
 
-							if config.enable_audio_mixing and audio_urls and state == Snapshot.RECORDED:
+							if config.enable_audio_mixing and audio_paths and state == Snapshot.RECORDED:
 
 								browser.go_to_blank_page_with_text('\N{Cocktail Glass} Mixing Audio \N{Cocktail Glass}', progress, str(snapshot))
 
 								try:
-									mix_urls = {}
+									mix_paths = {}
 
-									for url, (extension, _) in audio_urls.items():
+									for path, (extension, _) in audio_paths.items():
 
 										if extension in ['mid', 'midi']:
 
-											global_rate_limiter.wait_for_wayback_machine_rate_limit()
-											response = global_session.get(url)
-											response.raise_for_status()
-
-											# These intermediate files are deleted later like the others in the media download directory.
-											parts = urlparse(url)
-											download_path = media_download_path / Path(parts.path).name
-											with open(download_path, 'wb') as file:
-												file.write(response.content)
-
-											converted_path = download_path.with_suffix('.wav')
+											converted_path = path.with_suffix('.wav')
 											sound_font_path = random.choice(list(config.sound_fonts_path.glob('*.sf2')))
 
-											args = config.midi_fluidsynth_args + ['--fast-render', converted_path, sound_font_path, download_path]
-											log.debug(f'Converting the MIDI file "{url}" with the FluidSynth arguments: {args}')
+											args = config.midi_fluidsynth_args + ['--fast-render', converted_path, sound_font_path, path]
+											log.debug(f'Converting the MIDI file "{path}" with the FluidSynth arguments: {args}')
 
 											fluidsynth(*args)
-											mix_urls[converted_path] = audio_urls[url]
+											mix_paths[converted_path] = audio_paths[path]
 										else:
-											mix_urls[url] = audio_urls[url]
+											mix_paths[path] = audio_paths[path]
 
 									input_args = ['-i', upload_path]
 
-									for url, (_, loop) in mix_urls.items():
+									for path, (_, loop) in mix_paths.items():
 										loop_count = -1 if loop else 0
 										input_args.extend([
 											'-stream_loop', loop_count,
-											'-i', url,
+											'-i', path,
 										])
 
-									mix_input = '[base]' + ''.join(f'[{i}:a]' for i in range(1, len(mix_urls) + 1))
+									mix_input = '[base]' + ''.join(f'[{i}:a]' for i in range(1, len(mix_paths) + 1))
 									mix_path = upload_path.with_suffix('.mix.mp4')
 
 									output_args = config.audio_mixing_ffmpeg_output_args.copy()
 									output_args.extend([
 										'-c:v', 'copy',
-										'-filter_complex', f'[0:a]volume=0[base];{mix_input}amix={len(mix_urls) + 1}:duration=first[mix]',
+										'-filter_complex', f'[0:a]volume=0[base];{mix_input}amix={len(mix_paths) + 1}:duration=first[mix]',
 										'-map', '0:v',
 										'-map', '[mix]',
 										mix_path,
@@ -1086,8 +1082,6 @@ if __name__ == '__main__':
 
 									log.info(f'Saved the mixed audio recording to "{upload_path}".')
 
-								except RequestException as error:
-									log.error(f'Failed to download a MIDI file with the error: {repr(error)}')
 								except FluidSynthException as error:
 									log.error(f'Failed to convert a MIDI file with the error: {repr(error)}')
 								except FfmpegException as error:

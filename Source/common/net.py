@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 from urllib.parse import ParseResult, urlparse
 
 import requests
@@ -10,6 +10,7 @@ from requests.adapters import HTTPAdapter, Retry
 from tldextract import TLDExtract
 
 from .config import config
+from .logger import log
 
 def extract_media_extension_from_url(url: str) -> str:
 	""" Retrieves the file extension from a media file URL. The returned extension may be
@@ -41,6 +42,33 @@ def is_url_from_domain(url: Union[str, ParseResult], domain: str) -> bool:
 	""" Checks if a URL is part of a domain or any of its subdomains. """
 	parts = urlparse(url) if isinstance(url, str) else url
 	return parts.hostname is not None and (parts.hostname == domain or parts.hostname.endswith('.' + domain))
+
+def download_to_directory(url: str, directory: Path) -> tuple[bool, Optional[Path]]:
+	""" Downloads a file from a URL to a specific directory while keeping its filename. """
+
+	success = False
+	path = None
+
+	try:
+		response = global_session.get(url)
+		response.raise_for_status()
+
+		directory.mkdir(parents=True, exist_ok=True)
+		parts = urlparse(url)
+		filename = Path(parts.path).name
+		path = directory / filename
+
+		with open(path, 'wb') as file:
+			file.write(response.content)
+
+		success = True
+
+	except RequestException as error:
+		log.error(f'Failed to download "{url}" with the error: {repr(error)}')
+	except OSError as error:
+		log.error(f'Failed to write the file "{url}" to "{directory}" with the error: {repr(error)}')
+
+	return success, path
 
 checked_allowed_domains: dict[str, bool] = {}
 checked_disallowed_domains: dict[str, bool] = {}
