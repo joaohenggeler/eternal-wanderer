@@ -53,6 +53,7 @@ class Snapshot:
 	MediaExtensionOverride: Optional[str]
 	Notes: str
 	Script: Optional[str]
+	SoundFont: Optional[str]
 	Tags: list[str]
 	TitleOverride: Optional[str]
 
@@ -129,6 +130,7 @@ class Snapshot:
 		self.MediaExtensionOverride = self.Options.get('media_extension_override')
 		self.Notes = self.Options.get('notes', '')
 		self.Script = self.Options.get('script')
+		self.SoundFont = self.Options.get('sound_font')
 		self.Tags = self.Options.get('tags', [])
 		self.TitleOverride = self.Options.get('title_override')
 

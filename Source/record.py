@@ -859,10 +859,17 @@ if __name__ == '__main__':
 
 							try:
 								if media_extension in ['mid', 'midi']:
+
 									converted_path = media_path.with_suffix('.wav')
-									sound_font_path = random.choice(list(config.sound_fonts_path.glob('*.sf2')))
+
+									if snapshot.SoundFont is not None:
+										sound_font_path = config.sound_fonts_path / snapshot.SoundFont
+									else:
+										sound_font_path = random.choice(list(config.sound_fonts_path.glob('*.sf2')))
+
 									args = config.midi_fluidsynth_args + ['--fast-render', converted_path, sound_font_path, media_path]
 									log.debug(f'Converting the MIDI file with the FluidSynth arguments: {args}')
+
 									fluidsynth(*args)
 									media_path = converted_path
 
@@ -1043,7 +1050,11 @@ if __name__ == '__main__':
 										if extension in ['mid', 'midi']:
 
 											converted_path = path.with_suffix('.wav')
-											sound_font_path = random.choice(list(config.sound_fonts_path.glob('*.sf2')))
+
+											if snapshot.SoundFont is not None:
+												sound_font_path = config.sound_fonts_path / snapshot.SoundFont
+											else:
+												sound_font_path = random.choice(list(config.sound_fonts_path.glob('*.sf2')))
 
 											args = config.midi_fluidsynth_args + ['--fast-render', converted_path, sound_font_path, path]
 											log.debug(f'Converting the MIDI file "{path}" with the FluidSynth arguments: {args}')
