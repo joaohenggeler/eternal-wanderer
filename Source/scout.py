@@ -720,11 +720,16 @@ if __name__ == '__main__':
 										video_snapshot['media_title'] = title
 
 										try:
-											# E.g. https://web.archive.org/web/20170205034704if_/https://www.youtube.com/watch?v=AdpQkqUH-qU&feature=youtu.be
-											# Where the video timestamp is from 2017, the last modified time is from 2016, but the date published is from 2011.
+											# E.g.
+											# - "2011-10-23": https://web.archive.org/web/20170205034704if_/https://www.youtube.com/watch?v=AdpQkqUH-qU&feature=youtu.be
+											# - "2021-05-13T09:38:23-07:00": https://web.archive.org/web/20231120181033if_/https://www.youtube.com/watch?v=lZd7q-fiWCU
+											# Note that the first video timestamp is from 2017, the last modified time is from 2016, but the date published is from 2011.
 											meta = driver.find_element_by_xpath(r'//meta[@itemprop="datePublished"]')
 											date = meta.get_attribute('content')
-											date = date.replace('-', '').ljust(len(video_snapshot['timestamp']), '0')
+											date = re.sub('\D', '', date)
+											timestamp_length = len(video_snapshot['timestamp'])
+											date = date.ljust(timestamp_length, '0')
+											date = date[:timestamp_length]
 										except NoSuchElementException:
 											date = None
 
