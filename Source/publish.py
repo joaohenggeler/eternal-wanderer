@@ -381,7 +381,7 @@ if __name__ == '__main__':
 
 				for i in range(config.max_retries):
 					try:
-						media = mastodon_api.media_post(str(path), **kwargs)
+						media = mastodon_api.media_post(str(path), synchronous=True, **kwargs)
 						break
 					except (MastodonNetworkError, MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
 						log.warning(f'Retrying the media post operation ({i+1} of {config.max_retries}) after failing with the error: {repr(error)}')
