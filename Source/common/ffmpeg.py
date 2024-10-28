@@ -51,7 +51,7 @@ def ffmpeg_process(*args, **kwargs) -> Popen:
 	try:
 		return Popen(args, **kwargs)
 	except OSError as error:
-		raise FfmpegException(error)
+		raise FfmpegException(error) from None
 
 # E.g. "[silencedetect @ 0000022c2f32bf40] silence_end: 4.54283 | silence_duration: 0.377167"
 SILENCE_DURATION_REGEX = re.compile(r'^\[silencedetect.*silence_duration: (?P<duration>\d+\.\d+)', re.MULTILINE)
@@ -89,7 +89,7 @@ def ffprobe_duration(path: Path) -> float:
 		duration = ffprobe('-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', path)
 		return float(duration)
 	except ValueError as error:
-		raise FfmpegException(error)
+		raise FfmpegException(error) from None
 
 def ffprobe_info(path: Path) -> dict:
 	""" Retrieves a media file's metadata. """
@@ -97,7 +97,7 @@ def ffprobe_info(path: Path) -> dict:
 		info = ffprobe('-show_format', '-show_streams', '-of', 'json', path)
 		return json.loads(info)
 	except JSONDecodeError as error:
-		raise FfmpegException(error)
+		raise FfmpegException(error) from None
 
 def ffprobe_has_video_stream(path: Path) -> bool:
 	""" Checks if a media file has a video stream. """

@@ -379,15 +379,18 @@ if __name__ == '__main__':
 			def try_media_post(path: Path, **kwargs) -> int:
 				""" Posts a media file to the Mastodon instance, retrying if it fails with a 502, 503, or 504 HTTP error. """
 
+				last_error = None
+
 				for i in range(config.max_retries):
 					try:
 						media = mastodon_api.media_post(str(path), synchronous=True, **kwargs)
 						break
 					except (MastodonNetworkError, MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
+						last_error = error
 						log.warning(f'Retrying the media post operation ({i+1} of {config.max_retries}) after failing with the error: {repr(error)}')
 						sleep(config.retry_wait)
 				else:
-					raise
+					raise last_error
 
 				return media.id
 
@@ -395,16 +398,18 @@ if __name__ == '__main__':
 				""" Posts a status to the Mastodon instance, retrying if it fails with a 502, 503, or 504 HTTP error. """
 
 				idempotency_key = str(uuid4())
+				last_error = None
 
 				for i in range(config.max_retries):
 					try:
 						status = mastodon_api.status_post(text, idempotency_key=idempotency_key, **kwargs)
 						break
 					except (MastodonNetworkError, MastodonBadGatewayError, MastodonServiceUnavailableError, MastodonGatewayTimeoutError) as error:
+						last_error = error
 						log.warning(f'Retrying the status post operation ({i+1} of {config.max_retries}) after failing with the error: {repr(error)}')
 						sleep(config.retry_wait)
 				else:
-					raise
+					raise last_error
 
 				return status.id
 
@@ -553,16 +558,18 @@ if __name__ == '__main__':
 				with open(path, 'rb') as file:
 
 					video = file.read()
+					last_error = None
 
 					for i in range(config.max_retries):
 						try:
 							response = bluesky_api.send_video(video=video, **kwargs)
 							break
 						except AtNetworkError as error:
+							last_error = error
 							log.warning(f'Retrying the send video operation ({i+1} of {config.max_retries}) after failing with the error: {repr(error)}')
 							sleep(config.retry_wait)
 					else:
-						raise
+						raise last_error
 
 				return response
 
