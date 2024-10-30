@@ -873,16 +873,14 @@ if __name__ == '__main__':
 									fluidsynth(*args)
 									media_path = converted_path
 
-								input_args = [
-									'-i', media_path,
-									*config.media_conversion_ffmpeg_input_args, '-i', config.media_conversion_ffmpeg_input_name,
-								]
-
+								input_args = ['-i', media_path]
 								output_args = config.upload_ffmpeg_output_args.copy()
 
 								if config.media_conversion_add_subtitles and not ffprobe_has_video_stream(media_path):
 
 									log.debug('Adding subtitles to the converted media file.')
+
+									input_args.extend([*config.media_conversion_ffmpeg_input_args, '-i', config.media_conversion_ffmpeg_input_name])
 
 									preposition = 'by' if media_author is not None else None
 									subtitles = '\n'.join(filter(None, [snapshot.DisplayTitle, media_title, preposition, media_author]))
@@ -893,21 +891,19 @@ if __name__ == '__main__':
 									subtitles_file.write(f'1\n00:00:00,000 --> 99:00:00,000\n{subtitles}')
 									subtitles_file.flush()
 
-									# Take into account any previous filters from the configuration file.
 									subtitles_filter = f"subtitles='{escaped_subtitles_path}':force_style='{config.media_conversion_ffmpeg_subtitles_style}'"
 
+									# Take into account any previous filters from the configuration file.
 									try:
 										idx = output_args.index('-vf')
 										output_args[idx + 1] += ',' + subtitles_filter
 									except (ValueError, IndexError):
 										output_args.extend(['-vf', subtitles_filter])
 
-									output_args.extend(['-map', '1:v', '-map', '0:a'])
-								else:
-									output_args.extend(['-map', 0])
+									output_args.extend(['-shortest', '-map', '1:v', '-map', '0:a'])
 
 								# This is not capped to the maximum duration.
-								output_args.extend(['-shortest', upload_path])
+								output_args.append(upload_path)
 
 								log.debug(f'Converting the media file with the FFmpeg arguments: {input_args + output_args}')
 								output, warnings = ffmpeg(*input_args, *output_args)
