@@ -104,7 +104,7 @@ class CommonConfig:
 	TEMPORARY_PATH_PREFIX = 'wanderer.'
 
 	MUTABLE_OPTIONS = [
-		# For the recorder script.
+		# For the record script.
 		'hide_scrollbars'
 
 		'page_cache_wait',
@@ -145,6 +145,9 @@ class CommonConfig:
 
 		'enable_media_conversion',
 		'enable_audio_mixing',
+
+		# For the publish script.
+		'reply_with_text_to_speech',
 	]
 
 	def __init__(self):
