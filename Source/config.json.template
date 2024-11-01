@@ -135,7 +135,6 @@
 			"media.video_stats.enabled": false,
 			"media.videocontrols.picture-in-picture.video-toggle.enabled": false,
 			"network.allow-experiments": false,
-			"network.allow-experiments": false,
 			"network.captive-portal-service.enabled": false,
 			"network.dns.disablePrefetch": true,
 			"network.http.speculative-parallel-limit": 0,
@@ -315,7 +314,7 @@
 	"scout":
 	{
 		"scheduler": {"day_of_week": "mon-fri", "hour": 2},
-		"num_snapshots_per_scheduled_batch": 500,
+		"num_snapshots_per_scheduled_batch": 100,
 
 		"extension_filter": ["greasemonkey-3.17-fx.xpi"],
 		"user_script_filter": ["Disable Prompt Functions"],
@@ -427,13 +426,13 @@
 	"record":
 	{
 		"scheduler": {"day_of_week": "sun", "hour": 2},
-		"num_snapshots_per_scheduled_batch": 56,
+		"num_snapshots_per_scheduled_batch": 84,
 
 		"ranking_offset": 100,
 		"min_year": null,
 		"max_year": 2010,
 		"record_sensitive_snapshots": true,
-		"min_recordings_for_same_host": 100,
+		"min_recordings_for_same_host": 200,
 		"min_publish_days_for_same_url": 365,
 
 		"allowed_media_extensions":
@@ -706,11 +705,11 @@
 
 	"publish":
 	{
-		"scheduler": {"day_of_week": "mon-sat", "hour": "*/3", "jitter": 1200},
+		"scheduler": {"day_of_week": "mon-sat", "hour": "*/2", "jitter": 600},
 		"num_recordings_per_scheduled_batch": 1,
 
 		"require_approval": true,
-		"reply_with_text_to_speech": true,
+		"reply_with_text_to_speech": false,
 		"delete_files_after_upload": false,
 
 		"max_retries": 10,
@@ -744,7 +743,7 @@
 		"tumblr_access_token_secret": "<Access Token Secret>",
 
 		"tumblr_max_status_length": 4096,
-		"tumblr_max_video_duration": 450,
+		"tumblr_max_video_duration": 300,
 
 		"bluesky_instance_url": "<Instance URL>",
 		"bluesky_username": "<Username>",
