@@ -67,7 +67,7 @@ If you encounter any errors while installing the packages, try the following two
 
 * Download and install the latest [Microsoft Visual C++ Redistributable](https://docs.microsoft.com/en-US/cpp/windows/latest-supported-vc-redist?view=msvc-170).
 
-If you followed the previous instructions and fastText still fails to install with the error `Microsoft Visual C++ 14.0 or greater is required. Get it with "Microsoft C++ Build Tools"`, try installing [this package](https://github.com/messense/fasttext-wheel) instead by running the command `pip install fasttext-wheel==0.9.2`.
+If you followed the previous instructions and fastText still fails to install with the error `Microsoft Visual C++ 14.0 or greater is required. Get it with "Microsoft C++ Build Tools"`, try installing [this package](https://github.com/messense/fasttext-wheel) instead by running the command `pip install fasttext-wheel==0.9.2 numpy<2.0.0`.
 
 ## Setup Guide
 
@@ -547,7 +547,7 @@ Used by `publish.py` and `approve.py`.
 
 * `tumblr_max_status_length`: the maximum amount of characters in a Tumblr post. This should be set to the current Tumblr character limit.
 
-* `tumblr_max_video_duration`: the maximum duration of a Tumblr video (in seconds). This should be set to the current Tumblr video duration limit while taking into account the post frequency and the daily total limit. At the time of writing, this is a total of 60 minutes of video per day (or at most 450 seconds per video when posting every 3 hours). Used to trim media snapshots.
+* `tumblr_max_video_duration`: the maximum duration of a Tumblr video (in seconds). This should be set to the current Tumblr video duration limit while taking into account the post frequency and the daily total limit. At the time of writing, this is a total of 60 minutes of video per day (or at most 300 seconds per video when posting every 2 hours). Used to trim media snapshots.
 
 * `bluesky_instance_url`: the instance's URL decided in the [setup guide](#setup-guide). **Must be changed before publishing on Bluesky.**
 
