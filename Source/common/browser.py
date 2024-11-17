@@ -796,7 +796,7 @@ class Browser:
 
 		# Catches examples #2 and #5.
 		redirect_count = self.driver.execute_script('return window.performance.navigation.redirectCount;')
-		if redirect_count > 0:
+		if redirect_count is not None and redirect_count > 0:
 			log.debug(f'Passed the redirection test since the redirect count is {redirect_count}: "{expected_wayback_url}" -> "{current_url}".')
 			return True, current_wayback_parts.url, current_wayback_parts.timestamp
 
