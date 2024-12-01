@@ -1,5 +1,7 @@
 *.pyc
 
+.venv
+
 Source/config.json
 Source/*.log
 
