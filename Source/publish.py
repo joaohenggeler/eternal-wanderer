@@ -786,13 +786,14 @@ if __name__ == '__main__':
 					extract = tld_extract(url)
 					year = str(snapshot.OldestDatetime.year)
 					tags = [extract.domain, year, *snapshot.Tags]
+					bluesky_tags = [tag for tag in tags if ' ' not in tag]
 
-					for i, tag in enumerate(tags):
+					for i, tag in enumerate(bluesky_tags):
 						current_text = at_builder.build_text()
 						tag_text = '#' + tag
 						if len(current_text) + len(tag_text) + 1 <= config.bluesky_max_status_length:
 							at_builder.tag(tag_text, tag)
-							if i != len(tags) - 1:
+							if i != len(bluesky_tags) - 1:
 								at_builder.text(' ')
 						else:
 							break
