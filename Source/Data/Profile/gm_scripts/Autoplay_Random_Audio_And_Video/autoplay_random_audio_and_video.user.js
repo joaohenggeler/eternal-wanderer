@@ -191,6 +191,7 @@ for(const [tag_name, mime_type_regex] of tag_mime_types)
 	const regular_nodes = Array.from(document.querySelectorAll(tag_name));
 	const nodes = plugin_nodes_with_mime_type.concat(regular_nodes);
 
+	// E.g. https://web.archive.org/web/20070417172029if_/http://www.geocities.com/jerusalem4muslims/nasheed.htm
 	const autoplaying = nodes.some(is_autoplaying);
 	if(nodes && nodes.length && !autoplaying)
 	{
