@@ -215,8 +215,4 @@ for(const [tag_name, mime_type_regex] of tag_mime_types)
 			if(LOG) console.log(`Autoplay Random Audio And Video (${nodes.length} ${tag_name} tags) - Playing:`, element);	
 		}
 	}
-	else
-	{
-		if(LOG) console.log(`Autoplay Random Audio And Video (${nodes.length} ${tag_name} tags) - No Elements That Require Autoplay.`);	
-	}
 }
