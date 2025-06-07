@@ -244,7 +244,6 @@ if __name__ == '__main__':
 				retry_count=config.max_retries,
 				retry_delay=config.retry_wait,
 				retry_errors=[408, 502, 503, 504],
-				wait_on_rate_limit=True,
 			)
 
 			twitter_api_v2 = tweepy.Client(
@@ -252,7 +251,6 @@ if __name__ == '__main__':
 				consumer_secret=config.twitter_api_secret,
 				access_token=config.twitter_access_token,
 				access_token_secret=config.twitter_access_token_secret,
-				wait_on_rate_limit=True,
 			)
 
 		except TweepyException as error:
