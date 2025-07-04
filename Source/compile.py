@@ -196,14 +196,6 @@ if __name__ == '__main__':
 						except ValueError:
 							pass
 
-						try:
-							idx = output_args.index('-fflags')
-							if output_args[idx + 1] == 'shortest':
-								del output_args[idx + 1]
-								del output_args[idx]
-						except (ValueError, IndexError):
-							pass
-
 						output_args.append(transition_file.name)
 
 						ffmpeg(*input_args, *output_args)

@@ -634,7 +634,6 @@
 		"text_to_speech_ffmpeg_output_args":
 		[
 			"-shortest",
-			"-fflags", "shortest",
 			"-max_interleave_delta", "100M",
 			"-c:v", "libx264",
 			"-profile:v", "high",
