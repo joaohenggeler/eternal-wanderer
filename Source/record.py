@@ -611,7 +611,8 @@ if __name__ == '__main__':
 
 							if snapshot.Script is not None:
 								log.info(f'Running custom script: "{snapshot.Script}"')
-								driver.execute_script(snapshot.Script)
+								for _ in browser.traverse_frames():
+									driver.execute_script(snapshot.Script)
 
 							# Make sure the plugin instances had time to load.
 							sleep(config.plugin_load_wait)
@@ -936,7 +937,8 @@ if __name__ == '__main__':
 
 								if snapshot.Script is not None:
 									log.info(f'Running custom script: "{snapshot.Script}"')
-									driver.execute_script(snapshot.Script)
+									for _ in browser.traverse_frames():
+										driver.execute_script(snapshot.Script)
 
 								if config.plugin_syncing_reload_vrml_from_cache:
 									# Syncing VRML content in some machines can prevent the Cosmo Player from retrieving
