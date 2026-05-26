@@ -726,7 +726,7 @@ if __name__ == '__main__':
 											# Note that the first video timestamp is from 2017, the last modified time is from 2016, but the date published is from 2011.
 											meta = driver.find_element_by_xpath(r'//meta[@itemprop="datePublished"]')
 											date = meta.get_attribute('content')
-											date = re.sub('\D', '', date)
+											date = re.sub(r'\D', '', date)
 											timestamp_length = len(video_snapshot['timestamp'])
 											date = date.ljust(timestamp_length, '0')
 											date = date[:timestamp_length]

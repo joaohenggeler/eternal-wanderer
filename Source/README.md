@@ -6,7 +6,7 @@ This page documents every relevant component of the Eternal Wanderer including h
 
 ## Dependencies
 
-Python 3.10 (64-bit) or later is required to run the scripts. You can install the required dependencies by running the following command:
+Python 3.12 (64-bit) is required to run the scripts. You can install the required dependencies by running the following command:
 
 ```
 pip install -r requirements.txt
