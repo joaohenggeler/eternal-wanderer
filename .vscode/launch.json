@@ -9,7 +9,11 @@
 			"console": "externalTerminal",
 			"program": "${file}",
 			"args": "${command:pickArgs}",
-			"cwd": "${workspaceFolder}/Source"
+			"cwd": "${workspaceFolder}/Source",
+			"env":
+			{
+				"PATH": "${workspaceFolder}/.venv/Scripts;${env:PATH}"
+			}
 		}
 	]
 }
